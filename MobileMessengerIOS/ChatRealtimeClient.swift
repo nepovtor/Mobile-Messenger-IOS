@@ -3,6 +3,7 @@ import Foundation
 protocol ChatRealtimeClient {
     var onMessage: ((String) -> Void)? { get set }
     var onTyping: ((Bool) -> Void)? { get set }
+    var onError: ((Error) -> Void)? { get set }
     func connect()
     func disconnect()
     func send(text: String)
@@ -16,6 +17,7 @@ final class DefaultChatRealtimeClient: NSObject, ChatRealtimeClient {
 
     var onMessage: ((String) -> Void)?
     var onTyping: ((Bool) -> Void)?
+    var onError: ((Error) -> Void)?
 
     private var transport: Transport?
     private var receiveTask: Task<Void, Never>?
@@ -144,6 +146,7 @@ final class DefaultChatRealtimeClient: NSObject, ChatRealtimeClient {
         #if DEBUG
         print("WebSocket error: \(error.localizedDescription)")
         #endif
+        onError?(error)
     }
 
     private static func resolveWebSocketURL() -> URL? {

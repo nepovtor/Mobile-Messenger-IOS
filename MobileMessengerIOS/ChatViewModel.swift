@@ -1,20 +1,35 @@
 import Foundation
-import Combine
+import UIKit
 
 @MainActor
 final class ChatViewModel: ObservableObject {
-    @Published private(set) var messages: [ChatMessage] = [
-        ChatMessage(text: "Привет! Как дела?", isOutgoing: true, status: .read),
-        ChatMessage(text: "Привет! Все хорошо, спасибо", isOutgoing: false, status: .delivered),
-        ChatMessage(text: "Когда встретимся?", isOutgoing: true, status: .delivered),
-        ChatMessage(text: "Давай завтра вечером", isOutgoing: false, status: .delivered)
-    ]
+    static let defaultChatID = UUID(uuidString: "11111111-2222-3333-4444-555555555555") ?? UUID()
+    static let defaultChatTitle = "Диалог"
+
+    @Published private(set) var messages: [ChatMessage] = []
     @Published var isTyping = false
 
+    private let chatID: UUID
+    private let chatCache: ChatCache
     private let realtimeClient: ChatRealtimeClient
+    private let analytics: AnalyticsService
+    private let notificationManager: PushNotificationManager
 
-    init(realtimeClient: ChatRealtimeClient = DefaultChatRealtimeClient()) {
+    init(
+        chatID: UUID = ChatViewModel.defaultChatID,
+        chatCache: ChatCache = SwiftDataChatCache.shared,
+        realtimeClient: ChatRealtimeClient = DefaultChatRealtimeClient(),
+        analytics: AnalyticsService = DefaultAnalyticsService.shared,
+        notificationManager: PushNotificationManager = .shared
+    ) {
+        self.chatID = chatID
+        self.chatCache = chatCache
         self.realtimeClient = realtimeClient
+        self.analytics = analytics
+        self.notificationManager = notificationManager
+
+        chatCache.ensureChatExists(id: chatID, title: ChatViewModel.defaultChatTitle)
+        loadCachedMessages()
         bindRealtimeEvents()
     }
 
@@ -30,12 +45,18 @@ final class ChatViewModel: ObservableObject {
         realtimeClient.disconnect()
     }
 
+    func trackChatOpened() {
+        analytics.trackChatOpened(chatID: chatID)
+    }
+
     func sendMessage(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         let newMessage = ChatMessage(text: trimmed, isOutgoing: true, status: .sending)
         messages.append(newMessage)
+        persist(message: newMessage)
+        analytics.trackMessageSent(chatID: chatID, messageID: newMessage.id)
 
         Task { [weak self] in
             guard let self else { return }
@@ -56,29 +77,55 @@ final class ChatViewModel: ObservableObject {
         realtimeClient.send(text: trimmed)
     }
 
+    // MARK: - Private
+
     private func bindRealtimeEvents() {
         realtimeClient.onMessage = { [weak self] text in
             guard let self else { return }
-            Task {
-                await MainActor.run {
-                    let message = ChatMessage(text: text, isOutgoing: false, status: .delivered)
-                    self.messages.append(message)
-                }
+            Task { @MainActor in
+                let message = ChatMessage(text: text, isOutgoing: false, status: .delivered)
+                self.messages.append(message)
+                self.persist(message: message)
+                self.analytics.trackMessageReceived(chatID: self.chatID, messageID: message.id)
+                self.notificationManager.scheduleLocalNotification(for: message)
             }
         }
 
         realtimeClient.onTyping = { [weak self] typing in
             guard let self else { return }
-            Task {
-                await MainActor.run {
-                    self.isTyping = typing
-                }
+            Task { @MainActor in
+                self.isTyping = typing
             }
+        }
+
+        realtimeClient.onError = { [weak self] error in
+            self?.analytics.trackNetworkError(error)
         }
     }
 
     private func updateStatus(for id: UUID, to status: ChatMessage.DeliveryStatus) {
         guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
         messages[index].status = status
+        do {
+            try chatCache.updateStatus(for: id, to: status)
+        } catch {
+            analytics.trackStorageError(error)
+        }
+    }
+
+    private func persist(message: ChatMessage) {
+        do {
+            try chatCache.saveMessage(message, in: chatID)
+        } catch {
+            analytics.trackStorageError(error)
+        }
+    }
+
+    private func loadCachedMessages() {
+        do {
+            messages = try chatCache.loadMessages(for: chatID)
+        } catch {
+            analytics.trackStorageError(error)
+        }
     }
 }
