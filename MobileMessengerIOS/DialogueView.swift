@@ -15,15 +15,13 @@ struct ChatMessage: Identifiable, Equatable {
 }
 
 struct DialogueView: View {
-    @State private var messages: [ChatMessage] = [
-        ChatMessage(text: "Привет! Как дела?", isOutgoing: true, status: .read),
-        ChatMessage(text: "Привет! Все хорошо, спасибо", isOutgoing: false, status: .delivered),
-        ChatMessage(text: "Когда встретимся?", isOutgoing: true, status: .delivered),
-        ChatMessage(text: "Давай завтра вечером", isOutgoing: false, status: .delivered)
-    ]
+    @StateObject private var viewModel: ChatViewModel
     @State private var inputText: String = ""
-    @State private var isTyping = false
     @FocusState private var isInputFocused: Bool
+
+    init(viewModel: ChatViewModel = ChatViewModel()) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,12 +30,12 @@ struct DialogueView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach(messages) { message in
+                        ForEach(viewModel.messages) { message in
                             MessageBubble(message: message)
                                 .id(message.id)
                         }
 
-                        if isTyping {
+                        if viewModel.isTyping {
                             typingIndicator
                                 .transition(.opacity)
                         }
@@ -46,18 +44,24 @@ struct DialogueView: View {
                     .padding(.vertical, 12)
                 }
                 .background(Color(.systemGroupedBackground))
-                .onChange(of: messages.count) { _ in
+                .onChange(of: viewModel.messages.count) { _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: isTyping) { _ in
+                .onChange(of: viewModel.isTyping) { _ in
                     scrollToBottom(proxy: proxy)
                 }
             }
 
             messageComposer
         }
-        .animation(.easeInOut, value: messages)
-        .animation(.easeInOut, value: isTyping)
+        .animation(.easeInOut, value: viewModel.messages)
+        .animation(.easeInOut, value: viewModel.isTyping)
+        .onAppear {
+            viewModel.start()
+        }
+        .onDisappear {
+            viewModel.stop()
+        }
     }
 
     private var conversationHeader: some View {
@@ -68,8 +72,8 @@ struct DialogueView: View {
                     .bold()
                 Text("Собеседник печатает…")
                     .font(.subheadline)
-                    .foregroundColor(isTyping ? .blue : .secondary)
-                    .opacity(isTyping ? 1 : 0.4)
+                    .foregroundColor(viewModel.isTyping ? .blue : .secondary)
+                    .opacity(viewModel.isTyping ? 1 : 0.4)
             }
             Spacer()
             Image(systemName: "ellipsis.message")
@@ -115,12 +119,12 @@ struct DialogueView: View {
                             Circle()
                                 .fill(Color.gray.opacity(0.6))
                                 .frame(width: 6, height: 6)
-                                .scaleEffect(isTyping ? 1 : 0.8)
+                                .scaleEffect(viewModel.isTyping ? 1 : 0.8)
                                 .animation(
                                     .easeInOut(duration: 0.6)
                                         .repeatForever()
                                         .delay(Double(index) * 0.2),
-                                    value: isTyping
+                                    value: viewModel.isTyping
                                 )
                         }
                     }
@@ -141,49 +145,13 @@ struct DialogueView: View {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        var newMessage = ChatMessage(text: trimmed, isOutgoing: true, status: .sending)
-        messages.append(newMessage)
         inputText = ""
         isInputFocused = false
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            updateStatus(for: newMessage.id, to: .sent)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            updateStatus(for: newMessage.id, to: .delivered)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            updateStatus(for: newMessage.id, to: .read)
-        }
-
-        simulateIncomingMessage()
-    }
-
-    private func updateStatus(for id: UUID, to status: ChatMessage.DeliveryStatus) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[index].status = status
-    }
-
-    private func simulateIncomingMessage() {
-        isTyping = true
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation {
-                isTyping = false
-            }
-            let response = ChatMessage(
-                text: "Отлично! Тогда созвонимся позже.",
-                isOutgoing: false,
-                status: .delivered
-            )
-            messages.append(response)
-        }
+        viewModel.sendMessage(text: trimmed)
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        guard let lastID = messages.last?.id else { return }
+        guard let lastID = viewModel.messages.last?.id else { return }
         withAnimation {
             proxy.scrollTo(lastID, anchor: .bottom)
         }
