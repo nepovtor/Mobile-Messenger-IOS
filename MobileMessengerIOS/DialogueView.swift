@@ -1,26 +1,41 @@
 import SwiftUI
 
 struct ChatMessage: Identifiable, Equatable {
-    enum DeliveryStatus: String {
+    enum DeliveryStatus: String, Codable {
         case sending = "Sending"
         case sent = "Sent"
         case delivered = "Delivered"
         case read = "Read"
     }
 
-    let id = UUID()
+    let id: UUID
     let text: String
     let isOutgoing: Bool
+    let timestamp: Date
     var status: DeliveryStatus
+
+    init(
+        id: UUID = UUID(),
+        text: String,
+        isOutgoing: Bool,
+        status: DeliveryStatus,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
+        self.text = text
+        self.isOutgoing = isOutgoing
+        self.status = status
+        self.timestamp = timestamp
+    }
 }
 
 struct DialogueView: View {
-    @StateObject private var viewModel: ChatViewModel
+    @ObservedObject var viewModel: ChatViewModel
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
 
     init(viewModel: ChatViewModel = ChatViewModel()) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
     }
 
     var body: some View {
@@ -57,6 +72,7 @@ struct DialogueView: View {
         .animation(.easeInOut, value: viewModel.messages)
         .animation(.easeInOut, value: viewModel.isTyping)
         .onAppear {
+            viewModel.trackChatOpened()
             viewModel.start()
         }
         .onDisappear {
@@ -170,12 +186,15 @@ private struct MessageBubble: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .frame(maxWidth: .infinity, alignment: message.isOutgoing ? .trailing : .leading)
 
-            if message.isOutgoing {
-                Text(message.status.rawValue)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+            HStack(spacing: 6) {
+                Text(message.timestamp, style: .time)
+                if message.isOutgoing {
+                    Text(message.status.rawValue)
+                }
             }
+            .font(.caption2)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity, alignment: message.isOutgoing ? .trailing : .leading)
     }
