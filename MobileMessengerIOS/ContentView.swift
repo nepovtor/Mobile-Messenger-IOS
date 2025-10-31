@@ -1,14 +1,19 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var viewModel: ChatViewModel
-
-    init(viewModel: ChatViewModel = ChatViewModel()) {
-        _viewModel = StateObject(wrappedValue: viewModel)
-    }
+    @StateObject private var appState = AppState()
 
     var body: some View {
-        DialogueView(viewModel: viewModel)
+        Group {
+            if appState.isAuthenticated {
+                MainTabView()
+            } else {
+                AuthView { token in
+                    appState.authenticate(with: token)
+                }
+            }
+        }
+        .environmentObject(appState)
     }
 }
 

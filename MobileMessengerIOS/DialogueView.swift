@@ -83,7 +83,7 @@ struct DialogueView: View {
     private var conversationHeader: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Диалог")
+                Text(viewModel.title)
                     .font(.title2)
                     .bold()
                 Text("Собеседник печатает…")
