@@ -8,6 +8,7 @@ final class ChatViewModel: ObservableObject {
 
     @Published private(set) var messages: [ChatMessage] = []
     @Published var isTyping = false
+    @Published private(set) var title: String
 
     private let chatID: UUID
     private let chatCache: ChatCache
@@ -17,18 +18,20 @@ final class ChatViewModel: ObservableObject {
 
     init(
         chatID: UUID = ChatViewModel.defaultChatID,
+        chatTitle: String = ChatViewModel.defaultChatTitle,
         chatCache: ChatCache = SwiftDataChatCache.shared,
         realtimeClient: ChatRealtimeClient = DefaultChatRealtimeClient(),
         analytics: AnalyticsService = DefaultAnalyticsService.shared,
         notificationManager: PushNotificationManager = .shared
     ) {
         self.chatID = chatID
+        self.title = chatTitle
         self.chatCache = chatCache
         self.realtimeClient = realtimeClient
         self.analytics = analytics
         self.notificationManager = notificationManager
 
-        chatCache.ensureChatExists(id: chatID, title: ChatViewModel.defaultChatTitle)
+        chatCache.ensureChatExists(id: chatID, title: chatTitle)
         loadCachedMessages()
         bindRealtimeEvents()
     }

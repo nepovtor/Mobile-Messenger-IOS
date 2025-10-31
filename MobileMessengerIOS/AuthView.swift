@@ -1,12 +1,18 @@
 import SwiftUI
 
 struct AuthView: View {
-    @StateObject private var viewModel = AuthViewModel()
+    @StateObject private var viewModel: AuthViewModel
+    private let onAuthenticated: (String) -> Void
     @FocusState private var focusedField: Field?
 
     enum Field: Hashable {
         case contact
         case code
+    }
+
+    init(viewModel: AuthViewModel = AuthViewModel(), onAuthenticated: @escaping (String) -> Void = { _ in }) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+        self.onAuthenticated = onAuthenticated
     }
 
     var body: some View {
@@ -119,8 +125,9 @@ struct AuthView: View {
                 }
             }
             .onChange(of: viewModel.authToken) { _, token in
-                if token != nil {
+                if let token {
                     focusedField = nil
+                    onAuthenticated(token)
                 }
             }
         }
