@@ -43,59 +43,108 @@ Mobile-Messenger-IOS/
 
 ---
 
-## 👶 Для тех, кто впервые запускает iOS-проект
-**Не переживай, всё просто — повторяй шаги по порядку.**
+## 🚦 Как запустить (подробный гайд)
 
-1. **Проверь, что у тебя есть нужный софт**
-   - Mac с macOS 13 Ventura или свежее.
-   - [Xcode](https://apps.apple.com/ru/app/xcode/id497799835) 15 или выше (скачай из App Store).
-   - Apple ID для входа в Xcode (бесплатного достаточно).
+> Готовый блок, который можно вставить в README. Настроен так, чтобы даже новичок прошёл путь без лишних сюрпризов.
 
-2. **Установи инструменты командной строки** (один раз)
-   ```bash
-   xcode-select --install
-   ```
+### Требования
 
-3. **Клонируй репозиторий**
-   ```bash
-   git clone https://github.com/<your-org>/Mobile-Messenger-IOS.git
-   cd Mobile-Messenger-IOS
-   ```
+* macOS 12+
+* **Xcode 15.0+** (для SwiftData/iOS 17)
+* (Опционально) **Homebrew** и **CocoaPods**, если в проекте есть `Podfile`
 
-4. **Подтяни зависимости**
-   - Swift Package Manager: просто открой проект в Xcode — пакеты притянутся сами.
-   - Если используем CocoaPods:
-     ```bash
-     sudo gem install cocoapods
-     pod install
-     ```
+### Установка Xcode
 
-5. **Скопируй конфиги**
-   ```bash
-   cp Config/Config.example.xcconfig Config/Config.xcconfig
-   ```
-   Открой новый файл и впиши свои API-ключи, адреса WebSocket и параметры Firebase (при необходимости попроси у команды доступы).
+1. Откройте **App Store** → установите **Xcode** → запустите его один раз, соглашайтесь с лицензией.
+2. Убедитесь, что версия Xcode ≥ **15.0**.
 
-6. **Запусти проект**
-   ```bash
-   open MobileMessenger.xcworkspace
-   ```
-   В выпадающем меню схем выбери `MobileMessenger`, затем жми ▶️ (Cmd + R) и жди, пока приложение поднимется в симуляторе или на подключённом устройстве.
+### Клонирование проекта
 
-7. **Если что-то пошло не так**
-   - Проверь, что выбрана актуальная версия Xcode.
-   - Очисти кеши через `Shift + Cmd + K` и перезапусти сборку.
-   - Загляни в раздел [🆘 Поддержка](#-поддержка) и напиши в чат команды.
+```bash
+git clone https://github.com/nepovtor/Mobile-Messenger-IOS.git
+cd Mobile-Messenger-IOS
+```
 
----
+### Зависимости
+
+#### Вариант A — **без CocoaPods** (нет `Podfile`)
+
+Ничего ставить не нужно: SPM подтянет зависимости автоматически при сборке.
+
+#### Вариант B — **с CocoaPods** (есть `Podfile`)
+
+1. Установите Homebrew (если нет):
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+2. Установите CocoaPods:
+
+```bash
+brew install cocoapods
+pod --version   # должно показать номер версии
+```
+
+3. В корне проекта выполните:
+
+```bash
+pod install
+```
+
+4. Открывайте **`.xcworkspace`**, а не `.xcodeproj`.
+
+> Если при `pod install` получите SSL-ошибку (self-signed cert) — попробуйте другую сеть (домашний Wi-Fi/мобильный хот-спот). Часто это из-за корпоративного прокси (Ubiquiti/ZScaler). После смены сети запустите команду ещё раз.
+
+### Конфигурация окружения
+
+Скопируйте пример конфигурации и укажите собственные ключи и эндпоинты (при необходимости уточните их у команды):
+
+```bash
+cp Config/Config.example.xcconfig Config/Config.xcconfig
+```
+
+### Открытие в Xcode
+
+* Если использовали CocoaPods: откройте `MobileMessengerIOS.xcworkspace`.
+* Если нет Podfile: откройте `MobileMessengerIOS.xcodeproj`.
+
+### Запуск в симуляторе
+
+1. В верхней панели Xcode выберите **Scheme**: `MobileMessengerIOS`.
+2. Рядом выберите симулятор (например, **iPhone 15 Pro**).
+3. Нажмите ▶ (**Run**) или `Cmd + R`.
+
+### Запуск на реальном устройстве (опционально)
+
+1. Подключите iPhone по кабелю → нажмите **Trust** на устройстве.
+2. Xcode → **Settings → Accounts** → добавьте свой Apple ID.
+3. В Project Navigator → выберите **Target `MobileMessengerIOS` → Signing & Capabilities** → выберите **Team**.
+4. Выберите свой iPhone в списке устройств → **Run**.
+
+### Подсказки и решение проблем
+
+* Очистить кэш сборки: **Product → Clean Build Folder** (`Cmd + Shift + K`), затем снова **Run**.
+* Если `pod` не найден: закройте и откройте Terminal; при необходимости добавьте `/opt/homebrew/bin` в `PATH`:
+
+  ```bash
+  echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
+  source ~/.zshrc
+  ```
+
+* Если не запускается из-за подписи: включите **Automatically manage signing** и выберите **Team**.
+* Если Xcode ругается на iOS-версию симулятора: выберите устройство с iOS **17+**.
+* Если SPM завис: **File → Packages → Reset Package Caches**.
+
+----
 
 ## 🏁 Быстрый старт для опытных
 1. Клонируйте репозиторий и перейдите в папку проекта.
-2. Откройте `MobileMessenger.xcworkspace`.
-3. Выберите схему `MobileMessenger` и запустите на симуляторе или устройстве.
+2. Откройте `MobileMessengerIOS.xcworkspace` или `MobileMessengerIOS.xcodeproj` (в зависимости от наличия CocoaPods).
+3. Выберите схему `MobileMessengerIOS` и запустите на симуляторе или устройстве.
 4. Создайте `Config.xcconfig` из примера и пропишите секреты.
 
----
+----
 
 ## 🧪 Тестирование качества
 - **Unit**: `Cmd + U` или
