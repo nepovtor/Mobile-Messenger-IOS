@@ -154,6 +154,53 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
 - **UI / Snapshot**: запускайте из Xcode или через `xcodebuild test` с нужной схемой.
 - **Static Analysis**: SwiftLint + SwiftFormat (рекомендуется добавить в pre-commit).
 
+## 🛠️ Серверная разработка
+В репозитории добавлен рабочий каркас backend'а (NestJS) в папке `server/`. Он закрывает базовую инфраструктуру для интеграции с мобильным клиентом и может запускаться локально.
+
+### Минимальный стек
+- **TypeScript + NestJS** для HTTP/WebSocket API.
+- **PostgreSQL** для персистентных данных (чаты, пользователи, ACL).
+- **Redis** как кэш и брокер для эфемерных данных (сессии, rate limit, Presence).
+- **Kafka** (Redpanda) для асинхронных событий (доставка сообщений, fanout уведомлений).
+- **S3-совместимое хранилище** (MinIO) для медиа.
+- **OpenAPI 3.1** для контрактов клиента и автогенерации моделей.
+
+### Быстрый старт локально
+1. **Поднимите инфраструктуру в Docker** (PostgreSQL, Redis, MinIO, Kafka/Redpanda):
+   ```bash
+   docker compose -f server/docker-compose.dev.yml up -d
+   ```
+2. **Настройте переменные окружения**:
+   ```bash
+   cd server
+   cp .env.example .env
+   ```
+3. **Установите зависимости** (Node 20+, pnpm):
+   ```bash
+   pnpm install
+   ```
+4. **Запустите backend в watch-режиме**:
+   ```bash
+   pnpm run start:dev
+   ```
+5. **Проверьте точки входа**:
+   - REST префикс: `http://localhost:8080/api`
+   - Healthcheck: `GET http://localhost:8080/api/health`
+   - Версия сборки: `GET http://localhost:8080/api/version`
+
+### Базовые модули
+- **Auth**: OAuth2/Password, refresh токены, 2FA, сессии в Redis (заготовлено в инфраструктуре).
+- **Messaging**: REST для CRUD диалогов, WebSocket для real-time доставки; idempotency ключи для повтора отправок.
+- **Media**: загрузка файлов с прямой выдачей pre-signed URL из MinIO/S3.
+- **Notifications**: Fanout в FCM/APNs, topic- и user-level подписки, настройка quiet hours.
+
+### Практики для команды
+- Контрактный подход: сначала OpenAPI/AsyncAPI, затем реализация.
+- Фича-флаги для безопасных выкатов и A/B.
+- Набор обязательных линтеров: **ESLint**, **Prettier**, **commitlint**.
+- Автотесты: **Jest** + **supertest** для REST, **ws** для WebSocket.
+- Наблюдаемость: **OpenTelemetry** трейсинг + метрики Prometheus, логирование в JSON.
+
 ## 🔄 CI/CD потоки
 1. Install deps → Lint → Tests → Build IPA → Upload TestFlight.
 2. Пример `Fastlane`:
