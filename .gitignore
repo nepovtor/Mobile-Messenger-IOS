@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Xcode user data
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+DerivedData/
+build/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# CocoaPods
+Pods/
+
+# Backend dependencies and build output
+server/node_modules/
+server/dist/
+
+# Env files
+server/.env
