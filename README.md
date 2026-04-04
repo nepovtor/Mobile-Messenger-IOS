@@ -1,6 +1,6 @@
 # 🚀 Mobile Messenger iOS
 
-![Platform](https://img.shields.io/badge/platform-iOS_15+-blueviolet?style=for-the-badge) ![Swift](https://img.shields.io/badge/swift-5.9-orange?style=for-the-badge) ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20UIKit-ff69b4?style=for-the-badge) ![Status](https://img.shields.io/badge/status-Active-success?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-iOS_17+-blueviolet?style=for-the-badge) ![Swift](https://img.shields.io/badge/swift-5.9-orange?style=for-the-badge) ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20UIKit-ff69b4?style=for-the-badge) ![Status](https://img.shields.io/badge/status-Active-success?style=for-the-badge)
 
 > **Гипербыстрый и стильный мессенджер для тех, кто любит общаться красиво.**
 
@@ -27,7 +27,7 @@
 | Пуши | Firebase Cloud Messaging, APNs |
 | CI/CD | Xcode Cloud, Fastlane, GitHub Actions |
 
-> ⚙️ Минимальная iOS: **15.0**. Собирается в Xcode 15+ на macOS 13 Ventura и выше.
+> ⚙️ Минимальная iOS: **17.0**. Собирается в Xcode 15+ на macOS 13 Ventura и выше.
 
 ## 🗂 Структура проекта
 ```
@@ -45,11 +45,19 @@ Mobile-Messenger-IOS/
 
 ## 🚦 Как запустить (подробный гайд)
 
+### Супер-коротко (для новичка, 3 шага)
+
+1. Нужен **Mac** с установленным **Xcode 15+**.
+2. Клонируйте репозиторий и откройте `MobileMessengerIOS.xcodeproj`.
+3. Выберите схему `MobileMessengerIOS` → симулятор `iPhone 15 Pro` → нажмите `Cmd + R`.
+
+Если команда `xcodebuild` не найдена — вы, скорее всего, запускаете проект не на macOS или без установленного Xcode.
+
 > Готовый блок, который можно вставить в README. Настроен так, чтобы даже новичок прошёл путь без лишних сюрпризов.
 
 ### Требования
 
-* macOS 12+
+* macOS 13+
 * **Xcode 15.0+** (для SwiftData/iOS 17)
 * (Опционально) **Homebrew** и **CocoaPods**, если в проекте есть `Podfile`
 
@@ -115,6 +123,13 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
 2. Рядом выберите симулятор (например, **iPhone 15 Pro**).
 3. Нажмите ▶ (**Run**) или `Cmd + R`.
 
+### Быстрая проверка из Terminal (на Mac)
+
+```bash
+xcodebuild -version
+xcodebuild -scheme MobileMessengerIOS -destination 'platform=iOS Simulator,name=iPhone 15 Pro' build
+```
+
 ### Запуск на реальном устройстве (опционально)
 
 1. Подключите iPhone по кабелю → нажмите **Trust** на устройстве.
@@ -149,10 +164,12 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
 ## 🧪 Тестирование качества
 - **Unit**: `Cmd + U` или
   ```bash
-  xcodebuild test -scheme MobileMessenger -destination 'platform=iOS Simulator,name=iPhone 15'
+  xcodebuild test -scheme MobileMessengerIOS -destination 'platform=iOS Simulator,name=iPhone 15 Pro'
   ```
 - **UI / Snapshot**: запускайте из Xcode или через `xcodebuild test` с нужной схемой.
 - **Static Analysis**: SwiftLint + SwiftFormat (рекомендуется добавить в pre-commit).
+
+> ℹ️ Команды `swift build` / `swift test` в корне этого репозитория не подходят, потому что здесь Xcode-проект, а не Swift Package.
 
 ## 🛠️ Серверная разработка
 В репозитории добавлен рабочий каркас backend'а (NestJS) в папке `server/`. Он закрывает базовую инфраструктуру для интеграции с мобильным клиентом и может запускаться локально.
