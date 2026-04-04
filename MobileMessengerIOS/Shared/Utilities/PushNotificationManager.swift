@@ -27,7 +27,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
 
     func didRegister(deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        DefaultAnalyticsService.shared.track(event: AnalyticsEvent(kind: .pushRegistered, metadata: ["token": token]))
+        DefaultAnalyticsService.shared.track(.pushRegistered, metadata: ["token": token])
     }
 
     func didFailToRegister(error: Error) {

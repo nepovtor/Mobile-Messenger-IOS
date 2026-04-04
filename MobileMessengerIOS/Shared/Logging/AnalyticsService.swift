@@ -1,11 +1,14 @@
+// AnalyticsService.swift
+// Centralized analytics protocol and default implementation
 import Foundation
 
 public protocol AnalyticsService: Sendable {
-    func track(event: AnalyticsEvent)
+    func track(event: AppAnalyticsEvent)
     func track(error: Error, context: String)
 }
 
-public struct AnalyticsEvent: Sendable {
+// Use a unique, explicit type name to avoid ambiguity with any other AnalyticsEvent in the project.
+public struct AppAnalyticsEvent: Sendable {
     public enum Kind: String {
         case chatOpened
         case messageSent
@@ -29,11 +32,16 @@ public struct AnalyticsEvent: Sendable {
 public final class DefaultAnalyticsService: AnalyticsService {
     public static let shared = DefaultAnalyticsService()
     private let queue = DispatchQueue(label: "analytics.queue", qos: .utility)
-    private var events: [AnalyticsEvent] = []
+    private var events: [AppAnalyticsEvent] = []
 
     private init() {}
 
-    public func track(event: AnalyticsEvent) {
+    // Convenience overloads to reduce ambiguity at call sites
+    public func track(_ kind: AppAnalyticsEvent.Kind, metadata: [String: String] = [:], timestamp: Date = Date()) {
+        track(event: AppAnalyticsEvent(kind: kind, metadata: metadata, timestamp: timestamp))
+    }
+
+    public func track(event: AppAnalyticsEvent) {
         queue.async { [weak self] in
             self?.events.append(event)
             #if DEBUG
@@ -44,7 +52,7 @@ public final class DefaultAnalyticsService: AnalyticsService {
 
     public func track(error: Error, context: String) {
         queue.async { [weak self] in
-            let event = AnalyticsEvent(kind: .networkError, metadata: ["context": context, "description": String(describing: error)])
+            let event = AppAnalyticsEvent(kind: .networkError, metadata: ["context": context, "description": String(describing: error)])
             self?.events.append(event)
             #if DEBUG
             print("[Analytics][Error] \(context): \(error.localizedDescription)")
@@ -52,3 +60,4 @@ public final class DefaultAnalyticsService: AnalyticsService {
         }
     }
 }
+

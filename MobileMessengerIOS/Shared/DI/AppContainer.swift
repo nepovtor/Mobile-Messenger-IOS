@@ -4,11 +4,11 @@ import Foundation
 public final class AppContainer: ObservableObject {
     public static let shared = AppContainer()
 
-    public let configService: ConfigService
-    public let sessionStore: SessionStore
-    public let analytics: AnalyticsService
-    public let reachability: ReachabilityService
-    public let chatRepository: ChatRepository
+    private let configService: ConfigService
+    private let sessionStore: SessionStore
+    private let analytics: AnalyticsService
+    private let reachability: ReachabilityService
+    private let chatRepository: ChatRepository
 
     private let realtimeService: ChatRealtimeService
     private let chatStore: ChatLocalStore
@@ -40,6 +40,7 @@ public final class AppContainer: ObservableObject {
         )
     }
 
+    /// Creates and returns a new ChatViewModel for the given chat ID and title.
     public func makeChatViewModel(chatID: UUID, title: String) -> ChatViewModel {
         ChatViewModel(
             chatID: chatID,
@@ -53,6 +54,7 @@ public final class AppContainer: ObservableObject {
         )
     }
 
+    /// Creates and returns a new ChatListViewModel.
     public func makeChatListViewModel() -> ChatListViewModel {
         ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: chatRepository),
@@ -60,6 +62,7 @@ public final class AppContainer: ObservableObject {
         )
     }
 
+    /// Creates and returns a new AuthViewModel.
     public func makeAuthViewModel() -> AuthViewModel {
         AuthViewModel(authService: RESTAuthService(baseURL: configService.restBaseURL), sessionStore: sessionStore)
     }

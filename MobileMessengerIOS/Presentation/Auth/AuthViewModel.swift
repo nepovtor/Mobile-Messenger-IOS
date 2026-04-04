@@ -1,25 +1,25 @@
 import Foundation
 
 @MainActor
-final class AuthViewModel: ObservableObject {
-    @Published var method: AuthMethod = .phone
-    @Published var contact: String = ""
-    @Published var code: String = ""
-    @Published var isRequestingCode: Bool = false
-    @Published var isVerifyingCode: Bool = false
-    @Published var errorMessage: String?
-    @Published var isCodeSent: Bool = false
-    @Published var codeExpirationSeconds: Int?
+public final class AuthViewModel: ObservableObject {
+    @Published public var method: AuthMethod = .phone
+    @Published public var contact: String = ""
+    @Published public var code: String = ""
+    @Published public var isRequestingCode: Bool = false
+    @Published public var isVerifyingCode: Bool = false
+    @Published public var errorMessage: String?
+    @Published public var isCodeSent: Bool = false
+    @Published public var codeExpirationSeconds: Int?
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
 
-    init(authService: AuthNetworking, sessionStore: SessionStore) {
+    public init(authService: AuthNetworking, sessionStore: SessionStore) {
         self.authService = authService
         self.sessionStore = sessionStore
     }
 
-    var isContactValid: Bool {
+    public var isContactValid: Bool {
         let trimmed = contact.trimmingCharacters(in: .whitespacesAndNewlines)
         switch method {
         case .phone:
@@ -30,11 +30,11 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
-    var isCodeValid: Bool {
+    public var isCodeValid: Bool {
         code.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
     }
 
-    func requestCode() async {
+    public func requestCode() async {
         guard !isRequestingCode else { return }
         errorMessage = nil
         codeExpirationSeconds = nil
@@ -52,7 +52,7 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
-    func verifyCode() async {
+    public func verifyCode() async {
         guard !isVerifyingCode else { return }
         errorMessage = nil
         isVerifyingCode = true
@@ -69,7 +69,7 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
-    func reset() {
+    public func reset() {
         contact = ""
         code = ""
         errorMessage = nil

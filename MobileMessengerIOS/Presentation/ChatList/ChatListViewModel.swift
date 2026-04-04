@@ -1,12 +1,12 @@
 import Foundation
 
-struct ChatListItem: Identifiable, Hashable {
-    let id: UUID
-    let title: String
-    let lastMessagePreview: String?
-    let updatedAt: Date
-    let unreadCount: Int
-    let typingParticipants: [String]
+public struct ChatListItem: Identifiable, Hashable {
+    public let id: UUID
+    public let title: String
+    public let lastMessagePreview: String?
+    public let updatedAt: Date
+    public let unreadCount: Int
+    public let typingParticipants: [String]
 
     private static let formatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -14,7 +14,7 @@ struct ChatListItem: Identifiable, Hashable {
         return formatter
     }()
 
-    var initials: String {
+    public var initials: String {
         let words = title.split(separator: " ")
         if let first = words.first, let last = words.dropFirst().first {
             return String(first.prefix(1)) + String(last.prefix(1))
@@ -22,34 +22,50 @@ struct ChatListItem: Identifiable, Hashable {
         return title.isEmpty ? "" : String(title.prefix(2))
     }
 
-    var relativeDateString: String {
+    public var relativeDateString: String {
         Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
+    }
+
+    public init(
+        id: UUID,
+        title: String,
+        lastMessagePreview: String?,
+        updatedAt: Date,
+        unreadCount: Int,
+        typingParticipants: [String]
+    ) {
+        self.id = id
+        self.title = title
+        self.lastMessagePreview = lastMessagePreview
+        self.updatedAt = updatedAt
+        self.unreadCount = unreadCount
+        self.typingParticipants = typingParticipants
     }
 }
 
 @MainActor
-final class ChatListViewModel: ObservableObject {
-    @Published private(set) var chats: [ChatListItem] = []
-    @Published var searchQuery: String = "" {
+public final class ChatListViewModel: ObservableObject {
+    @Published public private(set) var chats: [ChatListItem] = []
+    @Published public var searchQuery: String = "" {
         didSet { scheduleSearch() }
     }
-    @Published var isLoading = false
-    @Published var isShowingError = false
+    @Published public var isLoading = false
+    @Published public var isShowingError = false
 
     private let loadChats: LoadChatListUseCase
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
 
-    init(loadChats: LoadChatListUseCase, analytics: AnalyticsService) {
+    public init(loadChats: LoadChatListUseCase, analytics: AnalyticsService) {
         self.loadChats = loadChats
         self.analytics = analytics
     }
 
-    func onAppear() {
+    public func onAppear() {
         Task { await refresh() }
     }
 
-    func refresh() async {
+    public func refresh() async {
         isLoading = true
         do {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
