@@ -33,7 +33,7 @@ public final class ChatViewModel: ObservableObject {
     private let notificationManager: PushNotificationManager
 
     private var observeTask: Task<Void, Never>?
-    public init(
+    init(
         chatID: UUID,
         title: String,
         observeMessages: ObserveChatMessagesUseCase,
@@ -42,7 +42,7 @@ public final class ChatViewModel: ObservableObject {
         retryPending: RetryPendingMessagesUseCase,
         markStatus: MarkMessageStatusUseCase,
         analytics: AnalyticsService,
-        notificationManager: PushNotificationManager = .shared
+        notificationManager: PushNotificationManager
     ) {
         self.chatID = chatID
         self.title = title
@@ -81,7 +81,7 @@ public final class ChatViewModel: ObservableObject {
             do {
                 let message = try await sendMessageUseCase(chatID: chatID, text: trimmed, localID: UUID())
                 messages.append(message)
-                analytics.track(event: AnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
+                analytics.track(event: AppAnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
             } catch {
                 banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
                 analytics.track(error: error, context: "send_message")

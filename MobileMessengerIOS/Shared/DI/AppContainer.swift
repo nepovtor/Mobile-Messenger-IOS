@@ -1,12 +1,12 @@
 import Foundation
 
-@MainActor
 public final class AppContainer: ObservableObject {
-    public static let shared = AppContainer()
+    public nonisolated(unsafe) static let shared = AppContainer()
 
     private let configService: ConfigService
-    private let sessionStore: SessionStore
+    public let sessionStore: SessionStore
     private let analytics: AnalyticsService
+    private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
     private let chatRepository: ChatRepository
 
@@ -23,8 +23,10 @@ public final class AppContainer: ObservableObject {
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
         reachability = DefaultReachabilityService()
-        sessionStore = SessionStore(tokenStore: tokenStore)
 
+        // Initialize main-actor isolated components safely
+        sessionStore = SessionStore(tokenStore: tokenStore)
+        
         chatStore = SwiftDataChatStore()
         realtimeService = DefaultChatRealtimeService(
             baseURL: configService.websocketURL,
@@ -32,6 +34,8 @@ public final class AppContainer: ObservableObject {
             reachability: reachability,
             featureFlags: configService.features
         )
+
+        notificationManager = PushNotificationManager.shared
 
         chatRepository = DefaultChatRepository(
             store: chatStore,
@@ -50,7 +54,8 @@ public final class AppContainer: ObservableObject {
             sendMessage: SendMessageUseCase(repository: chatRepository),
             retryPending: RetryPendingMessagesUseCase(repository: chatRepository),
             markStatus: MarkMessageStatusUseCase(repository: chatRepository),
-            analytics: analytics
+            analytics: analytics,
+            notificationManager: notificationManager
         )
     }
 

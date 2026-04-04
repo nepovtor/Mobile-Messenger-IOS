@@ -1,6 +1,6 @@
 import Foundation
 
-public final class DefaultChatRealtimeService: ChatRealtimeService {
+public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked Sendable {
     public enum State: Equatable {
         case disconnected
         case connecting(retry: Int)
@@ -124,3 +124,4 @@ public final class DefaultChatRealtimeService: ChatRealtimeService {
         min(pow(2.0, Double(retry)), 30)
     }
 }
+

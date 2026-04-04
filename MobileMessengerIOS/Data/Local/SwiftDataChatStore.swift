@@ -1,6 +1,6 @@
 import Foundation
 
-public actor SwiftDataChatStore: ChatLocalStore {
+public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     private var chats: [UUID: ChatRecord] = [:]
     private var messageStreams: [UUID: AsyncStream<Message>.Continuation] = [:]
 
@@ -130,3 +130,4 @@ public actor SwiftDataChatStore: ChatLocalStore {
         }
     }
 }
+

@@ -82,7 +82,7 @@ public final class DefaultChatRepository: ChatRepository {
                 self.analytics.track(error: error, context: "sendMessage")
             }
         }
-        analytics.track(event: AnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
+        analytics.track(event: AppAnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
         return message
     }
 

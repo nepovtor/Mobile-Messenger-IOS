@@ -9,7 +9,7 @@ public protocol AnalyticsService: Sendable {
 
 // Use a unique, explicit type name to avoid ambiguity with any other AnalyticsEvent in the project.
 public struct AppAnalyticsEvent: Sendable {
-    public enum Kind: String {
+    public enum Kind: String, Sendable {
         case chatOpened
         case messageSent
         case messageReceived
@@ -29,7 +29,7 @@ public struct AppAnalyticsEvent: Sendable {
     }
 }
 
-public final class DefaultAnalyticsService: AnalyticsService {
+public final class DefaultAnalyticsService: AnalyticsService, @unchecked Sendable {
     public static let shared = DefaultAnalyticsService()
     private let queue = DispatchQueue(label: "analytics.queue", qos: .utility)
     private var events: [AppAnalyticsEvent] = []
