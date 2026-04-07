@@ -1,13 +1,13 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from './modules/app.module';
-import * as dotenv from 'dotenv';
+import { Logger, ValidationPipe } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import * as dotenv from "dotenv";
+import { AppModule } from "./modules/app.module";
 
 dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix("api");
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -16,10 +16,9 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT ? Number(process.env.PORT) : 8080;
+  const port = Number(process.env.PORT ?? 8080);
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`🚀 API is ready on http://localhost:${port}/api`);
+  Logger.log(`API is ready on http://localhost:${port}/api`, "Bootstrap");
 }
 
-bootstrap();
+void bootstrap();

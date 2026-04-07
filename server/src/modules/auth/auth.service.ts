@@ -1,0 +1,87 @@
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { JwtPayload } from "../../auth.types";
+import { User } from "../../entities/user.entity";
+import { RequestCodeDto } from "./dto/request-code.dto";
+import { VerifyCodeDto } from "./dto/verify-code.dto";
+
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  private readonly codes = new Map<string, { code: string; expires: Date }>();
+
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  async requestCode({ method, contact }: RequestCodeDto) {
+    if (method !== "phone") {
+      throw new BadRequestException("Only phone method supported");
+    }
+
+    const code = process.env.AUTH_TEST_CODE ?? "123456";
+    const expires = new Date(Date.now() + 5 * 60 * 1000);
+
+    this.codes.set(contact, { code, expires });
+    this.logger.log(`Verification code generated for ${contact}`);
+    this.logger.debug(`Verification code for ${contact}: ${code}`);
+
+    return { expiresIn: 300 };
+  }
+
+  async verifyCode({ method, contact, code }: VerifyCodeDto) {
+    if (method !== "phone") {
+      throw new BadRequestException("Only phone method supported");
+    }
+
+    const stored = this.codes.get(contact);
+    if (!stored || stored.code !== code || stored.expires < new Date()) {
+      throw new UnauthorizedException("Invalid or expired code");
+    }
+
+    this.codes.delete(contact);
+
+    let user = await this.userRepository.findOne({ where: { phone: contact } });
+    if (!user) {
+      const fallbackName = `User ${contact.slice(-4)}`;
+      const requestedDisplayName = this.normalizeDisplayName(arguments[0].displayName);
+
+      user = this.userRepository.create({
+        phone: contact,
+        displayName: requestedDisplayName ?? fallbackName,
+      });
+      await this.userRepository.save(user);
+    }
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      phone: user.phone,
+      displayName: user.displayName,
+    };
+    const token = this.jwtService.sign(payload);
+
+    return {
+      token,
+      userID: user.id,
+      displayName: user.displayName,
+    };
+  }
+
+  private normalizeDisplayName(value?: string): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.trim().replace(/\s+/g, " ");
+    return normalized.length >= 2 ? normalized : null;
+  }
+}

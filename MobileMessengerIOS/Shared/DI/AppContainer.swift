@@ -1,50 +1,51 @@
 import Foundation
 
+@MainActor
 public final class AppContainer: ObservableObject {
-    public nonisolated(unsafe) static let shared = AppContainer()
+    @MainActor public static let shared = AppContainer()
 
-    private let configService: ConfigService
+    public let configService: ConfigService
     public let sessionStore: SessionStore
-    private let analytics: AnalyticsService
-    private let notificationManager: PushNotificationManager
-    private let reachability: ReachabilityService
-    private let chatRepository: ChatRepository
+    public let analytics: AnalyticsService
+    public let reachability: ReachabilityService
+    public let chatRepository: ChatRepository
 
     private let realtimeService: ChatRealtimeService
     private let chatStore: ChatLocalStore
+    private let notificationManager: PushNotificationManager
 
+    @MainActor
     private init() {
-        #if DEBUG
-        let tokenStore = InMemoryTokenStore()
-        #else
-        let tokenStore = KeychainTokenStore()
-        #endif
+        let tokenStore: TokenStore = KeychainTokenStore()
 
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
         reachability = DefaultReachabilityService()
-
-        // Initialize main-actor isolated components safely
         sessionStore = SessionStore(tokenStore: tokenStore)
-        
+        notificationManager = .shared
+
         chatStore = SwiftDataChatStore()
         realtimeService = DefaultChatRealtimeService(
             baseURL: configService.websocketURL,
             analytics: analytics,
             reachability: reachability,
-            featureFlags: configService.features
+            featureFlags: configService.features,
+            userSessionProvider: { tokenStore.retrieveSession() }
         )
 
-        notificationManager = PushNotificationManager.shared
-
+        let chatNetworking = RESTChatService(
+            baseURL: configService.restBaseURL,
+            tokenProvider: { tokenStore.retrieveSession()?.token }
+        )
         chatRepository = DefaultChatRepository(
             store: chatStore,
             realtime: realtimeService,
-            analytics: analytics
+            analytics: analytics,
+            userSessionProvider: { tokenStore.retrieveSession() },
+            chatNetworking: chatNetworking
         )
     }
 
-    /// Creates and returns a new ChatViewModel for the given chat ID and title.
     public func makeChatViewModel(chatID: UUID, title: String) -> ChatViewModel {
         ChatViewModel(
             chatID: chatID,
@@ -59,7 +60,6 @@ public final class AppContainer: ObservableObject {
         )
     }
 
-    /// Creates and returns a new ChatListViewModel.
     public func makeChatListViewModel() -> ChatListViewModel {
         ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: chatRepository),
@@ -67,7 +67,6 @@ public final class AppContainer: ObservableObject {
         )
     }
 
-    /// Creates and returns a new AuthViewModel.
     public func makeAuthViewModel() -> AuthViewModel {
         AuthViewModel(authService: RESTAuthService(baseURL: configService.restBaseURL), sessionStore: sessionStore)
     }

@@ -17,19 +17,35 @@ public struct DefaultConfigService: ConfigService {
     public init() {}
 
     public var restBaseURL: URL {
-        guard let string = Bundle.main.object(forInfoDictionaryKey: "REST_BASE_URL") as? String,
-              let url = URL(string: string) else {
-            return URL(string: "https://api.example.com")!
+        if let url = urlFromInfoDictionary(key: "REST_BASE_URL") {
+            return url
         }
-        return url
+#if DEBUG
+        return URL(string: "http://127.0.0.1:8080/api")!
+#else
+        return URL(string: "https://api.example.com")!
+#endif
     }
 
     public var websocketURL: URL {
-        guard let string = Bundle.main.object(forInfoDictionaryKey: "WEBSOCKET_URL") as? String,
-              let url = URL(string: string) else {
-            return URL(string: "wss://ws.example.com")!
+        if let url = urlFromInfoDictionary(key: "WEBSOCKET_URL") {
+            return url
         }
-        return url
+#if DEBUG
+        return URL(string: "ws://127.0.0.1:8080")!
+#else
+        return URL(string: "wss://ws.example.com")!
+#endif
+    }
+
+    private func urlFromInfoDictionary(key: String) -> URL? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
+            return nil
+        }
+
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = trimmed.replacingOccurrences(of: "\\", with: "")
+        return URL(string: cleaned)
     }
 
     public var features: FeatureFlags {

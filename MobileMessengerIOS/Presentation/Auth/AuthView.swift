@@ -1,98 +1,101 @@
 import SwiftUI
-import Combine
 
+@MainActor
 struct AuthView: View {
     @StateObject private var viewModel: AuthViewModel
     let onAuthorized: () -> Void
 
-    init(container: AppContainer = .shared, onAuthorized: @escaping () -> Void) {
+    @State private var selectedTab: AuthTab = .login
+
+    enum AuthTab: String, CaseIterable {
+        case login = "Вход"
+        case register = "Регистрация"
+    }
+
+    @MainActor
+    init(container: AppContainer? = nil, onAuthorized: @escaping () -> Void) {
+        let container = container ?? .shared
         _viewModel = StateObject(wrappedValue: container.makeAuthViewModel())
         self.onAuthorized = onAuthorized
     }
 
     var body: some View {
         VStack(spacing: 24) {
-            Picker("Способ", selection: $viewModel.method) {
-                Text("Телефон").tag(AuthMethod.phone)
-                Text("Email").tag(AuthMethod.email)
+            Text("Mobile Messenger")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+
+            Picker("Режим", selection: $selectedTab) {
+                ForEach(AuthTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
             }
             .pickerStyle(.segmented)
+            .padding(.horizontal)
 
-            TextField(viewModel.method == .phone ? "+7 999 000-00-00" : "name@example.com", text: $viewModel.contact)
-                .keyboardType(viewModel.method == .phone ? .phonePad : .emailAddress)
-                .textContentType(viewModel.method == .phone ? .telephoneNumber : .emailAddress)
-                .padding()
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(uiColor: .secondarySystemBackground)))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Номер телефона")
+                    .font(.headline)
+                TextField("+7 (999) 000-00-00", text: $viewModel.contact)
+                    .padding()
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(8)
+                    .keyboardType(.phonePad)
+            }
 
             if viewModel.isCodeSent {
-                VStack(spacing: 12) {
-                    SecureField("Код", text: $viewModel.code)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Код подтверждения")
+                        .font(.headline)
+                    TextField("Введите код", text: $viewModel.code)
                         .padding()
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(uiColor: .secondarySystemBackground)))
-
-                    if let seconds = viewModel.codeExpirationSeconds {
-                        Text("Код истечет через \(seconds) сек.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Button(action: verify) {
-                        if viewModel.isVerifyingCode {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                        } else {
-                            Text("Войти")
-                                .bold()
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!viewModel.isCodeValid || viewModel.isVerifyingCode)
+                        .background(Color.gray.opacity(0.2))
+                        .cornerRadius(8)
+                        .keyboardType(.numberPad)
                 }
-                .transition(.move(edge: .bottom))
-            }
 
-            Button(action: requestCode) {
-                if viewModel.isRequestingCode {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                } else {
-                    Text(viewModel.isCodeSent ? "Отправить код снова" : "Получить код")
-                        .bold()
-                        .frame(maxWidth: .infinity)
+                if let expiration = viewModel.codeExpirationSeconds {
+                    Text("Код действителен \(expiration) сек")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(!viewModel.isContactValid || viewModel.isRequestingCode)
 
             if let error = viewModel.errorMessage {
                 Text(error)
                     .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 16)
+                    .font(.footnote)
+            }
+
+            Button(action: {
+                Task {
+                    if viewModel.isCodeSent {
+                        await viewModel.verifyCode()
+                    } else {
+                        await viewModel.requestCode()
+                    }
+                }
+            }) {
+                Text(viewModel.isCodeSent ? "Подтвердить" : (selectedTab == .login ? "Войти" : "Зарегистрироваться"))
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(viewModel.isCodeSent ? (viewModel.isCodeValid ? Color.blue : Color.gray) : (viewModel.isContactValid ? Color.blue : Color.gray))
+                    .cornerRadius(8)
+            }
+            .disabled(viewModel.isCodeSent ? !viewModel.isCodeValid : !viewModel.isContactValid)
+            .disabled(viewModel.isRequestingCode || viewModel.isVerifyingCode)
+
+            if viewModel.isRequestingCode || viewModel.isVerifyingCode {
+                ProgressView()
             }
 
             Spacer()
         }
         .padding()
-        .animation(.easeInOut, value: viewModel.isCodeSent)
-        .onReceive(viewModel.sessionStore.$state) { state in
-            if case .authenticated = state {
-                onAuthorized()
-            }
-        }
-    }
-
-    private func requestCode() {
-        Task { await viewModel.requestCode() }
-    }
-
-    private func verify() {
-        Task {
-            await viewModel.verifyCode()
-            if case .authenticated = viewModel.sessionStore.state {
+        .onChange(of: viewModel.state) {
+            if case .authenticated = viewModel.state {
                 onAuthorized()
             }
         }

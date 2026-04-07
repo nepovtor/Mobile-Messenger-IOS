@@ -1,6 +1,2 @@
-REST_BASE_URL = https://api.staging.example.com
-WEBSOCKET_URL = wss://ws.staging.example.com
-FEATURE_REALTIME = YES
-FEATURE_PUSH = YES
-FEATURE_MEDIA = NO
-FEATURE_VERBOSE_LOGGING = YES
+#include "../../Config/Config.example.xcconfig"
+#include? "../../Config/Config.xcconfig"

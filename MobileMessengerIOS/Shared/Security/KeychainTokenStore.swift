@@ -7,8 +7,8 @@ public final class KeychainTokenStore: TokenStore {
 
     public init() {}
 
-    public func store(token: String) {
-        guard let data = token.data(using: .utf8) else { return }
+    public func store(session: SessionStore.AuthenticatedSession) {
+        guard let data = try? JSONEncoder().encode(session) else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -19,7 +19,7 @@ public final class KeychainTokenStore: TokenStore {
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
-    public func retrieveToken() -> String? {
+    public func retrieveSession() -> SessionStore.AuthenticatedSession? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -31,10 +31,10 @@ public final class KeychainTokenStore: TokenStore {
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data,
-              let token = String(data: data, encoding: .utf8) else {
+              let session = try? JSONDecoder().decode(SessionStore.AuthenticatedSession.self, from: data) else {
             return nil
         }
-        return token
+        return session
     }
 
     public func clear() {
@@ -46,25 +46,3 @@ public final class KeychainTokenStore: TokenStore {
         SecItemDelete(query as CFDictionary)
     }
 }
-
-#if DEBUG
-public final class InMemoryTokenStore: TokenStore {
-    private var token: String?
-
-    public init(token: String? = nil) {
-        self.token = token
-    }
-
-    public func store(token: String) {
-        self.token = token
-    }
-
-    public func retrieveToken() -> String? {
-        token
-    }
-
-    public func clear() {
-        token = nil
-    }
-}
-#endif

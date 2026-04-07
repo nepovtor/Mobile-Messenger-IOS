@@ -17,6 +17,7 @@ public struct Message: Identifiable, Hashable, Sendable {
     public let authorName: String
     public let text: String
     public let createdAt: Date
+    public let isOutgoing: Bool
     public let status: MessageStatus
     public let attachments: [MessageAttachment]
     public let repliedTo: Identifier?
@@ -29,6 +30,7 @@ public struct Message: Identifiable, Hashable, Sendable {
         authorName: String,
         text: String,
         createdAt: Date,
+        isOutgoing: Bool,
         status: MessageStatus,
         attachments: [MessageAttachment] = [],
         repliedTo: Identifier? = nil,
@@ -40,14 +42,11 @@ public struct Message: Identifiable, Hashable, Sendable {
         self.authorName = authorName
         self.text = text
         self.createdAt = createdAt
+        self.isOutgoing = isOutgoing
         self.status = status
         self.attachments = attachments
         self.repliedTo = repliedTo
         self.editedAt = editedAt
-    }
-
-    public var isOutgoing: Bool {
-        authorID == SessionStore.Constants.currentUserID
     }
 
     public func updatingStatus(_ status: MessageStatus) -> Message {
@@ -58,6 +57,7 @@ public struct Message: Identifiable, Hashable, Sendable {
             authorName: authorName,
             text: text,
             createdAt: createdAt,
+            isOutgoing: isOutgoing,
             status: status,
             attachments: attachments,
             repliedTo: repliedTo,

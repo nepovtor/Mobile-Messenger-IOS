@@ -2,11 +2,11 @@ import Foundation
 
 @MainActor
 public final class ChatViewModel: ObservableObject {
-    public enum Banner: Identifiable {
+    enum Banner: Identifiable {
         case error(String)
         case offline
 
-        public var id: String {
+        var id: String {
             switch self {
             case .error(let message):
                 return "error_\(message)"
@@ -16,14 +16,14 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    @Published public private(set) var title: String
-    @Published public private(set) var messages: [Message] = []
-    @Published public var inputText: String = ""
-    @Published public var isTyping = false
-    @Published public var banner: Banner?
-    @Published public var isLoadingHistory = true
+    @Published private(set) var title: String
+    public let chatID: UUID
+    @Published private(set) var messages: [Message] = []
+    @Published var inputText: String = ""
+    @Published var isTyping = false
+    @Published var banner: Banner?
+    @Published var isLoadingHistory = true
 
-    private let chatID: UUID
     private let observeMessages: ObserveChatMessagesUseCase
     private let loadHistory: LoadChatHistoryUseCase
     private let sendMessageUseCase: SendMessageUseCase
@@ -59,7 +59,7 @@ public final class ChatViewModel: ObservableObject {
         observeTask?.cancel()
     }
 
-    public func onAppear() {
+    func onAppear() {
         guard observeTask == nil else { return }
         observeTask = Task { [weak self] in
             await self?.bindMessages()
@@ -67,12 +67,12 @@ public final class ChatViewModel: ObservableObject {
         Task { await loadInitialHistory() }
     }
 
-    public func onDisappear() {
+    func onDisappear() {
         observeTask?.cancel()
         observeTask = nil
     }
 
-    public func sendMessage() {
+    func sendMessage() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         inputText = ""
@@ -80,8 +80,7 @@ public final class ChatViewModel: ObservableObject {
         Task {
             do {
                 let message = try await sendMessageUseCase(chatID: chatID, text: trimmed, localID: UUID())
-                messages.append(message)
-                analytics.track(event: AppAnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
+                upsert(message: message)
             } catch {
                 banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
                 analytics.track(error: error, context: "send_message")
@@ -89,11 +88,11 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    public func retryFailedMessages() {
+    func retryFailedMessages() {
         Task { await retryPending(chatID: chatID) }
     }
 
-    public func markAsRead(messageID: UUID) {
+    func markAsRead(messageID: UUID) {
         Task { try? await markStatus(chatID: chatID, messageID: messageID, status: .read) }
     }
 

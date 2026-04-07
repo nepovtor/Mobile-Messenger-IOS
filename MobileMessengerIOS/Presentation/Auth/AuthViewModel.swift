@@ -2,24 +2,35 @@ import Foundation
 
 @MainActor
 public final class AuthViewModel: ObservableObject {
-    @Published public var method: AuthMethod = .phone
-    @Published public var contact: String = ""
-    @Published public var code: String = ""
-    @Published public var isRequestingCode: Bool = false
-    @Published public var isVerifyingCode: Bool = false
-    @Published public var errorMessage: String?
-    @Published public var isCodeSent: Bool = false
-    @Published public var codeExpirationSeconds: Int?
+    public enum AuthState: Equatable {
+        case unauthenticated
+        case authenticated
+    }
+
+    @Published var method: AuthMethod = .phone
+    @Published var displayName: String = ""
+    @Published var contact: String = ""
+    @Published var code: String = ""
+    @Published var isRequestingCode: Bool = false
+    @Published var isVerifyingCode: Bool = false
+    @Published var errorMessage: String?
+    @Published var isCodeSent: Bool = false
+    @Published var codeExpirationSeconds: Int?
+    @Published var state: AuthState = .unauthenticated
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
 
-    public init(authService: AuthNetworking, sessionStore: SessionStore) {
+    init(authService: AuthNetworking, sessionStore: SessionStore) {
         self.authService = authService
         self.sessionStore = sessionStore
+        // Check if already authenticated
+        if sessionStore.authToken != nil {
+            state = .authenticated
+        }
     }
 
-    public var isContactValid: Bool {
+    var isContactValid: Bool {
         let trimmed = contact.trimmingCharacters(in: .whitespacesAndNewlines)
         switch method {
         case .phone:
@@ -30,11 +41,17 @@ public final class AuthViewModel: ObservableObject {
         }
     }
 
-    public var isCodeValid: Bool {
+    var isDisplayNameValid: Bool {
+        displayName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .count >= 2
+    }
+
+    var isCodeValid: Bool {
         code.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
     }
 
-    public func requestCode() async {
+    func requestCode() async {
         guard !isRequestingCode else { return }
         errorMessage = nil
         codeExpirationSeconds = nil
@@ -52,7 +69,7 @@ public final class AuthViewModel: ObservableObject {
         }
     }
 
-    public func verifyCode() async {
+    func verifyCode(displayName: String? = nil) async {
         guard !isVerifyingCode else { return }
         errorMessage = nil
         isVerifyingCode = true
@@ -60,17 +77,33 @@ public final class AuthViewModel: ObservableObject {
 
         let sanitizedContact = sanitize(contact: contact)
         let sanitizedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedDisplayName = sanitize(displayName: displayName)
 
         do {
-            let response = try await authService.verifyCode(method: method, contact: sanitizedContact, code: sanitizedCode)
-            sessionStore.authenticate(with: response.token)
+            let response = try await authService.verifyCode(
+                method: method,
+                contact: sanitizedContact,
+                code: sanitizedCode,
+                displayName: sanitizedDisplayName
+            )
+            sessionStore.authenticate(
+                token: response.token,
+                userID: response.userID,
+                displayName: response.displayName
+            )
+            state = .authenticated
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
-    public func reset() {
+    func reset() {
+        displayName = ""
         contact = ""
+        resetVerificationState()
+    }
+
+    func resetVerificationState() {
         code = ""
         errorMessage = nil
         isCodeSent = false
@@ -88,5 +121,11 @@ public final class AuthViewModel: ObservableObject {
         case .email:
             return trimmed.lowercased()
         }
+    }
+
+    private func sanitize(displayName: String?) -> String? {
+        guard let displayName else { return nil }
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

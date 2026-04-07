@@ -1,10 +1,13 @@
 import SwiftUI
 
+@MainActor
 struct ChatListView: View {
     @StateObject private var viewModel: ChatListViewModel
     @State private var isShowingCreateSheet = false
 
-    init(container: AppContainer = .shared) {
+    @MainActor
+    init(container: AppContainer? = nil) {
+        let container = container ?? .shared
         _viewModel = StateObject(wrappedValue: container.makeChatListViewModel())
     }
 
@@ -33,6 +36,7 @@ struct ChatListView: View {
                 DialogueView(chatID: chat.id, title: chat.title)
             }
             .searchable(text: $viewModel.searchQuery, prompt: "Поиск чатов")
+            .navigationTitle("Чаты")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { isShowingCreateSheet = true }) {
@@ -46,12 +50,10 @@ struct ChatListView: View {
             .overlay(alignment: .top) {
                 if viewModel.isShowingError {
                     BannerView(message: "Не удалось загрузить список чатов")
-                        .transition(.move(edge: .top))
-                        .padding()
                 }
             }
-            .task { viewModel.onAppear() }
         }
+        .task { viewModel.onAppear() }
     }
 }
 

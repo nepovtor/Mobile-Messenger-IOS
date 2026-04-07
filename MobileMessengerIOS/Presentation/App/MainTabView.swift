@@ -11,13 +11,33 @@ struct MainTabView: View {
         TabView {
             ChatListView(container: container)
                 .tabItem {
-                    Label("Чаты", systemImage: "message")
+                    VStack {
+                        Image(systemName: "message.fill")
+                        Text("Чаты")
+                    }
                 }
+                .tag(0)
 
             ProfileView()
                 .tabItem {
-                    Label("Профиль", systemImage: "person.crop.circle")
+                    VStack {
+                        Image(systemName: "person.fill")
+                        Text("Профиль")
+                    }
                 }
+                .tag(1)
+        }
+        .accentColor(.blue)
+        .onAppear {
+            // Настройка внешнего вида TabBar
+            let appearance = UITabBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor.systemBackground
+
+            UITabBar.appearance().standardAppearance = appearance
+            if #available(iOS 15.0, *) {
+                UITabBar.appearance().scrollEdgeAppearance = appearance
+            }
         }
     }
 }

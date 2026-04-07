@@ -1,8 +1,27 @@
-import { Module } from '@nestjs/common';
-import { HealthModule } from './health/health.module';
-import { VersionModule } from './version/version.module';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { Chat } from "../entities/chat.entity";
+import { Message } from "../entities/message.entity";
+import { User } from "../entities/user.entity";
+import { AppController } from "./app.controller";
+import { AuthModule } from "./auth/auth.module";
+import { ChatModule } from "./chat/chat.module";
+import { HealthModule } from "./health/health.module";
+import { VersionModule } from "./version/version.module";
 
 @Module({
-  imports: [HealthModule, VersionModule],
+  imports: [
+    TypeOrmModule.forRoot({
+      type: "sqlite",
+      database: process.env.SQLITE_PATH ?? "database.sqlite",
+      entities: [User, Chat, Message],
+      synchronize: process.env.NODE_ENV !== "production",
+    }),
+    HealthModule,
+    VersionModule,
+    AuthModule,
+    ChatModule,
+  ],
+  controllers: [AppController],
 })
 export class AppModule {}

@@ -1,12 +1,12 @@
 import Foundation
 
-public struct ChatListItem: Identifiable, Hashable {
-    public let id: UUID
-    public let title: String
-    public let lastMessagePreview: String?
-    public let updatedAt: Date
-    public let unreadCount: Int
-    public let typingParticipants: [String]
+struct ChatListItem: Identifiable, Hashable {
+    let id: UUID
+    let title: String
+    let lastMessagePreview: String?
+    let updatedAt: Date
+    let unreadCount: Int
+    let typingParticipants: [String]
 
     private static let formatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -14,7 +14,7 @@ public struct ChatListItem: Identifiable, Hashable {
         return formatter
     }()
 
-    public var initials: String {
+    var initials: String {
         let words = title.split(separator: " ")
         if let first = words.first, let last = words.dropFirst().first {
             return String(first.prefix(1)) + String(last.prefix(1))
@@ -22,54 +22,38 @@ public struct ChatListItem: Identifiable, Hashable {
         return title.isEmpty ? "" : String(title.prefix(2))
     }
 
-    public var relativeDateString: String {
+    var relativeDateString: String {
         Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
-    }
-
-    public init(
-        id: UUID,
-        title: String,
-        lastMessagePreview: String?,
-        updatedAt: Date,
-        unreadCount: Int,
-        typingParticipants: [String]
-    ) {
-        self.id = id
-        self.title = title
-        self.lastMessagePreview = lastMessagePreview
-        self.updatedAt = updatedAt
-        self.unreadCount = unreadCount
-        self.typingParticipants = typingParticipants
     }
 }
 
 @MainActor
 public final class ChatListViewModel: ObservableObject {
-    @Published public private(set) var chats: [ChatListItem] = []
-    @Published public var searchQuery: String = "" {
+    @Published private(set) var chats: [ChatListItem] = []
+    @Published var searchQuery: String = "" {
         didSet { scheduleSearch() }
     }
-    @Published public var isLoading = false
-    @Published public var isShowingError = false
+    @Published var isLoading = false
+    @Published var isShowingError = false
 
     private let loadChats: LoadChatListUseCase
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
 
-    public init(loadChats: LoadChatListUseCase, analytics: AnalyticsService) {
+    init(loadChats: LoadChatListUseCase, analytics: AnalyticsService) {
         self.loadChats = loadChats
         self.analytics = analytics
     }
 
-    public func onAppear() {
+    func onAppear() {
         Task { await refresh() }
     }
 
-    public func refresh() async {
+    func refresh() async {
         isLoading = true
         do {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
-            self.chats = chats.map { chat in
+            var chatItems = chats.map { chat in
                 ChatListItem(
                     id: chat.id,
                     title: chat.title,
@@ -79,6 +63,19 @@ public final class ChatListViewModel: ObservableObject {
                     typingParticipants: chat.typingParticipants
                 )
             }
+
+            // Добавляем ИИ чат в начало списка
+            let aiChat = ChatListItem(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+                title: "🤖 ИИ Ассистент",
+                lastMessagePreview: "Чем могу помочь?",
+                updatedAt: Date(),
+                unreadCount: 0,
+                typingParticipants: []
+            )
+            chatItems.insert(aiChat, at: 0)
+
+            self.chats = chatItems
             isShowingError = false
         } catch {
             isShowingError = true

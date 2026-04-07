@@ -3,32 +3,39 @@ import Combine
 
 @MainActor
 public final class SessionStore: ObservableObject {
-    public enum State: Equatable {
-        case unauthenticated
-        case authenticated(token: String, userID: UUID, displayName: String)
+    public struct AuthenticatedSession: Codable, Equatable, Sendable {
+        public let token: String
+        public let userID: UUID
+        public let displayName: String
+
+        public init(token: String, userID: UUID, displayName: String) {
+            self.token = token
+            self.userID = userID
+            self.displayName = displayName
+        }
     }
 
-    public enum Constants {
-        public static let currentUserID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
-        public static let currentUserDisplayName = "Вы"
-        static let tokenKey = "auth.token"
+    public enum State: Equatable {
+        case unauthenticated
+        case authenticated(AuthenticatedSession)
     }
 
     @Published public private(set) var state: State
     private let tokenStore: TokenStore
 
     public init(tokenStore: TokenStore) {
-        if let token = tokenStore.retrieveToken() {
-            state = .authenticated(token: token, userID: Constants.currentUserID, displayName: Constants.currentUserDisplayName)
+        self.tokenStore = tokenStore
+        if let session = tokenStore.retrieveSession() {
+            state = .authenticated(session)
         } else {
             state = .unauthenticated
         }
-        self.tokenStore = tokenStore
     }
 
-    public func authenticate(with token: String) {
-        tokenStore.store(token: token)
-        state = .authenticated(token: token, userID: Constants.currentUserID, displayName: Constants.currentUserDisplayName)
+    public func authenticate(token: String, userID: UUID, displayName: String) {
+        let session = AuthenticatedSession(token: token, userID: userID, displayName: displayName)
+        tokenStore.store(session: session)
+        state = .authenticated(session)
     }
 
     public func logout() {
@@ -37,13 +44,31 @@ public final class SessionStore: ObservableObject {
     }
 
     public var authToken: String? {
-        if case .authenticated(let token, _, _) = state { return token }
+        currentSession?.token
+    }
+
+    public var currentSession: AuthenticatedSession? {
+        if case .authenticated(let session) = state {
+            return session
+        }
         return nil
+    }
+
+    public var currentUserID: UUID? {
+        currentSession?.userID
+    }
+
+    public var currentUserDisplayName: String? {
+        currentSession?.displayName
+    }
+
+    public var isAuthenticated: Bool {
+        currentSession != nil
     }
 }
 
-public protocol TokenStore {
-    func store(token: String)
-    func retrieveToken() -> String?
+public protocol TokenStore: Sendable {
+    func store(session: SessionStore.AuthenticatedSession)
+    func retrieveSession() -> SessionStore.AuthenticatedSession?
     func clear()
 }

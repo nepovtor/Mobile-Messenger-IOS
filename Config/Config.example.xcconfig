@@ -1,0 +1,11 @@
+// Copy this file to Config/Config.xcconfig and adjust the values if needed.
+// For the iOS simulator, 127.0.0.1 points to the host Mac.
+// For a physical device, replace 127.0.0.1 with your Mac's LAN IP.
+
+REST_BASE_URL = http\:\/\/127.0.0.1:8080/api
+WEBSOCKET_URL = ws\:\/\/127.0.0.1:8080
+
+FEATURE_REALTIME = YES
+FEATURE_PUSH = YES
+FEATURE_MEDIA = NO
+FEATURE_VERBOSE_LOGGING = YES

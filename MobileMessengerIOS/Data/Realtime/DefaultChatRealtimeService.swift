@@ -12,15 +12,23 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private let analytics: AnalyticsService
     private let reachability: ReachabilityService
     private let featureFlags: FeatureFlags
+    private let userSessionProvider: @Sendable () -> SessionStore.AuthenticatedSession?
     private var state: State = .disconnected
     private var eventContinuations: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation] = [:]
     private let stateQueue = DispatchQueue(label: "realtime.state.queue")
 
-    public init(baseURL: URL, analytics: AnalyticsService, reachability: ReachabilityService, featureFlags: FeatureFlags) {
+    public init(
+        baseURL: URL,
+        analytics: AnalyticsService,
+        reachability: ReachabilityService,
+        featureFlags: FeatureFlags,
+        userSessionProvider: @escaping @Sendable () -> SessionStore.AuthenticatedSession?
+    ) {
         self.baseURL = baseURL
         self.analytics = analytics
         self.reachability = reachability
         self.featureFlags = featureFlags
+        self.userSessionProvider = userSessionProvider
     }
 
     public func connect(to chatID: UUID) {
@@ -49,14 +57,19 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     public func sendMessage(chatID: UUID, text: String, localID: UUID) async throws {
         guard featureFlags.isRealtimeEnabled else { return }
+        guard let currentSession = userSessionProvider() else {
+            throw AppError.unauthorized
+        }
+
         try await Task.sleep(nanoseconds: 150_000_000) // simulate network
         let message = Message(
             id: Message.Identifier(chatID: chatID, messageID: UUID()),
             localID: localID,
-            authorID: SessionStore.Constants.currentUserID,
-            authorName: SessionStore.Constants.currentUserDisplayName,
+            authorID: currentSession.userID,
+            authorName: currentSession.displayName,
             text: text,
             createdAt: Date(),
+            isOutgoing: true,
             status: .sent
         )
         eventContinuations[chatID]?.yield(.message(message))
@@ -124,4 +137,3 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         min(pow(2.0, Double(retry)), 30)
     }
 }
-

@@ -1,14 +1,11 @@
-// AnalyticsService.swift
-// Centralized analytics protocol and default implementation
 import Foundation
 
 public protocol AnalyticsService: Sendable {
-    func track(event: AppAnalyticsEvent)
+    func track(event: AnalyticsEvent)
     func track(error: Error, context: String)
 }
 
-// Use a unique, explicit type name to avoid ambiguity with any other AnalyticsEvent in the project.
-public struct AppAnalyticsEvent: Sendable {
+public struct AnalyticsEvent: Sendable {
     public enum Kind: String, Sendable {
         case chatOpened
         case messageSent
@@ -32,16 +29,11 @@ public struct AppAnalyticsEvent: Sendable {
 public final class DefaultAnalyticsService: AnalyticsService, @unchecked Sendable {
     public static let shared = DefaultAnalyticsService()
     private let queue = DispatchQueue(label: "analytics.queue", qos: .utility)
-    private var events: [AppAnalyticsEvent] = []
+    private var events: [AnalyticsEvent] = [] // Protected by DispatchQueue
 
     private init() {}
 
-    // Convenience overloads to reduce ambiguity at call sites
-    public func track(_ kind: AppAnalyticsEvent.Kind, metadata: [String: String] = [:], timestamp: Date = Date()) {
-        track(event: AppAnalyticsEvent(kind: kind, metadata: metadata, timestamp: timestamp))
-    }
-
-    public func track(event: AppAnalyticsEvent) {
+    public func track(event: AnalyticsEvent) {
         queue.async { [weak self] in
             self?.events.append(event)
             #if DEBUG
@@ -52,7 +44,7 @@ public final class DefaultAnalyticsService: AnalyticsService, @unchecked Sendabl
 
     public func track(error: Error, context: String) {
         queue.async { [weak self] in
-            let event = AppAnalyticsEvent(kind: .networkError, metadata: ["context": context, "description": String(describing: error)])
+            let event = AnalyticsEvent(kind: .networkError, metadata: ["context": context, "description": String(describing: error)])
             self?.events.append(event)
             #if DEBUG
             print("[Analytics][Error] \(context): \(error.localizedDescription)")
@@ -60,4 +52,3 @@ public final class DefaultAnalyticsService: AnalyticsService, @unchecked Sendabl
         }
     }
 }
-
