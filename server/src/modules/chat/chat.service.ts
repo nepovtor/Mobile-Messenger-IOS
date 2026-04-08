@@ -163,7 +163,10 @@ export class ChatService implements OnModuleInit {
   }
 
   private hasAccess(chat: ChatEntity, userID: string): boolean {
-    return chat.participants.length === 0 || chat.participants.some((user) => user.id === userID);
+    return (
+      chat.participants.length === 0 ||
+      chat.participants.some((user) => user.id === userID)
+    );
   }
 
   private toChatDto(chat: ChatEntity): Chat {

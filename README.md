@@ -1,6 +1,6 @@
 # 🚀 Mobile Messenger iOS
 
-![Platform](https://img.shields.io/badge/platform-iOS_15+-blueviolet?style=for-the-badge) ![Swift](https://img.shields.io/badge/swift-5.9-orange?style=for-the-badge) ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20UIKit-ff69b4?style=for-the-badge) ![Status](https://img.shields.io/badge/status-Active-success?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-iOS_17+-blueviolet?style=for-the-badge) ![Swift](https://img.shields.io/badge/swift-5.9-orange?style=for-the-badge) ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20UIKit-ff69b4?style=for-the-badge) ![Status](https://img.shields.io/badge/status-Active-success?style=for-the-badge)
 
 > **Гипербыстрый и стильный мессенджер для тех, кто любит общаться красиво.**
 
@@ -50,11 +50,11 @@
 | Ядро | Swift 5+, Combine, async/await |
 | UI | SwiftUI + UIKit (гибридный подход) |
 | Сеть | URLSession, WebSocket, Network.framework |
-| Данные | CoreData, Keychain, UserDefaults |
+| Данные | SwiftData, Keychain, UserDefaults |
 | Пуши | Firebase Cloud Messaging, APNs |
 | CI/CD | Xcode Cloud, Fastlane, GitHub Actions |
 
-> ⚙️ Минимальная iOS: **15.0**. Собирается в Xcode 15+ на macOS 13 Ventura и выше.
+> ⚙️ Минимальная iOS: **17.0**. Собирается в Xcode 15+ на macOS 13 Ventura и выше.
 
 ## 🗂 Структура проекта
 ```
@@ -64,7 +64,7 @@ Mobile-Messenger-IOS/
 ├── Data/                 # API-клиенты, WebSocket, репозитории данных
 ├── Resources/            # Ассеты, локализации, конфиги
 ├── Tests/                # Unit, Snapshot и UI тесты
-├── Scripts/              # Fastlane, утилиты сборок, pre-commit хуки
+├── Scripts/              # Утилиты сборок и локальная проверка сценариев README
 └── README.md             # Документация проекта
 ```
 
@@ -139,7 +139,7 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
 ### Запуск в симуляторе
 
 1. В верхней панели Xcode выберите **Scheme**: `MobileMessengerIOS`.
-2. Рядом выберите симулятор (например, **iPhone 15 Pro**).
+2. Рядом выберите симулятор (например, **iPhone 17**).
 3. Нажмите ▶ (**Run**) или `Cmd + R`.
 
 ### Запуск на реальном устройстве (опционально)
@@ -176,21 +176,26 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
 ## 🧪 Тестирование качества
 - **Unit**: `Cmd + U` или
   ```bash
-  xcodebuild test -scheme MobileMessenger -destination 'platform=iOS Simulator,name=iPhone 15'
+  xcodebuild \
+    -project MobileMessengerIOS.xcodeproj \
+    -scheme MobileMessengerIOS \
+    -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17' \
+    CODE_SIGNING_ALLOWED=NO \
+    test
   ```
 - **UI / Snapshot**: запускайте из Xcode или через `xcodebuild test` с нужной схемой.
 - **Static Analysis**: SwiftLint + SwiftFormat (рекомендуется добавить в pre-commit).
+- **Smoke / README check**: `./Scripts/verify-readme.sh`
 
 ## 🛠️ Серверная разработка
 В репозитории добавлен рабочий каркас backend'а (NestJS) в папке `server/`. Он закрывает базовую инфраструктуру для интеграции с мобильным клиентом и может запускаться локально.
 
 ### Минимальный стек
 - **TypeScript + NestJS** для HTTP/WebSocket API.
-- **PostgreSQL** для персистентных данных (чаты, пользователи, ACL).
-- **Redis** как кэш и брокер для эфемерных данных (сессии, rate limit, Presence).
-- **Kafka** (Redpanda) для асинхронных событий (доставка сообщений, fanout уведомлений).
-- **S3-совместимое хранилище** (MinIO) для медиа.
-- **OpenAPI 3.1** для контрактов клиента и автогенерации моделей.
+- **SQLite** по умолчанию для локального запуска и smoke-тестов.
+- **PostgreSQL / Redis / MinIO / Redpanda** уже подготовлены в `docker-compose.dev.yml` как следующий слой инфраструктуры.
+- **REST + WebSocket** точки входа для интеграции мобильного клиента и real-time сценариев.
+- **Контрактно-ориентированная структура DTO** как база для дальнейшей OpenAPI/AsyncAPI генерации.
 
 ### Быстрый старт локально
 1. **Поднимите инфраструктуру в Docker** (PostgreSQL, Redis, MinIO, Kafka/Redpanda):
@@ -202,13 +207,13 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
    cd server
    cp .env.example .env
    ```
-3. **Установите зависимости** (Node 20+, pnpm):
+3. **Установите зависимости** (Node 20+, npm):
    ```bash
-   pnpm install
+   npm install
    ```
 4. **Запустите backend в watch-режиме**:
    ```bash
-   pnpm run start:dev
+   npm run start:dev
    ```
 5. **Проверьте точки входа**:
    - REST префикс: `http://localhost:8080/api`
@@ -234,11 +239,11 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
    ```ruby
    lane :beta do
      match(type: "appstore")
-     build_app(scheme: "MobileMessenger")
+     build_app(scheme: "MobileMessengerIOS")
      upload_to_testflight
    end
    ```
-3. Для GitHub Actions доступен шаблон workflow `ci.yml` (создайте при необходимости).
+3. GitHub Actions уже настроен в `.github/workflows/swift.yml` и прогоняет backend lint/build/test вместе с iOS build/test.
 
 ## 🛡 Безопасность
 - SSL pinning, ATS без лишних исключений.
