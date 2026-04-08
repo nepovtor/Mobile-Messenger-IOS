@@ -34,6 +34,7 @@ public final class DefaultChatRepository: ChatRepository {
                         unreadCount: 0
                     )
                 }
+                try await store.upsert(chats: chats)
                 return filterChats(chats, searchQuery: searchQuery)
             } catch {
                 analytics.track(error: error, context: "listChats")
@@ -42,6 +43,36 @@ public final class DefaultChatRepository: ChatRepository {
         }
 
         return try await store.fetchChats(searchQuery: searchQuery)
+    }
+
+    public func createChat(title: String, participantIDs: [UUID]) async throws -> Chat {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Название чата не может быть пустым", en: "Chat title cannot be empty"))
+        }
+
+        if let networking = chatNetworking {
+            let dto = try await networking.createChat(title: trimmedTitle, participantIDs: participantIDs)
+            let chat = Chat(
+                id: dto.id,
+                title: dto.title,
+                lastMessagePreview: dto.lastMessagePreview,
+                lastActivity: dto.lastActivity,
+                unreadCount: 0
+            )
+            try await store.upsert(chats: [chat])
+            return chat
+        }
+
+        let localChat = Chat(
+            id: UUID(),
+            title: trimmedTitle,
+            lastMessagePreview: nil,
+            lastActivity: Date(),
+            unreadCount: 0
+        )
+        try await store.upsert(chats: [localChat])
+        return localChat
     }
 
     public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {

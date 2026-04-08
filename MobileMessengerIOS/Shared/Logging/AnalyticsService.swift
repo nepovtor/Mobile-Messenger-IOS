@@ -5,6 +5,12 @@ public protocol AnalyticsService: Sendable {
     func track(error: Error, context: String)
 }
 
+public extension AnalyticsService {
+    func track(_ kind: AnalyticsEvent.Kind, metadata: [String: String] = [:]) {
+        track(event: AnalyticsEvent(kind: kind, metadata: metadata))
+    }
+}
+
 public struct AnalyticsEvent: Sendable {
     public enum Kind: String, Sendable {
         case chatOpened

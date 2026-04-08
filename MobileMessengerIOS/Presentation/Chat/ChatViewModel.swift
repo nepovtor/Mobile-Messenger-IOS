@@ -82,7 +82,7 @@ public final class ChatViewModel: ObservableObject {
                 let message = try await sendMessageUseCase(chatID: chatID, text: trimmed, localID: UUID())
                 upsert(message: message)
             } catch {
-                banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
+                banner = .error(AppLanguagePreference.localized(ru: "Не удалось отправить сообщение. Попробуйте снова.", en: "Failed to send the message. Please try again."))
                 analytics.track(error: error, context: "send_message")
             }
         }
@@ -104,7 +104,7 @@ public final class ChatViewModel: ObservableObject {
             isLoadingHistory = false
         } catch {
             isLoadingHistory = false
-            banner = .error("Не удалось загрузить чат")
+            banner = .error(AppLanguagePreference.localized(ru: "Не удалось загрузить чат", en: "Failed to load the chat"))
             analytics.track(error: error, context: "load_history")
         }
     }

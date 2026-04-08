@@ -63,6 +63,7 @@ public final class AppContainer: ObservableObject {
     public func makeChatListViewModel() -> ChatListViewModel {
         ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: chatRepository),
+            createChat: CreateChatUseCase(repository: chatRepository),
             analytics: analytics
         )
     }

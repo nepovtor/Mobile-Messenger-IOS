@@ -19,13 +19,16 @@ export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Get()
-  listChats() {
-    return this.chatService.listChats();
+  listChats(@Req() request: AuthenticatedRequest) {
+    return this.chatService.listChats(request.user.sub);
   }
 
   @Get(":chatId/messages")
-  getMessages(@Param("chatId") chatId: string) {
-    return this.chatService.getMessages(chatId);
+  getMessages(
+    @Param("chatId") chatId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.chatService.getMessages(chatId, request.user.sub);
   }
 
   @Post(":chatId/messages")

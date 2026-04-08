@@ -6,7 +6,7 @@ struct MessageStatusView: View {
     var body: some View {
         switch status {
         case .sending:
-            Label("Отправка", systemImage: "paperplane")
+            Label(AppLanguagePreference.localized(ru: "Отправка", en: "Sending"), systemImage: "paperplane")
                 .labelStyle(.iconOnly)
                 .foregroundColor(.secondary)
         case .sent:

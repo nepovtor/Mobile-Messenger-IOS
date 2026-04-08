@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -50,29 +51,20 @@ export class ChatService implements OnModuleInit {
     await this.initializeCommonChat();
   }
 
-  async listChats(): Promise<Chat[]> {
+  async listChats(userID: string): Promise<Chat[]> {
     const chats = await this.chatRepository.find({
       relations: ["participants"],
       order: { lastActivity: "DESC", createdAt: "DESC" },
     });
 
-    return chats.map((chat) => ({
-      id: chat.id,
-      title: chat.title,
-      lastMessagePreview: chat.lastMessagePreview,
-      lastActivity: (chat.lastActivity ?? chat.createdAt).toISOString(),
-    }));
+    return chats
+      .filter((chat) => this.hasAccess(chat, userID))
+      .map((chat) => this.toChatDto(chat));
   }
 
-  async getMessages(chatId: string): Promise<Message[]> {
+  async getMessages(chatId: string, userID: string): Promise<Message[]> {
     const normalizedChatID = chatId.toLowerCase();
-    const chat = await this.chatRepository.findOne({
-      where: { id: normalizedChatID },
-    });
-    if (!chat) {
-      throw new NotFoundException("Chat not found");
-    }
-
+    await this.requireChatAccess(normalizedChatID, userID);
     const messages = await this.messageRepository.find({
       where: { chat: { id: normalizedChatID } },
       relations: ["author"],
@@ -90,12 +82,7 @@ export class ChatService implements OnModuleInit {
     authorID: string,
   ): Promise<Message> {
     const normalizedChatID = chatId.toLowerCase();
-    const chat = await this.chatRepository.findOne({
-      where: { id: normalizedChatID },
-    });
-    if (!chat) {
-      throw new NotFoundException("Chat not found");
-    }
+    const chat = await this.requireChatAccess(normalizedChatID, authorID);
 
     const author = await this.userRepository.findOne({
       where: { id: authorID },
@@ -122,7 +109,7 @@ export class ChatService implements OnModuleInit {
     return this.toMessageDto(message, normalizedChatID);
   }
 
-  async createChat(body: CreateChatDto, ownerID: string): Promise<ChatEntity> {
+  async createChat(body: CreateChatDto, ownerID: string): Promise<Chat> {
     const participantIDs = Array.from(
       new Set([...body.participantIds, ownerID]),
     );
@@ -136,7 +123,8 @@ export class ChatService implements OnModuleInit {
       lastActivity: new Date(),
     });
 
-    return this.chatRepository.save(chat);
+    const savedChat = await this.chatRepository.save(chat);
+    return this.toChatDto(savedChat);
   }
 
   private async initializeCommonChat() {
@@ -155,6 +143,36 @@ export class ChatService implements OnModuleInit {
     });
     await this.chatRepository.save(chat);
     this.logger.log("Seeded General Chat");
+  }
+
+  private async requireChatAccess(
+    chatId: string,
+    userID: string,
+  ): Promise<ChatEntity> {
+    const chat = await this.chatRepository.findOne({
+      where: { id: chatId },
+      relations: ["participants"],
+    });
+    if (!chat) {
+      throw new NotFoundException("Chat not found");
+    }
+    if (!this.hasAccess(chat, userID)) {
+      throw new ForbiddenException("Access denied");
+    }
+    return chat;
+  }
+
+  private hasAccess(chat: ChatEntity, userID: string): boolean {
+    return chat.participants.length === 0 || chat.participants.some((user) => user.id === userID);
+  }
+
+  private toChatDto(chat: ChatEntity): Chat {
+    return {
+      id: chat.id,
+      title: chat.title,
+      lastMessagePreview: chat.lastMessagePreview,
+      lastActivity: (chat.lastActivity ?? chat.createdAt).toISOString(),
+    };
   }
 
   private toMessageDto(message: MessageEntity, chatId: string): Message {

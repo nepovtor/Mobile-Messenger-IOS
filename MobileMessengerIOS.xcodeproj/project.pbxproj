@@ -43,6 +43,7 @@
 		D503A9D05F1A4F49A86AD537 /* DefaultChatRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE940CD9ED4B4EFC97C48CAE /* DefaultChatRealtimeService.swift */; };
 		DECB1BF54D164D53ABC2FF8A /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914DF17C08C64D12BE15F460 /* SessionStore.swift */; };
 		EDF1A6F7F129450D8505C81B /* MessageStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE8F16C007F4E309EB5EC22 /* MessageStatus.swift */; };
+		F3A1D0B74D134F5E81B9A422 /* CreateChatUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4C2E8D916A740A8B49DA364 /* CreateChatUseCase.swift */; };
 		F00190CB017745F3907414E0 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE4380CB81594638A1AB6346 /* Message.swift */; };
 		F69B0FBED04C45E68F0CE844 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C29CD7B8D7D14E84B35CB1AA /* ReachabilityService.swift */; };
 		FE3E2CAFA1A64C8284B969C3 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4A0B922EB034697919B93BB /* AuthViewModel.swift */; };
@@ -80,6 +81,7 @@
 		B5155C2914D7427AB8D6FA83 /* DefaultChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultChatRepository.swift; sourceTree = "<group>"; };
 		B6307C4D28434252B875E9B1 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		BCD10FE7D1D2472AA378F216 /* DialogueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DialogueView.swift; sourceTree = "<group>"; };
+		B4C2E8D916A740A8B49DA364 /* CreateChatUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateChatUseCase.swift; sourceTree = "<group>"; };
 		BE4380CB81594638A1AB6346 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
 		BFDA2643DE174267AD184771 /* SendMessageUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendMessageUseCase.swift; sourceTree = "<group>"; };
 		C29CD7B8D7D14E84B35CB1AA /* ReachabilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityService.swift; sourceTree = "<group>"; };
@@ -137,6 +139,7 @@
 		0E515483EA4543CDAD9DEB6C /* UseCases */ = {
 			isa = PBXGroup;
 			children = (
+				B4C2E8D916A740A8B49DA364 /* CreateChatUseCase.swift */,
 				0E3341D122F14CCBA46562C4 /* LoadChatListUseCase.swift */,
 				DF89FB281FD04A9CBC745CBA /* ObserveChatMessagesUseCase.swift */,
 				BFDA2643DE174267AD184771 /* SendMessageUseCase.swift */,
@@ -448,6 +451,7 @@
 				6DE6464F93404DCDB1D98E39 /* MessageAttachment.swift in Sources */,
 				EDF1A6F7F129450D8505C81B /* MessageStatus.swift in Sources */,
 				99317D73ECE84F038783511A /* ChatRepository.swift in Sources */,
+				F3A1D0B74D134F5E81B9A422 /* CreateChatUseCase.swift in Sources */,
 				5DFC88BCF22045078D61DFCC /* LoadChatListUseCase.swift in Sources */,
 				C6B72048F1084075B13780F7 /* ObserveChatMessagesUseCase.swift in Sources */,
 				4BE33E89E8EB45328391F2E2 /* SendMessageUseCase.swift in Sources */,

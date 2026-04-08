@@ -2,6 +2,7 @@ import Foundation
 
 public protocol ChatLocalStore: Sendable {
     func ensureChatExists(id: UUID, title: String) async throws
+    func upsert(chats: [Chat]) async throws
     func upsert(messages: [Message], for chatID: UUID) async throws
     func append(message: Message, for chatID: UUID) async throws
     func loadMessages(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message]

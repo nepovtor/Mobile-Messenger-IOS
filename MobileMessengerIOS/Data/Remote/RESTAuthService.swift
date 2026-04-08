@@ -118,6 +118,7 @@ public struct AuthVerifyResponse: Codable {
 
 public protocol ChatNetworking: Sendable {
     func listChats() async throws -> [ChatDTO]
+    func createChat(title: String, participantIDs: [UUID]) async throws -> ChatDTO
     func getMessages(chatID: UUID) async throws -> [MessageDTO]
     func sendMessage(chatID: UUID, text: String, messageID: UUID) async throws -> MessageDTO
 }
@@ -188,15 +189,33 @@ public struct RESTChatService: ChatNetworking {
         return try Self.makeJSONDecoder().decode([ChatDTO].self, from: data)
     }
 
+    public func createChat(title: String, participantIDs: [UUID]) async throws -> ChatDTO {
+        let url = endpointURL("chats")
+        var request = authorizedRequest(for: url, method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let payload: [String: Any] = [
+            "title": title,
+            "participantIds": participantIDs.map(canonicalUUID)
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка создания чата", en: "Failed to create chat"))
+        return try Self.makeJSONDecoder().decode(ChatDTO.self, from: data)
+    }
+
     public func getMessages(chatID: UUID) async throws -> [MessageDTO] {
         let url = endpointURL("chats/\(canonicalUUID(chatID))/messages")
         let request = authorizedRequest(for: url)
         
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.network(description: "Некорректный ответ сервера")
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
         }
-        try validate(httpResponse: httpResponse, fallbackDescription: "Ошибка получения сообщений")
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка получения сообщений", en: "Failed to load messages"))
         return try Self.makeJSONDecoder().decode([MessageDTO].self, from: data)
     }
 
@@ -212,9 +231,9 @@ public struct RESTChatService: ChatNetworking {
         
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.network(description: "Некорректный ответ сервера")
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
         }
-        try validate(httpResponse: httpResponse, fallbackDescription: "Ошибка отправки сообщения")
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка отправки сообщения", en: "Failed to send the message"))
         return try Self.makeJSONDecoder().decode(MessageDTO.self, from: data)
     }
 

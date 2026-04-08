@@ -23,7 +23,8 @@ struct ChatListItem: Identifiable, Hashable {
     }
 
     var relativeDateString: String {
-        Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
+        Self.formatter.locale = AppLanguagePreference.current.locale
+        return Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
     }
 }
 
@@ -35,13 +36,17 @@ public final class ChatListViewModel: ObservableObject {
     }
     @Published var isLoading = false
     @Published var isShowingError = false
+    @Published var isCreatingChat = false
+    @Published var createChatErrorMessage: String?
 
     private let loadChats: LoadChatListUseCase
+    private let createChatUseCase: CreateChatUseCase
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
 
-    init(loadChats: LoadChatListUseCase, analytics: AnalyticsService) {
+    init(loadChats: LoadChatListUseCase, createChat: CreateChatUseCase, analytics: AnalyticsService) {
         self.loadChats = loadChats
+        self.createChatUseCase = createChat
         self.analytics = analytics
     }
 
@@ -53,22 +58,13 @@ public final class ChatListViewModel: ObservableObject {
         isLoading = true
         do {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
-            var chatItems = chats.map { chat in
-                ChatListItem(
-                    id: chat.id,
-                    title: chat.title,
-                    lastMessagePreview: chat.lastMessagePreview,
-                    updatedAt: chat.lastActivity,
-                    unreadCount: chat.unreadCount,
-                    typingParticipants: chat.typingParticipants
-                )
-            }
+            var chatItems = chats.map(makeChatItem(from:))
 
             // Добавляем ИИ чат в начало списка
             let aiChat = ChatListItem(
                 id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-                title: "🤖 ИИ Ассистент",
-                lastMessagePreview: "Чем могу помочь?",
+                title: AppLanguagePreference.localized(ru: "🤖 ИИ Ассистент", en: "🤖 AI Assistant"),
+                lastMessagePreview: AppLanguagePreference.localized(ru: "Чем могу помочь?", en: "How can I help?"),
                 updatedAt: Date(),
                 unreadCount: 0,
                 typingParticipants: []
@@ -84,6 +80,37 @@ public final class ChatListViewModel: ObservableObject {
         isLoading = false
     }
 
+    func createChat(title: String) async -> ChatListItem? {
+        guard !isCreatingChat else { return nil }
+        isCreatingChat = true
+        createChatErrorMessage = nil
+        defer { isCreatingChat = false }
+
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            createChatErrorMessage = AppLanguagePreference.localized(ru: "Название чата не может быть пустым", en: "Chat title cannot be empty")
+            return nil
+        }
+
+        do {
+            let chat = try await createChatUseCase(title: trimmedTitle, participantIDs: [])
+            if !searchQuery.isEmpty {
+                searchTask?.cancel()
+                searchQuery = ""
+            }
+            await refresh()
+            return makeChatItem(from: chat)
+        } catch {
+            createChatErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            analytics.track(error: error, context: "chat_create")
+            return nil
+        }
+    }
+
+    func clearCreateChatState() {
+        createChatErrorMessage = nil
+    }
+
     private func scheduleSearch() {
         searchTask?.cancel()
         searchTask = Task { [weak self] in
@@ -91,5 +118,16 @@ public final class ChatListViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             await self?.refresh()
         }
+    }
+
+    private func makeChatItem(from chat: Chat) -> ChatListItem {
+        ChatListItem(
+            id: chat.id,
+            title: chat.title,
+            lastMessagePreview: chat.lastMessagePreview,
+            updatedAt: chat.lastActivity,
+            unreadCount: chat.unreadCount,
+            typingParticipants: chat.typingParticipants
+        )
     }
 }
