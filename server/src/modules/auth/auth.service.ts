@@ -38,7 +38,7 @@ export class AuthService {
     return { expiresIn: 300 };
   }
 
-  async verifyCode({ method, contact, code }: VerifyCodeDto) {
+  async verifyCode({ method, contact, code, displayName }: VerifyCodeDto) {
     if (method !== "phone") {
       throw new BadRequestException("Only phone method supported");
     }
@@ -53,13 +53,19 @@ export class AuthService {
     let user = await this.userRepository.findOne({ where: { phone: contact } });
     if (!user) {
       const fallbackName = `User ${contact.slice(-4)}`;
-      const requestedDisplayName = this.normalizeDisplayName(arguments[0].displayName);
+      const requestedDisplayName = this.normalizeDisplayName(displayName);
 
       user = this.userRepository.create({
         phone: contact,
         displayName: requestedDisplayName ?? fallbackName,
       });
       await this.userRepository.save(user);
+    } else if (displayName) {
+      const requestedDisplayName = this.normalizeDisplayName(displayName);
+      if (requestedDisplayName && requestedDisplayName !== user.displayName) {
+        user.displayName = requestedDisplayName;
+        await this.userRepository.save(user);
+      }
     }
 
     const payload: JwtPayload = {
