@@ -6,12 +6,17 @@ public protocol ReachabilityService: Sendable {
     func observe() -> AsyncStream<Bool>
 }
 
-public final class DefaultReachabilityService: ReachabilityService {
+public final class DefaultReachabilityService: ReachabilityService, @unchecked Sendable {
     private let monitor: NWPathMonitor
     private let queue = DispatchQueue(label: "reachability.queue")
+    private let lock = NSLock()
+    private var continuations: [UUID: AsyncStream<Bool>.Continuation] = [:]
 
     public init() {
         monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            self?.broadcast(path.status == .satisfied)
+        }
         monitor.start(queue: queue)
     }
 
@@ -25,12 +30,27 @@ public final class DefaultReachabilityService: ReachabilityService {
 
     public func observe() -> AsyncStream<Bool> {
         AsyncStream { continuation in
-            monitor.pathUpdateHandler = { path in
-                continuation.yield(path.status == .satisfied)
+            let id = UUID()
+            lock.lock()
+            continuations[id] = continuation
+            lock.unlock()
+
+            continuation.yield(isReachable)
+            continuation.onTermination = { [weak self] _ in
+                self?.lock.lock()
+                self?.continuations[id] = nil
+                self?.lock.unlock()
             }
-            continuation.onTermination = { [monitor] _ in
-                monitor.pathUpdateHandler = nil
-            }
+        }
+    }
+
+    private func broadcast(_ isReachable: Bool) {
+        lock.lock()
+        let activeContinuations = continuations.values
+        lock.unlock()
+
+        for continuation in activeContinuations {
+            continuation.yield(isReachable)
         }
     }
 }

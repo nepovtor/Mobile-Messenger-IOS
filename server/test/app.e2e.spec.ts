@@ -37,58 +37,75 @@ describe("Mobile Messenger backend", () => {
   });
 
   it("supports the README auth and chat flow", async () => {
-    const contact = "+15551230001";
+    const authenticate = async (contact: string, displayName: string) => {
+      const requestCodeResponse = await request(app.getHttpServer())
+        .post("/api/auth/request")
+        .send({
+          method: "phone",
+          contact,
+        });
 
-    const requestCodeResponse = await request(app.getHttpServer())
-      .post("/api/auth/request")
-      .send({
-        method: "phone",
-        contact,
-      });
+      expect(requestCodeResponse.status).toBe(201);
+      expect(requestCodeResponse.body.expiresIn).toBe(300);
 
-    expect(requestCodeResponse.status).toBe(201);
-    expect(requestCodeResponse.body.expiresIn).toBe(300);
+      const verifyCodeResponse = await request(app.getHttpServer())
+        .post("/api/auth/verify")
+        .send({
+          method: "phone",
+          contact,
+          code: "123456",
+          displayName,
+        });
 
-    const verifyCodeResponse = await request(app.getHttpServer())
-      .post("/api/auth/verify")
-      .send({
-        method: "phone",
-        contact,
-        code: "123456",
-        displayName: "README Smoke",
-      });
+      expect(verifyCodeResponse.status).toBe(201);
+      expect(verifyCodeResponse.body.displayName).toBe(displayName);
 
-    expect(verifyCodeResponse.status).toBe(201);
-    expect(verifyCodeResponse.body.displayName).toBe("README Smoke");
+      return {
+        token: verifyCodeResponse.body.token as string,
+        userID: verifyCodeResponse.body.userID as string,
+      };
+    };
 
-    const token = verifyCodeResponse.body.token as string;
-    const withAuth = (
+    const createAuthedRequest = (token: string) => (
       method: "get" | "post",
       path: string,
-    ) => request(app.getHttpServer())[method](path).set("Authorization", `Bearer ${token}`);
+    ) =>
+      request(app.getHttpServer())[method](path).set(
+        "Authorization",
+        `Bearer ${token}`,
+      );
 
-    const chatsResponse = await withAuth("get", "/api/chats");
+    const primaryUser = await authenticate("+15551230001", "README Smoke");
+    const secondaryUser = await authenticate("+15551230002", "README Reader");
+    const withPrimaryAuth = createAuthedRequest(primaryUser.token);
+    const withSecondaryAuth = createAuthedRequest(secondaryUser.token);
+
+    const chatsResponse = await withPrimaryAuth("get", "/api/chats");
     expect(chatsResponse.status).toBe(200);
     expect(chatsResponse.body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           title: "General Chat",
+          unreadCount: 0,
+          typingParticipants: [],
         }),
       ]),
     );
 
-    const createChatResponse = await withAuth("post", "/api/chats").send({
+    const createChatResponse = await withPrimaryAuth("post", "/api/chats").send({
       title: "README Test Chat",
-      participantIds: [],
+      participantIds: [secondaryUser.userID],
     });
 
     expect(createChatResponse.status).toBe(201);
     expect(createChatResponse.body.title).toBe("README Test Chat");
+    expect(createChatResponse.body.unreadCount).toBe(0);
+    expect(createChatResponse.body.typingParticipants).toEqual([]);
 
     const chatID = createChatResponse.body.id as string;
     const messageID = randomUUID();
 
-    const sendMessageResponse = await withAuth(
+    const sendMessageResponse = await withPrimaryAuth(
       "post",
       `/api/chats/${chatID}/messages`,
     )
@@ -103,7 +120,61 @@ describe("Mobile Messenger backend", () => {
       "Hello from automated README smoke test",
     );
 
-    const messagesResponse = await withAuth(
+    const duplicateSendResponse = await withPrimaryAuth(
+      "post",
+      `/api/chats/${chatID}/messages`,
+    )
+      .send({
+        text: "Hello from automated README smoke test",
+        messageID,
+      });
+
+    expect(duplicateSendResponse.status).toBe(201);
+    expect(duplicateSendResponse.body.id).toBe(sendMessageResponse.body.id);
+
+    const chatForReaderResponse = await withSecondaryAuth(
+      "get",
+      `/api/chats/${chatID}`,
+    );
+    expect(chatForReaderResponse.status).toBe(200);
+    expect(chatForReaderResponse.body.unreadCount).toBe(1);
+    expect(chatForReaderResponse.body.typingParticipants).toEqual([]);
+
+    const typingStartedResponse = await withSecondaryAuth(
+      "post",
+      `/api/chats/${chatID}/typing`,
+    ).send({
+      isTyping: true,
+    });
+    expect(typingStartedResponse.status).toBe(201);
+
+    const chatWhileTypingResponse = await withPrimaryAuth(
+      "get",
+      `/api/chats/${chatID}`,
+    );
+    expect(chatWhileTypingResponse.status).toBe(200);
+    expect(chatWhileTypingResponse.body.typingParticipants).toEqual([
+      "README Reader",
+    ]);
+
+    const typingStoppedResponse = await withSecondaryAuth(
+      "post",
+      `/api/chats/${chatID}/typing`,
+    ).send({
+      isTyping: false,
+    });
+    expect(typingStoppedResponse.status).toBe(201);
+
+    const markReadResponse = await withSecondaryAuth(
+      "post",
+      `/api/chats/${chatID}/read`,
+    ).send({
+      messageID,
+    });
+    expect(markReadResponse.status).toBe(201);
+    expect(markReadResponse.body.unreadCount).toBe(0);
+
+    const messagesResponse = await withPrimaryAuth(
       "get",
       `/api/chats/${chatID}/messages`,
     );
@@ -115,6 +186,7 @@ describe("Mobile Messenger backend", () => {
           messageID,
           text: "Hello from automated README smoke test",
           authorName: "README Smoke",
+          status: "read",
         }),
       ]),
     );

@@ -97,7 +97,7 @@ struct DialogueView: View {
 
                     Spacer(minLength: 16)
 
-                    Label(t("Активен", "Active"), systemImage: "waveform.path.ecg")
+                    Label(viewModel.presenceLabel, systemImage: viewModel.isTyping ? "ellipsis.message.fill" : "waveform.path.ecg")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
@@ -107,7 +107,7 @@ struct DialogueView: View {
 
                 HStack(spacing: 10) {
                     HeaderPill(title: t("Сообщений", "Messages"), value: "\(viewModel.messages.count)")
-                    HeaderPill(title: t("Статус", "Status"), value: viewModel.isLoadingHistory ? t("Загрузка", "Loading") : t("Онлайн", "Online"))
+                    HeaderPill(title: t("Статус", "Status"), value: viewModel.heroStatusValue)
                 }
             }
             .padding(22)
@@ -139,7 +139,7 @@ struct DialogueView: View {
                     }
 
                     if viewModel.isTyping {
-                        TypingBubbleView()
+                        TypingBubbleView(title: viewModel.typingTitle)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -273,6 +273,9 @@ struct DialogueView: View {
     private var headerSubtitle: String {
         if viewModel.isLoadingHistory {
             return t("Синхронизируем переписку и статусы сообщений.", "Syncing messages and delivery statuses.")
+        }
+        if viewModel.isTyping {
+            return t("\(viewModel.typingTitle) сейчас набирает сообщение.", "\(viewModel.typingTitle) is typing right now.")
         }
         if viewModel.messages.isEmpty {
             return t("Новый диалог готов к первому сообщению.", "This conversation is ready for the first message.")

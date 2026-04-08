@@ -25,6 +25,7 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
                 record.lastUpdated = chat.lastActivity
                 record.cachedLastMessagePreview = chat.lastMessagePreview
                 record.cachedUnreadCount = chat.unreadCount
+                record.cachedTypingParticipants = chat.typingParticipants
                 chats[chat.id] = record
             }
         }
@@ -34,10 +35,14 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
         queue.sync(flags: .barrier) {
             var record = chats[chatID] ?? ChatRecord(id: chatID, title: AppLanguagePreference.localized(ru: "Диалог", en: "Chat"), messages: [])
             var existing: [Message.Identifier: Message] = [:]
+            var changedMessages: [Message] = []
             for message in record.messages {
                 existing[message.id] = message
             }
             for message in messages {
+                if existing[message.id] != message {
+                    changedMessages.append(message)
+                }
                 existing[message.id] = message
             }
             record.messages = existing.values.sorted(by: Self.sortMessages)
@@ -45,7 +50,7 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
             record.cachedLastMessagePreview = record.messages.last?.text ?? record.cachedLastMessagePreview
             record.cachedUnreadCount = record.messages.filter { !$0.isOutgoing && $0.status != .read }.count
             chats[chatID] = record
-            for message in messages {
+            for message in changedMessages {
                 messageStreams[chatID]?.yield(message)
             }
         }
@@ -54,15 +59,26 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
     public func append(message: Message, for chatID: UUID) async throws {
         queue.sync(flags: .barrier) {
             var record = chats[chatID] ?? ChatRecord(id: chatID, title: AppLanguagePreference.localized(ru: "Диалог", en: "Chat"), messages: [])
-            if !record.messages.contains(where: { $0.id == message.id }) {
+            if let existingIndex = record.messages.firstIndex(where: { $0.id == message.id }) {
+                if record.messages[existingIndex] == message {
+                    return
+                }
+                record.messages[existingIndex] = message
+            } else {
                 record.messages.append(message)
-                record.messages.sort(by: Self.sortMessages)
-                record.lastUpdated = max(record.lastUpdated, message.createdAt)
-                record.cachedLastMessagePreview = record.messages.last?.text ?? record.cachedLastMessagePreview
-                record.cachedUnreadCount = record.messages.filter { !$0.isOutgoing && $0.status != .read }.count
-                chats[chatID] = record
-                messageStreams[chatID]?.yield(message)
             }
+            record.messages.sort(by: Self.sortMessages)
+            record.lastUpdated = max(record.lastUpdated, message.createdAt)
+            record.cachedLastMessagePreview = record.messages.last?.text ?? record.cachedLastMessagePreview
+            record.cachedUnreadCount = record.messages.filter { !$0.isOutgoing && $0.status != .read }.count
+            chats[chatID] = record
+            messageStreams[chatID]?.yield(message)
+        }
+    }
+
+    public func fetchChat(id: UUID) async throws -> Chat? {
+        queue.sync {
+            chats[id]?.toChat()
         }
     }
 
@@ -115,6 +131,9 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
             guard let index = record.messages.firstIndex(where: { $0.id.messageID == messageID }) else { return }
             let updated = record.messages[index].updatingStatus(status)
             record.messages[index] = updated
+            record.lastUpdated = record.messages.last?.createdAt ?? record.lastUpdated
+            record.cachedLastMessagePreview = record.messages.last?.text ?? record.cachedLastMessagePreview
+            record.cachedUnreadCount = record.messages.filter { !$0.isOutgoing && $0.status != .read }.count
             chats[chatID] = record
             messageStreams[chatID]?.yield(updated)
         }
@@ -124,7 +143,7 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
         return queue.sync {
             guard let record = chats[chatID] else { return [] }
             return record.messages.filter { message in
-                message.isOutgoing && !message.status.isTerminal
+                message.isOutgoing && (message.status == .sending || message.status == .failed)
             }
         }
     }
@@ -158,6 +177,7 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
         var lastUpdated: Date = Date()
         var cachedLastMessagePreview: String?
         var cachedUnreadCount = 0
+        var cachedTypingParticipants: [String] = []
 
         func toChat() -> Chat {
             let lastMessage = messages.last
@@ -169,7 +189,8 @@ public final class SwiftDataChatStore: ChatLocalStore, @unchecked Sendable {
                 title: title,
                 lastMessagePreview: lastMessage?.text ?? cachedLastMessagePreview,
                 lastActivity: lastMessage?.createdAt ?? lastUpdated,
-                unreadCount: unreadCount
+                unreadCount: unreadCount,
+                typingParticipants: cachedTypingParticipants
             )
         }
     }

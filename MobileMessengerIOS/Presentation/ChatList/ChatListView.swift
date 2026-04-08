@@ -77,6 +77,7 @@ struct ChatListView: View {
             }
         }
         .task { viewModel.onAppear() }
+        .onDisappear { viewModel.onDisappear() }
         .onChange(of: languagePreference) { _, _ in
             Task { await viewModel.refresh() }
         }

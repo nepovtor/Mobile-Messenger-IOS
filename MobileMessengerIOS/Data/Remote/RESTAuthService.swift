@@ -118,9 +118,12 @@ public struct AuthVerifyResponse: Codable {
 
 public protocol ChatNetworking: Sendable {
     func listChats() async throws -> [ChatDTO]
+    func getChat(chatID: UUID) async throws -> ChatDTO
     func createChat(title: String, participantIDs: [UUID]) async throws -> ChatDTO
     func getMessages(chatID: UUID) async throws -> [MessageDTO]
     func sendMessage(chatID: UUID, text: String, messageID: UUID) async throws -> MessageDTO
+    func markRead(chatID: UUID, messageID: UUID) async throws -> ChatDTO
+    func setTyping(chatID: UUID, isTyping: Bool) async throws -> ChatDTO
 }
 
 public struct ChatDTO: Codable, Identifiable {
@@ -128,12 +131,23 @@ public struct ChatDTO: Codable, Identifiable {
     public let title: String
     public let lastMessagePreview: String?
     public let lastActivity: Date
+    public let unreadCount: Int
+    public let typingParticipants: [String]
     
-    public init(id: UUID, title: String, lastMessagePreview: String?, lastActivity: Date) {
+    public init(
+        id: UUID,
+        title: String,
+        lastMessagePreview: String?,
+        lastActivity: Date,
+        unreadCount: Int,
+        typingParticipants: [String] = []
+    ) {
         self.id = id
         self.title = title
         self.lastMessagePreview = lastMessagePreview
         self.lastActivity = lastActivity
+        self.unreadCount = unreadCount
+        self.typingParticipants = typingParticipants
     }
 }
 
@@ -189,6 +203,18 @@ public struct RESTChatService: ChatNetworking {
         return try Self.makeJSONDecoder().decode([ChatDTO].self, from: data)
     }
 
+    public func getChat(chatID: UUID) async throws -> ChatDTO {
+        let url = endpointURL("chats/\(canonicalUUID(chatID))")
+        let request = authorizedRequest(for: url)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка получения чата", en: "Failed to load chat"))
+        return try Self.makeJSONDecoder().decode(ChatDTO.self, from: data)
+    }
+
     public func createChat(title: String, participantIDs: [UUID]) async throws -> ChatDTO {
         let url = endpointURL("chats")
         var request = authorizedRequest(for: url, method: "POST")
@@ -235,6 +261,38 @@ public struct RESTChatService: ChatNetworking {
         }
         try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка отправки сообщения", en: "Failed to send the message"))
         return try Self.makeJSONDecoder().decode(MessageDTO.self, from: data)
+    }
+
+    public func markRead(chatID: UUID, messageID: UUID) async throws -> ChatDTO {
+        let url = endpointURL("chats/\(canonicalUUID(chatID))/read")
+        var request = authorizedRequest(for: url, method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "messageID": canonicalUUID(messageID)
+        ])
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка обновления статуса чтения", en: "Failed to update read status"))
+        return try Self.makeJSONDecoder().decode(ChatDTO.self, from: data)
+    }
+
+    public func setTyping(chatID: UUID, isTyping: Bool) async throws -> ChatDTO {
+        let url = endpointURL("chats/\(canonicalUUID(chatID))/typing")
+        var request = authorizedRequest(for: url, method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "isTyping": isTyping
+        ])
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Ошибка отправки статуса набора", en: "Failed to update typing state"))
+        return try Self.makeJSONDecoder().decode(ChatDTO.self, from: data)
     }
 
     private func endpointURL(_ path: String) -> URL {

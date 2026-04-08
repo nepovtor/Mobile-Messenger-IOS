@@ -52,11 +52,18 @@ public final class AppContainer: ObservableObject {
             title: title,
             observeMessages: ObserveChatMessagesUseCase(repository: chatRepository),
             loadHistory: LoadChatHistoryUseCase(repository: chatRepository),
+            loadChatState: { [chatRepository] chatID in
+                try await chatRepository.getChat(chatID)
+            },
             sendMessage: SendMessageUseCase(repository: chatRepository),
             retryPending: RetryPendingMessagesUseCase(repository: chatRepository),
             markStatus: MarkMessageStatusUseCase(repository: chatRepository),
+            setTypingState: { [chatRepository] chatID, isTyping in
+                await chatRepository.setTyping(in: chatID, isTyping: isTyping)
+            },
             analytics: analytics,
-            notificationManager: notificationManager
+            notificationManager: notificationManager,
+            reachability: reachability
         )
     }
 

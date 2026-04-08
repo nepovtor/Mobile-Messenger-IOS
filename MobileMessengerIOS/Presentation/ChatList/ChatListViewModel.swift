@@ -43,6 +43,7 @@ public final class ChatListViewModel: ObservableObject {
     private let createChatUseCase: CreateChatUseCase
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
+    private var refreshLoopTask: Task<Void, Never>?
 
     init(loadChats: LoadChatListUseCase, createChat: CreateChatUseCase, analytics: AnalyticsService) {
         self.loadChats = loadChats
@@ -51,11 +52,28 @@ public final class ChatListViewModel: ObservableObject {
     }
 
     func onAppear() {
+        guard refreshLoopTask == nil else { return }
         Task { await refresh() }
+        refreshLoopTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { return }
+                await self?.refresh()
+            }
+        }
+    }
+
+    func onDisappear() {
+        refreshLoopTask?.cancel()
+        refreshLoopTask = nil
     }
 
     func refresh() async {
-        isLoading = true
+        guard !isLoading else { return }
+        let shouldShowLoader = chats.isEmpty
+        if shouldShowLoader {
+            isLoading = true
+        }
         do {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
             var chatItems = chats.map(makeChatItem(from:))
@@ -77,7 +95,9 @@ public final class ChatListViewModel: ObservableObject {
             isShowingError = true
             analytics.track(error: error, context: "chat_list_load")
         }
-        isLoading = false
+        if shouldShowLoader {
+            isLoading = false
+        }
     }
 
     func createChat(title: String) async -> ChatListItem? {

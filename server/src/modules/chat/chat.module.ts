@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Chat } from "../../entities/chat.entity";
+import { ChatReadState } from "../../entities/chat-read-state.entity";
 import { Message } from "../../entities/message.entity";
 import { User } from "../../entities/user.entity";
 import { ChatController } from "./chat.controller";
@@ -22,7 +23,7 @@ function resolveJwtSecret(): string {
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Chat, Message, User]),
+    TypeOrmModule.forFeature([Chat, Message, User, ChatReadState]),
     JwtModule.register({
       secret: resolveJwtSecret(),
     }),

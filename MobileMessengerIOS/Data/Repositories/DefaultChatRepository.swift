@@ -1,6 +1,10 @@
 import Foundation
 
 public final class DefaultChatRepository: ChatRepository {
+    private enum RepositoryConstants {
+        static let remoteSyncInterval: UInt64 = 2_000_000_000
+    }
+
     private let store: ChatLocalStore
     private let realtime: ChatRealtimeService
     private let analytics: AnalyticsService
@@ -25,15 +29,7 @@ public final class DefaultChatRepository: ChatRepository {
         if let networking = chatNetworking {
             do {
                 let dtos = try await networking.listChats()
-                let chats = dtos.map { dto in
-                    Chat(
-                        id: dto.id,
-                        title: dto.title,
-                        lastMessagePreview: dto.lastMessagePreview,
-                        lastActivity: dto.lastActivity,
-                        unreadCount: 0
-                    )
-                }
+                let chats = dtos.map(makeChat(from:))
                 try await store.upsert(chats: chats)
                 return filterChats(chats, searchQuery: searchQuery)
             } catch {
@@ -45,6 +41,25 @@ public final class DefaultChatRepository: ChatRepository {
         return try await store.fetchChats(searchQuery: searchQuery)
     }
 
+    public func getChat(_ chatID: UUID) async throws -> Chat {
+        if let networking = chatNetworking {
+            do {
+                let dto = try await networking.getChat(chatID: chatID)
+                let chat = makeChat(from: dto)
+                try await store.upsert(chats: [chat])
+                return chat
+            } catch {
+                analytics.track(error: error, context: "getChat")
+            }
+        }
+
+        if let chat = try await store.fetchChat(id: chatID) {
+            return chat
+        }
+
+        throw AppError.network(description: AppLanguagePreference.localized(ru: "Чат не найден", en: "Chat not found"))
+    }
+
     public func createChat(title: String, participantIDs: [UUID]) async throws -> Chat {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else {
@@ -53,13 +68,7 @@ public final class DefaultChatRepository: ChatRepository {
 
         if let networking = chatNetworking {
             let dto = try await networking.createChat(title: trimmedTitle, participantIDs: participantIDs)
-            let chat = Chat(
-                id: dto.id,
-                title: dto.title,
-                lastMessagePreview: dto.lastMessagePreview,
-                lastActivity: dto.lastActivity,
-                unreadCount: 0
-            )
+            let chat = makeChat(from: dto)
             try await store.upsert(chats: [chat])
             return chat
         }
@@ -96,6 +105,16 @@ public final class DefaultChatRepository: ChatRepository {
                 }
             }
 
+            let pollingTask = Task { [weak self] in
+                guard let self, self.chatNetworking != nil else { return }
+                await self.syncRemoteStateSilently(for: chatID)
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: RepositoryConstants.remoteSyncInterval)
+                    guard !Task.isCancelled else { return }
+                    await self.syncRemoteStateSilently(for: chatID)
+                }
+            }
+
             let storeTask = Task {
                 for await message in storeStream {
                     continuation.yield(message)
@@ -105,6 +124,7 @@ public final class DefaultChatRepository: ChatRepository {
 
             continuation.onTermination = { _ in
                 realtimeTask.cancel()
+                pollingTask.cancel()
                 storeTask.cancel()
                 self.realtime.disconnect(from: chatID)
             }
@@ -114,12 +134,7 @@ public final class DefaultChatRepository: ChatRepository {
     public func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
         if let networking = chatNetworking {
             do {
-                let currentUserID = userSessionProvider()?.userID
-                let dtos = try await networking.getMessages(chatID: chatID)
-                let messages = dtos.map { dto in
-                    makeMessage(from: dto, chatID: chatID, currentUserID: currentUserID)
-                }
-                try await store.upsert(messages: messages, for: chatID)
+                let (_, messages) = try await syncRemoteState(for: chatID, networking: networking)
                 return messages
             } catch {
                 analytics.track(error: error, context: "loadHistory")
@@ -136,7 +151,10 @@ public final class DefaultChatRepository: ChatRepository {
         }
 
         let local = localID ?? UUID()
-        try await store.ensureChatExists(id: chatID, title: "Диалог")
+        let existingChat = try await store.fetchChat(id: chatID)
+        let existingTitle = existingChat?.title
+            ?? AppLanguagePreference.localized(ru: "Диалог", en: "Chat")
+        try await store.ensureChatExists(id: chatID, title: existingTitle)
 
         let message = Message(
             id: Message.Identifier(chatID: chatID, messageID: UUID()),
@@ -167,6 +185,7 @@ public final class DefaultChatRepository: ChatRepository {
                         fallbackLocalID: local
                     )
                     try await self.store.upsert(messages: [serverMessage], for: chatID)
+                    _ = try? await self.syncRemoteState(for: chatID, networking: networking)
                 } catch {
                     try? await self.store.updateStatus(for: message.id.messageID, in: chatID, status: .failed)
                     self.analytics.track(error: error, context: "sendMessage")
@@ -213,6 +232,7 @@ public final class DefaultChatRepository: ChatRepository {
                                 fallbackLocalID: message.localID
                             )
                             try await self.store.upsert(messages: [updatedMessage], for: chatID)
+                            _ = try? await self.syncRemoteState(for: chatID, networking: networking)
                         } catch {
                             self.analytics.track(error: error, context: "retryPendingMessages")
                         }
@@ -236,6 +256,24 @@ public final class DefaultChatRepository: ChatRepository {
 
     public func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws {
         try await store.updateStatus(for: messageID, in: chatID, status: status)
+        guard status == .read, let networking = chatNetworking else {
+            return
+        }
+
+        let chat = try await networking.markRead(chatID: chatID, messageID: messageID)
+        try await store.upsert(chats: [makeChat(from: chat)])
+        _ = try? await syncRemoteState(for: chatID, networking: networking)
+    }
+
+    public func setTyping(in chatID: UUID, isTyping: Bool) async {
+        guard let networking = chatNetworking else { return }
+
+        do {
+            let chat = try await networking.setTyping(chatID: chatID, isTyping: isTyping)
+            try await store.upsert(chats: [makeChat(from: chat)])
+        } catch {
+            // Typing is best-effort; avoid noisy failures while the user is composing.
+        }
     }
 
     private func makeMessage(
@@ -254,6 +292,41 @@ public final class DefaultChatRepository: ChatRepository {
             isOutgoing: dto.authorID == currentUserID,
             status: MessageStatus(rawValue: dto.status) ?? .delivered
         )
+    }
+
+    private func makeChat(from dto: ChatDTO) -> Chat {
+        Chat(
+            id: dto.id,
+            title: dto.title,
+            lastMessagePreview: dto.lastMessagePreview,
+            lastActivity: dto.lastActivity,
+            unreadCount: dto.unreadCount,
+            typingParticipants: dto.typingParticipants
+        )
+    }
+
+    private func syncRemoteState(
+        for chatID: UUID,
+        networking: ChatNetworking
+    ) async throws -> (chat: Chat, messages: [Message]) {
+        let currentUserID = userSessionProvider()?.userID
+        async let chatRequest = networking.getChat(chatID: chatID)
+        async let messagesRequest = networking.getMessages(chatID: chatID)
+        let (chatDTO, messageDTOs) = try await (chatRequest, messagesRequest)
+
+        let chat = makeChat(from: chatDTO)
+        let messages = messageDTOs.map { dto in
+            makeMessage(from: dto, chatID: chatID, currentUserID: currentUserID)
+        }
+
+        try await store.upsert(chats: [chat])
+        try await store.upsert(messages: messages, for: chatID)
+        return (chat, messages)
+    }
+
+    private func syncRemoteStateSilently(for chatID: UUID) async {
+        guard let networking = chatNetworking else { return }
+        _ = try? await syncRemoteState(for: chatID, networking: networking)
     }
 
     private func filterChats(_ chats: [Chat], searchQuery: String?) -> [Chat] {
