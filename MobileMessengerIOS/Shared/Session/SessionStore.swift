@@ -38,6 +38,17 @@ public final class SessionStore: ObservableObject {
         state = .authenticated(session)
     }
 
+    public func updateDisplayName(_ displayName: String) {
+        guard case .authenticated(let session) = state else { return }
+        let updatedSession = AuthenticatedSession(
+            token: session.token,
+            userID: session.userID,
+            displayName: displayName
+        )
+        tokenStore.store(session: updatedSession)
+        state = .authenticated(updatedSession)
+    }
+
     public func logout() {
         tokenStore.clear()
         state = .unauthenticated

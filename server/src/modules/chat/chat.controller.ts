@@ -2,13 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  MessageEvent,
   Param,
   Post,
   Req,
+  Sse,
   UseGuards,
 } from "@nestjs/common";
+import { Observable } from "rxjs";
 import { AuthenticatedRequest } from "../../auth.types";
 import { JwtAuthGuard } from "../../jwt-auth.guard";
+import { ChatEventsService } from "./chat-events.service";
 import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { MarkChatReadDto } from "./dto/mark-chat-read.dto";
@@ -18,7 +22,10 @@ import { UpdateTypingDto } from "./dto/update-typing.dto";
 @Controller("chats")
 @UseGuards(JwtAuthGuard)
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly chatEventsService: ChatEventsService,
+  ) {}
 
   @Get()
   listChats(@Req() request: AuthenticatedRequest) {
@@ -31,6 +38,19 @@ export class ChatController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.chatService.getChat(chatId, request.user.sub);
+  }
+
+  @Sse(":chatId/events")
+  async streamChatEvents(
+    @Param("chatId") chatId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<Observable<MessageEvent>> {
+    const chat = await this.chatService.getChat(chatId, request.user.sub);
+    return this.chatEventsService.subscribe(
+      chatId.toLowerCase(),
+      request.user.sub,
+      chat,
+    );
   }
 
   @Get(":chatId/messages")

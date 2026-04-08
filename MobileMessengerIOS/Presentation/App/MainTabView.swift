@@ -17,7 +17,7 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
-            ProfileView()
+            ProfileView(container: container)
                 .tabItem {
                     Label(language.text(ru: "Профиль", en: "Profile"), systemImage: "person.crop.circle.fill")
                 }

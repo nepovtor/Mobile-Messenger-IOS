@@ -10,6 +10,7 @@ public final class AppContainer: ObservableObject {
     public let reachability: ReachabilityService
     public let chatRepository: ChatRepository
 
+    private let profileService: ProfileNetworking
     private let realtimeService: ChatRealtimeService
     private let chatStore: ChatLocalStore
     private let notificationManager: PushNotificationManager
@@ -26,7 +27,7 @@ public final class AppContainer: ObservableObject {
 
         chatStore = SwiftDataChatStore()
         realtimeService = DefaultChatRealtimeService(
-            baseURL: configService.websocketURL,
+            baseURL: configService.restBaseURL,
             analytics: analytics,
             reachability: reachability,
             featureFlags: configService.features,
@@ -34,6 +35,10 @@ public final class AppContainer: ObservableObject {
         )
 
         let chatNetworking = RESTChatService(
+            baseURL: configService.restBaseURL,
+            tokenProvider: { tokenStore.retrieveSession()?.token }
+        )
+        profileService = RESTProfileService(
             baseURL: configService.restBaseURL,
             tokenProvider: { tokenStore.retrieveSession()?.token }
         )
@@ -77,5 +82,12 @@ public final class AppContainer: ObservableObject {
 
     public func makeAuthViewModel() -> AuthViewModel {
         AuthViewModel(authService: RESTAuthService(baseURL: configService.restBaseURL), sessionStore: sessionStore)
+    }
+
+    public func makeProfileViewModel() -> ProfileViewModel {
+        ProfileViewModel(
+            profileService: profileService,
+            sessionStore: sessionStore
+        )
     }
 }

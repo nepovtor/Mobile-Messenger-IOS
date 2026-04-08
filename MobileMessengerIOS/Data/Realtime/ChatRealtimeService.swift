@@ -4,6 +4,7 @@ public enum ChatRealtimeEvent: Sendable {
     case connected
     case disconnected(Error?)
     case message(Message)
+    case chatUpdated(Chat)
     case typing(Bool)
 }
 

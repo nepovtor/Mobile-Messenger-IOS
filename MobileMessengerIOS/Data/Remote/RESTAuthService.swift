@@ -114,6 +114,97 @@ public struct AuthVerifyResponse: Codable {
     public let displayName: String
 }
 
+// MARK: - Profile Networking
+
+public protocol ProfileNetworking: Sendable {
+    func getCurrentProfile() async throws -> ProfileDTO
+    func updateProfile(displayName: String) async throws -> ProfileUpdateResponse
+}
+
+public struct ProfileDTO: Codable, Sendable {
+    public let userID: UUID
+    public let displayName: String
+    public let phone: String
+}
+
+public struct ProfileUpdateResponse: Codable, Sendable {
+    public let token: String
+    public let userID: UUID
+    public let displayName: String
+    public let phone: String
+}
+
+public struct RESTProfileService: ProfileNetworking {
+    private let baseURL: URL
+    private let session: URLSession
+    private let tokenProvider: @Sendable () -> String?
+
+    public init(baseURL: URL, session: URLSession = .shared, tokenProvider: @escaping @Sendable () -> String? = { nil }) {
+        self.baseURL = baseURL
+        self.session = session
+        self.tokenProvider = tokenProvider
+    }
+
+    public func getCurrentProfile() async throws -> ProfileDTO {
+        let request = authorizedRequest(for: endpointURL("auth/me"))
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Не удалось загрузить профиль", en: "Failed to load profile"))
+        return try Self.makeJSONDecoder().decode(ProfileDTO.self, from: data)
+    }
+
+    public func updateProfile(displayName: String) async throws -> ProfileUpdateResponse {
+        var request = authorizedRequest(for: endpointURL("auth/me"), method: "PATCH")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "displayName": displayName
+        ])
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Не удалось обновить профиль", en: "Failed to update profile"))
+        return try Self.makeJSONDecoder().decode(ProfileUpdateResponse.self, from: data)
+    }
+
+    private func authorizedRequest(for url: URL, method: String = "GET") -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        if let token = tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private func endpointURL(_ path: String) -> URL {
+        path
+            .split(separator: "/")
+            .reduce(baseURL) { partialURL, component in
+                partialURL.appendingPathComponent(String(component))
+            }
+    }
+
+    private func validate(httpResponse: HTTPURLResponse, fallbackDescription: String) throws {
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return
+        case 401:
+            throw AppError.unauthorized
+        default:
+            throw AppError.network(description: fallbackDescription)
+        }
+    }
+
+    private static func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
+
 // MARK: - Chat Networking
 
 public protocol ChatNetworking: Sendable {

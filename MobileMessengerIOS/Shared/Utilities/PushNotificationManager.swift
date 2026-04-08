@@ -16,23 +16,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func registerForNotifications() async {
-        guard notificationsEnabled else {
-            syncNotificationPreferences()
-            return
-        }
-
-        let center = UNUserNotificationCenter.current()
-        let options: UNAuthorizationOptions = [.alert, .badge, .sound]
-        do {
-            let granted = try await center.requestAuthorization(options: options)
-            if granted {
-                await MainActor.run {
-                    UIApplication.shared.registerForRemoteNotifications()
-                }
-            }
-        } catch {
-            print("Push authorization error: \(error)")
-        }
+        await requestLocalAuthorizationIfNeeded()
     }
 
     func didRegister(deviceToken: Data) {
@@ -60,11 +44,17 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func syncNotificationPreferences() {
-        guard !notificationsEnabled else { return }
         let center = UNUserNotificationCenter.current()
-        center.removeAllPendingNotificationRequests()
-        center.removeAllDeliveredNotifications()
-        center.setBadgeCount(0) { _ in }
+        if !notificationsEnabled {
+            center.removeAllPendingNotificationRequests()
+            center.removeAllDeliveredNotifications()
+            center.setBadgeCount(0) { _ in }
+            return
+        }
+
+        Task {
+            await requestLocalAuthorizationIfNeeded()
+        }
     }
 
     private var notificationsEnabled: Bool {
@@ -76,5 +66,29 @@ final class PushNotificationManager: NSObject, ObservableObject {
 
     private var quietHoursEnabled: Bool {
         UserDefaults.standard.bool(forKey: NotificationPreferenceKeys.quietHoursEnabled)
+    }
+
+    private func requestLocalAuthorizationIfNeeded() async {
+        guard notificationsEnabled else {
+            syncNotificationPreferences()
+            return
+        }
+
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            do {
+                _ = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            } catch {
+                DefaultAnalyticsService.shared.track(error: error, context: "local_notification_authorization")
+            }
+        case .authorized, .provisional, .ephemeral:
+            break
+        case .denied:
+            DefaultAnalyticsService.shared.track(error: AppError.network(description: "Notifications permission denied"), context: "local_notification_authorization")
+        @unknown default:
+            break
+        }
     }
 }

@@ -95,6 +95,8 @@ public final class DefaultChatRepository: ChatRepository {
                     switch event {
                     case .message(let message):
                         try? await store.append(message: message, for: chatID)
+                    case .chatUpdated(let chat):
+                        try? await store.upsert(chats: [chat])
                     case .connected:
                         break
                     case .disconnected:

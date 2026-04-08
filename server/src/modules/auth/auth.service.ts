@@ -10,6 +10,7 @@ import { Repository } from "typeorm";
 import { JwtPayload } from "../../auth.types";
 import { User } from "../../entities/user.entity";
 import { RequestCodeDto } from "./dto/request-code.dto";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { VerifyCodeDto } from "./dto/verify-code.dto";
 
 @Injectable()
@@ -68,6 +69,59 @@ export class AuthService {
       }
     }
 
+    return this.createSessionResponse(user);
+  }
+
+  async getCurrentUser(userID: string) {
+    const user = await this.requireUser(userID);
+    return {
+      userID: user.id,
+      displayName: user.displayName,
+      phone: user.phone,
+    };
+  }
+
+  async updateProfile(userID: string, { displayName }: UpdateProfileDto) {
+    const user = await this.requireUser(userID);
+    const normalizedDisplayName = this.normalizeDisplayName(displayName);
+
+    if (!normalizedDisplayName) {
+      throw new BadRequestException(
+        "Display name must be at least 2 characters",
+      );
+    }
+
+    if (user.displayName !== normalizedDisplayName) {
+      user.displayName = normalizedDisplayName;
+      await this.userRepository.save(user);
+    }
+
+    return {
+      ...this.createSessionResponse(user),
+      phone: user.phone,
+    };
+  }
+
+  private normalizeDisplayName(value?: string): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.trim().replace(/\s+/g, " ");
+    return normalized.length >= 2 ? normalized : null;
+  }
+
+  private async requireUser(userID: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id: userID },
+    });
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+    return user;
+  }
+
+  private createSessionResponse(user: User) {
     const payload: JwtPayload = {
       sub: user.id,
       phone: user.phone,
@@ -80,14 +134,5 @@ export class AuthService {
       userID: user.id,
       displayName: user.displayName,
     };
-  }
-
-  private normalizeDisplayName(value?: string): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value.trim().replace(/\s+/g, " ");
-    return normalized.length >= 2 ? normalized : null;
   }
 }

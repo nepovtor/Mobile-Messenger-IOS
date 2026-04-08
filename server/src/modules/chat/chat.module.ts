@@ -6,6 +6,7 @@ import { ChatReadState } from "../../entities/chat-read-state.entity";
 import { Message } from "../../entities/message.entity";
 import { User } from "../../entities/user.entity";
 import { ChatController } from "./chat.controller";
+import { ChatEventsService } from "./chat-events.service";
 import { ChatGateway } from "./chat.gateway";
 import { ChatService } from "./chat.service";
 
@@ -29,7 +30,7 @@ function resolveJwtSecret(): string {
     }),
   ],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway],
-  exports: [ChatService],
+  providers: [ChatService, ChatGateway, ChatEventsService],
+  exports: [ChatService, ChatEventsService],
 })
 export class ChatModule {}

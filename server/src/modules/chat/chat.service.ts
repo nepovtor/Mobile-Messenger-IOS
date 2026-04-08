@@ -14,6 +14,7 @@ import {
   MessageStatus,
 } from "../../entities/message.entity";
 import { User } from "../../entities/user.entity";
+import { ChatEventsService } from "./chat-events.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 
@@ -55,6 +56,7 @@ export class ChatService implements OnModuleInit {
     private readonly messageRepository: Repository<MessageEntity>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly chatEventsService: ChatEventsService,
   ) {}
 
   async onModuleInit() {
@@ -142,7 +144,10 @@ export class ChatService implements OnModuleInit {
     chat.lastActivity = message.createdAt;
     await this.chatRepository.save(chat);
 
-    return this.toMessageDto(message, normalizedChatID);
+    const messageDto = this.toMessageDto(message, normalizedChatID);
+    this.chatEventsService.publishMessage(normalizedChatID, messageDto);
+    await this.publishChatUpdated(chat);
+    return messageDto;
   }
 
   async createChat(body: CreateChatDto, ownerID: string): Promise<Chat> {
@@ -238,7 +243,9 @@ export class ChatService implements OnModuleInit {
       await this.messageRepository.save(updatedMessages);
     }
 
-    return this.toChatDto(chat, userID);
+    const chatDto = await this.toChatDto(chat, userID);
+    await this.publishChatUpdated(chat);
+    return chatDto;
   }
 
   async setTyping(
@@ -269,7 +276,9 @@ export class ChatService implements OnModuleInit {
       }
     }
 
-    return this.toChatDto(chat, userID);
+    const chatDto = await this.toChatDto(chat, userID);
+    await this.publishChatUpdated(chat);
+    return chatDto;
   }
 
   private async initializeCommonChat() {
@@ -413,5 +422,11 @@ export class ChatService implements OnModuleInit {
         this.typingParticipants.set(currentChatID, participants);
       }
     }
+  }
+
+  private async publishChatUpdated(chat: ChatEntity) {
+    await this.chatEventsService.publishChatUpdated(chat.id, (userID) =>
+      this.toChatDto(chat, userID),
+    );
   }
 }
