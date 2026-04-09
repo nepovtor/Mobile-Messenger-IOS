@@ -11,6 +11,7 @@ public final class AppContainer: ObservableObject {
     public let chatRepository: ChatRepository
 
     private let profileService: ProfileNetworking
+    private let contactsService: ContactsNetworking
     private let realtimeService: ChatRealtimeService
     private let chatStore: ChatLocalStore
     private let notificationManager: PushNotificationManager
@@ -42,6 +43,10 @@ public final class AppContainer: ObservableObject {
             baseURL: configService.restBaseURL,
             tokenProvider: { tokenStore.retrieveSession()?.token }
         )
+        contactsService = RESTContactsService(
+            baseURL: configService.restBaseURL,
+            tokenProvider: { tokenStore.retrieveSession()?.token }
+        )
         chatRepository = DefaultChatRepository(
             store: chatStore,
             realtime: realtimeService,
@@ -57,8 +62,8 @@ public final class AppContainer: ObservableObject {
             title: title,
             observeMessages: ObserveChatMessagesUseCase(repository: chatRepository),
             loadHistory: LoadChatHistoryUseCase(repository: chatRepository),
-            loadChatState: { [chatRepository] chatID in
-                try await chatRepository.getChat(chatID)
+            observeChatState: { [chatRepository] chatID in
+                chatRepository.observeChat(chatID)
             },
             sendMessage: SendMessageUseCase(repository: chatRepository),
             retryPending: RetryPendingMessagesUseCase(repository: chatRepository),
@@ -82,6 +87,14 @@ public final class AppContainer: ObservableObject {
 
     public func makeAuthViewModel() -> AuthViewModel {
         AuthViewModel(authService: RESTAuthService(baseURL: configService.restBaseURL), sessionStore: sessionStore)
+    }
+
+    public func makeContactsViewModel() -> ContactsViewModel {
+        ContactsViewModel(
+            contactsService: contactsService,
+            createChat: CreateChatUseCase(repository: chatRepository),
+            analytics: analytics
+        )
     }
 
     public func makeProfileViewModel() -> ProfileViewModel {

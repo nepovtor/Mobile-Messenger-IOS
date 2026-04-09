@@ -29,7 +29,7 @@ public final class ChatViewModel: ObservableObject {
 
     private let observeMessages: ObserveChatMessagesUseCase
     private let loadHistory: LoadChatHistoryUseCase
-    private let loadChatState: (UUID) async throws -> Chat
+    private let observeChatState: (UUID) -> AsyncStream<Chat>
     private let sendMessageUseCase: SendMessageUseCase
     private let retryPending: RetryPendingMessagesUseCase
     private let markStatus: MarkMessageStatusUseCase
@@ -39,7 +39,7 @@ public final class ChatViewModel: ObservableObject {
     private let reachability: ReachabilityService
 
     private var observeTask: Task<Void, Never>?
-    private var stateTask: Task<Void, Never>?
+    private var chatTask: Task<Void, Never>?
     private var reachabilityTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     init(
@@ -47,7 +47,7 @@ public final class ChatViewModel: ObservableObject {
         title: String,
         observeMessages: ObserveChatMessagesUseCase,
         loadHistory: LoadChatHistoryUseCase,
-        loadChatState: @escaping (UUID) async throws -> Chat,
+        observeChatState: @escaping (UUID) -> AsyncStream<Chat>,
         sendMessage: SendMessageUseCase,
         retryPending: RetryPendingMessagesUseCase,
         markStatus: MarkMessageStatusUseCase,
@@ -60,7 +60,7 @@ public final class ChatViewModel: ObservableObject {
         self.title = title
         self.observeMessages = observeMessages
         self.loadHistory = loadHistory
-        self.loadChatState = loadChatState
+        self.observeChatState = observeChatState
         self.sendMessageUseCase = sendMessage
         self.retryPending = retryPending
         self.markStatus = markStatus
@@ -72,7 +72,7 @@ public final class ChatViewModel: ObservableObject {
 
     deinit {
         observeTask?.cancel()
-        stateTask?.cancel()
+        chatTask?.cancel()
         reachabilityTask?.cancel()
         typingTask?.cancel()
     }
@@ -82,8 +82,8 @@ public final class ChatViewModel: ObservableObject {
         observeTask = Task { [weak self] in
             await self?.bindMessages()
         }
-        stateTask = Task { [weak self] in
-            await self?.pollChatState()
+        chatTask = Task { [weak self] in
+            await self?.bindChatState()
         }
         reachabilityTask = Task { [weak self] in
             await self?.bindReachability()
@@ -94,8 +94,8 @@ public final class ChatViewModel: ObservableObject {
     func onDisappear() {
         observeTask?.cancel()
         observeTask = nil
-        stateTask?.cancel()
-        stateTask = nil
+        chatTask?.cancel()
+        chatTask = nil
         reachabilityTask?.cancel()
         reachabilityTask = nil
         typingTask?.cancel()
@@ -162,8 +162,7 @@ public final class ChatViewModel: ObservableObject {
         isLoadingHistory = true
         do {
             let history = try await loadHistory(chatID: chatID, limit: 100, before: nil)
-            messages = history
-            await refreshChatState()
+            messages = history.sorted(by: Self.sortMessages)
             isLoadingHistory = false
         } catch {
             isLoadingHistory = false
@@ -175,13 +174,19 @@ public final class ChatViewModel: ObservableObject {
     private func bindMessages() async {
         let stream = observeMessages(chatID: chatID)
         for await message in stream {
-            await MainActor.run {
-                let alreadyVisible = messages.contains(where: { $0.id == message.id })
-                upsert(message: message)
-                if !message.isOutgoing && !alreadyVisible && !isLoadingHistory {
-                    notificationManager.scheduleLocalNotification(for: message)
-                }
+            let isInserted = upsert(message: message)
+            if !message.isOutgoing && isInserted && !isLoadingHistory {
+                notificationManager.scheduleLocalNotification(for: message)
             }
+        }
+    }
+
+    private func bindChatState() async {
+        let stream = observeChatState(chatID)
+        for await chat in stream {
+            title = chat.title
+            typingParticipants = chat.typingParticipants
+            isTyping = !chat.typingParticipants.isEmpty
         }
     }
 
@@ -191,27 +196,6 @@ public final class ChatViewModel: ObservableObject {
             await MainActor.run {
                 applyReachability(isReachable)
             }
-        }
-    }
-
-    private func pollChatState() async {
-        await refreshChatState()
-
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard !Task.isCancelled else { return }
-            await refreshChatState()
-        }
-    }
-
-    private func refreshChatState() async {
-        do {
-            let chat = try await loadChatState(chatID)
-            title = chat.title
-            typingParticipants = chat.typingParticipants
-            isTyping = !chat.typingParticipants.isEmpty
-        } catch {
-            // Background chat refresh is best-effort; the message stream remains usable offline.
         }
     }
 
@@ -238,17 +222,46 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func upsert(message: Message) {
+    @discardableResult
+    private func upsert(message: Message) -> Bool {
         if let index = messages.firstIndex(where: { $0.id == message.id }) {
-            messages[index] = message
-        } else {
-            messages.append(message)
-        }
-        messages.sort { lhs, rhs in
-            if lhs.createdAt == rhs.createdAt {
-                return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
+            if messages[index] == message {
+                return false
             }
-            return lhs.createdAt < rhs.createdAt
+
+            let requiresSort = messages[index].createdAt != message.createdAt
+            messages[index] = message
+            if requiresSort {
+                messages.sort(by: Self.sortMessages)
+            }
+            return false
+        } else {
+            let insertionIndex = Self.insertionIndex(for: message, in: messages)
+            messages.insert(message, at: insertionIndex)
+            return true
         }
+    }
+
+    private static func sortMessages(lhs: Message, rhs: Message) -> Bool {
+        if lhs.createdAt == rhs.createdAt {
+            return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
+        }
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func insertionIndex(for message: Message, in messages: [Message]) -> Int {
+        var low = 0
+        var high = messages.count
+
+        while low < high {
+            let mid = (low + high) / 2
+            if sortMessages(lhs: messages[mid], rhs: message) {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        return low
     }
 }

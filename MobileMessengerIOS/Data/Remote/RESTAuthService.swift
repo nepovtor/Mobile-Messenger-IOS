@@ -8,6 +8,11 @@ public protocol AuthNetworking: Sendable {
         code: String,
         displayName: String?
     ) async throws -> AuthVerifyResponse
+    func signInWithPassword(
+        method: AuthMethod,
+        contact: String,
+        password: String
+    ) async throws -> AuthVerifyResponse
 }
 
 public struct RESTAuthService: AuthNetworking {
@@ -42,6 +47,18 @@ public struct RESTAuthService: AuthNetworking {
         }
 
         return try await sendRequest(endpoint: "/auth/verify", payload: payload)
+    }
+
+    public func signInWithPassword(
+        method: AuthMethod,
+        contact: String,
+        password: String
+    ) async throws -> AuthVerifyResponse {
+        try await sendRequest(endpoint: "/auth/password-login", payload: [
+            "method": method.rawValue,
+            "contact": contact,
+            "password": password
+        ])
     }
 
     private func sendRequest<Response: Decodable>(endpoint: String, payload: [String: String]) async throws -> Response {
@@ -134,6 +151,19 @@ public struct ProfileUpdateResponse: Codable, Sendable {
     public let phone: String
 }
 
+public protocol ContactsNetworking: Sendable {
+    func listContacts() async throws -> [ContactDTO]
+}
+
+public struct ContactDTO: Codable, Hashable, Identifiable, Sendable {
+    public let userID: UUID
+    public let displayName: String
+    public let phone: String
+    public let isCurrentUser: Bool
+
+    public var id: UUID { userID }
+}
+
 public struct RESTProfileService: ProfileNetworking {
     private let baseURL: URL
     private let session: URLSession
@@ -198,6 +228,62 @@ public struct RESTProfileService: ProfileNetworking {
         }
     }
 
+private static func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
+
+public struct RESTContactsService: ContactsNetworking {
+    private let baseURL: URL
+    private let session: URLSession
+    private let tokenProvider: @Sendable () -> String?
+
+    public init(baseURL: URL, session: URLSession = .shared, tokenProvider: @escaping @Sendable () -> String? = { nil }) {
+        self.baseURL = baseURL
+        self.session = session
+        self.tokenProvider = tokenProvider
+    }
+
+    public func listContacts() async throws -> [ContactDTO] {
+        let request = authorizedRequest(for: endpointURL("auth/contacts"))
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: AppLanguagePreference.localized(ru: "Некорректный ответ сервера", en: "Invalid server response"))
+        }
+        try validate(httpResponse: httpResponse, fallbackDescription: AppLanguagePreference.localized(ru: "Не удалось загрузить контакты", en: "Failed to load contacts"))
+        return try Self.makeJSONDecoder().decode([ContactDTO].self, from: data)
+    }
+
+    private func authorizedRequest(for url: URL, method: String = "GET") -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        if let token = tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private func endpointURL(_ path: String) -> URL {
+        path
+            .split(separator: "/")
+            .reduce(baseURL) { partialURL, component in
+                partialURL.appendingPathComponent(String(component))
+            }
+    }
+
+    private func validate(httpResponse: HTTPURLResponse, fallbackDescription: String) throws {
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return
+        case 401:
+            throw AppError.unauthorized
+        default:
+            throw AppError.network(description: fallbackDescription)
+        }
+    }
+
     private static func makeJSONDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -210,7 +296,7 @@ public struct RESTProfileService: ProfileNetworking {
 public protocol ChatNetworking: Sendable {
     func listChats() async throws -> [ChatDTO]
     func getChat(chatID: UUID) async throws -> ChatDTO
-    func createChat(title: String, participantIDs: [UUID]) async throws -> ChatDTO
+    func createChat(title: String, participantIDs: [UUID], isDirect: Bool) async throws -> ChatDTO
     func getMessages(chatID: UUID) async throws -> [MessageDTO]
     func sendMessage(chatID: UUID, text: String, messageID: UUID) async throws -> MessageDTO
     func markRead(chatID: UUID, messageID: UUID) async throws -> ChatDTO
@@ -306,13 +392,14 @@ public struct RESTChatService: ChatNetworking {
         return try Self.makeJSONDecoder().decode(ChatDTO.self, from: data)
     }
 
-    public func createChat(title: String, participantIDs: [UUID]) async throws -> ChatDTO {
+    public func createChat(title: String, participantIDs: [UUID], isDirect: Bool) async throws -> ChatDTO {
         let url = endpointURL("chats")
         var request = authorizedRequest(for: url, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let payload: [String: Any] = [
             "title": title,
-            "participantIds": participantIDs.map(canonicalUUID)
+            "participantIds": participantIDs.map(canonicalUUID),
+            "isDirect": isDirect
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 

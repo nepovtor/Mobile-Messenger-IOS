@@ -26,19 +26,28 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func listChats(searchQuery: String?) async throws -> [Chat] {
+        let normalizedSearchQuery = normalizedSearchQuery(from: searchQuery)
+
+        if let normalizedSearchQuery {
+            let cachedChats = try await store.fetchChats(searchQuery: nil)
+            if !cachedChats.isEmpty {
+                return filterChats(cachedChats, searchQuery: normalizedSearchQuery)
+            }
+        }
+
         if let networking = chatNetworking {
             do {
                 let dtos = try await networking.listChats()
                 let chats = dtos.map(makeChat(from:))
                 try await store.upsert(chats: chats)
-                return filterChats(chats, searchQuery: searchQuery)
+                return filterChats(chats, searchQuery: normalizedSearchQuery)
             } catch {
                 analytics.track(error: error, context: "listChats")
-                return try await store.fetchChats(searchQuery: searchQuery)
+                return try await store.fetchChats(searchQuery: normalizedSearchQuery)
             }
         }
 
-        return try await store.fetchChats(searchQuery: searchQuery)
+        return try await store.fetchChats(searchQuery: normalizedSearchQuery)
     }
 
     public func getChat(_ chatID: UUID) async throws -> Chat {
@@ -60,14 +69,18 @@ public final class DefaultChatRepository: ChatRepository {
         throw AppError.network(description: AppLanguagePreference.localized(ru: "Чат не найден", en: "Chat not found"))
     }
 
-    public func createChat(title: String, participantIDs: [UUID]) async throws -> Chat {
+    public func observeChat(_ chatID: UUID) -> AsyncStream<Chat> {
+        store.observeChat(id: chatID)
+    }
+
+    public func createChat(title: String, participantIDs: [UUID], isDirect: Bool) async throws -> Chat {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else {
             throw AppError.network(description: AppLanguagePreference.localized(ru: "Название чата не может быть пустым", en: "Chat title cannot be empty"))
         }
 
         if let networking = chatNetworking {
-            let dto = try await networking.createChat(title: trimmedTitle, participantIDs: participantIDs)
+            let dto = try await networking.createChat(title: trimmedTitle, participantIDs: participantIDs, isDirect: isDirect)
             let chat = makeChat(from: dto)
             try await store.upsert(chats: [chat])
             return chat
@@ -332,14 +345,21 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     private func filterChats(_ chats: [Chat], searchQuery: String?) -> [Chat] {
-        guard let query = searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty else {
+        guard let normalizedQuery = normalizedSearchQuery(from: searchQuery) else {
             return chats
         }
 
-        let normalizedQuery = query.lowercased()
         return chats.filter { chat in
             chat.title.lowercased().contains(normalizedQuery) ||
             (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false)
         }
+    }
+
+    private func normalizedSearchQuery(from searchQuery: String?) -> String? {
+        guard let query = searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty else {
+            return nil
+        }
+
+        return query.lowercased()
     }
 }

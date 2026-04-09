@@ -17,11 +17,17 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
+            ContactsView(container: container)
+                .tabItem {
+                    Label(language.text(ru: "Контакты", en: "Contacts"), systemImage: "person.2.fill")
+                }
+                .tag(1)
+
             ProfileView(container: container)
                 .tabItem {
                     Label(language.text(ru: "Профиль", en: "Profile"), systemImage: "person.crop.circle.fill")
                 }
-                .tag(1)
+                .tag(2)
         }
         .tint(Color(red: 0.00, green: 0.48, blue: 1.00))
         .onAppear {

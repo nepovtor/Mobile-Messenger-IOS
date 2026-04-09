@@ -1,6 +1,8 @@
 import {
   ArrayUnique,
+  IsBoolean,
   IsArray,
+  IsOptional,
   IsString,
   IsUUID,
   MaxLength,
@@ -17,4 +19,8 @@ export class CreateChatDto {
   @ArrayUnique()
   @IsUUID("4", { each: true })
   participantIds!: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  isDirect?: boolean;
 }

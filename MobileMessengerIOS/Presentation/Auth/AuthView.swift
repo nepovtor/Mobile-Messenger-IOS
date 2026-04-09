@@ -6,6 +6,7 @@ struct AuthView: View {
     let onAuthorized: () -> Void
 
     @State private var selectedTab: AuthTab = .login
+    @State private var loginMode: LoginMode = .password
     @AppStorage(AppPreferenceKeys.language) private var languagePreference = AppLanguagePreference.system.rawValue
     @FocusState private var focusedField: Field?
 
@@ -14,9 +15,15 @@ struct AuthView: View {
         case register
     }
 
+    enum LoginMode: CaseIterable {
+        case password
+        case code
+    }
+
     private enum Field: Hashable {
         case name
         case phone
+        case password
         case code
     }
 
@@ -50,6 +57,11 @@ struct AuthView: View {
             viewModel.method = .phone
             viewModel.resetVerificationState()
             focusedField = selectedTab == .register ? .name : .phone
+        }
+        .onChange(of: loginMode) {
+            viewModel.resetVerificationState()
+            viewModel.errorMessage = nil
+            focusedField = .phone
         }
         .onChange(of: viewModel.state) {
             if case .authenticated = viewModel.state {
@@ -120,6 +132,15 @@ struct AuthView: View {
             }
             .pickerStyle(.segmented)
 
+            if selectedTab == .login {
+                Picker(t("Способ входа", "Sign in method"), selection: $loginMode) {
+                    ForEach(LoginMode.allCases, id: \.self) { mode in
+                        Text(title(for: mode)).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
             if selectedTab == .register {
                 inputField(
                     title: t("Имя", "Name"),
@@ -151,7 +172,22 @@ struct AuthView: View {
                     .focused($focusedField, equals: .phone)
             }
 
-            if viewModel.isCodeSent {
+            if selectedTab == .login && loginMode == .password {
+                inputField(
+                    title: t("Пароль", "Password"),
+                    icon: "lock.fill",
+                    message: viewModel.password.isEmpty
+                        ? t("Для demo аккаунтов используйте пароль из списка ниже", "For demo accounts, use a password from the list below")
+                        : (viewModel.isPasswordValid ? t("Пароль готов к входу", "Password looks good") : t("Нужно минимум 4 символа", "At least 4 characters are required")),
+                    color: validationColor(isEmpty: viewModel.password.isEmpty, isValid: viewModel.isPasswordValid)
+                ) {
+                    SecureField(t("Введите пароль", "Enter password"), text: $viewModel.password)
+                        .textContentType(.password)
+                        .focused($focusedField, equals: .password)
+                }
+            }
+
+            if loginMode == .code && viewModel.isCodeSent {
                 inputField(
                     title: t("Код подтверждения", "Verification code"),
                     icon: "number.square",
@@ -204,6 +240,10 @@ struct AuthView: View {
             }
             .buttonStyle(.plain)
             .disabled(primaryButtonDisabled || viewModel.isRequestingCode || viewModel.isVerifyingCode)
+
+            if selectedTab == .login && loginMode == .password {
+                demoAccountsCard
+            }
         }
         .padding(24)
         .background(Color(uiColor: .systemBackground).opacity(0.92), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
@@ -216,13 +256,16 @@ struct AuthView: View {
     }
 
     private var helperFootnote: some View {
-        Text(t("Для локального backend код по умолчанию `123456`, если в `server/.env` не указан свой `AUTH_TEST_CODE`.", "For the local backend, the default code is `123456` unless `AUTH_TEST_CODE` is set in `server/.env`."))
+        Text(helperFootnoteText)
             .font(.footnote)
             .foregroundStyle(Color.white.opacity(0.86))
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private var primaryButtonTitle: String {
+        if selectedTab == .login && loginMode == .password {
+            return t("Войти по паролю", "Sign in with password")
+        }
         if viewModel.isCodeSent {
             return selectedTab == .register ? t("Создать профиль", "Create profile") : t("Подтвердить вход", "Confirm sign in")
         }
@@ -230,6 +273,10 @@ struct AuthView: View {
     }
 
     private var primaryButtonDisabled: Bool {
+        if selectedTab == .login && loginMode == .password {
+            return !viewModel.isContactValid || !viewModel.isPasswordValid
+        }
+
         if viewModel.isCodeSent {
             return !viewModel.isCodeValid || (selectedTab == .register && !viewModel.isDisplayNameValid)
         }
@@ -239,6 +286,14 @@ struct AuthView: View {
         }
 
         return !viewModel.isContactValid
+    }
+
+    private var helperFootnoteText: String {
+        if selectedTab == .login && loginMode == .password {
+            return t("Ниже есть 5 demo-аккаунтов с телефоном и паролем. Можно открыть два симулятора, войти разными пользователями и сразу переписываться.", "Below are 5 demo accounts with phone numbers and passwords. Open two simulators, sign in with different users and start chatting right away.")
+        }
+
+        return t("Для локального backend код по умолчанию `123456`, если в `server/.env` не указан свой `AUTH_TEST_CODE`.", "For the local backend, the default code is `123456` unless `AUTH_TEST_CODE` is set in `server/.env`.")
     }
 
     private var codeDescription: String {
@@ -262,7 +317,9 @@ struct AuthView: View {
 
     private func handlePrimaryAction() {
         Task {
-            if viewModel.isCodeSent {
+            if selectedTab == .login && loginMode == .password {
+                await viewModel.signInWithPassword()
+            } else if viewModel.isCodeSent {
                 await viewModel.verifyCode(displayName: selectedTab == .register ? viewModel.displayName : nil)
             } else {
                 await viewModel.requestCode()
@@ -279,6 +336,15 @@ struct AuthView: View {
             return t("Вход", "Sign In")
         case .register:
             return t("Регистрация", "Sign Up")
+        }
+    }
+
+    private func title(for mode: LoginMode) -> String {
+        switch mode {
+        case .password:
+            return t("Пароль", "Password")
+        case .code:
+            return t("Код", "Code")
         }
     }
 
@@ -316,6 +382,54 @@ struct AuthView: View {
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(color)
+        }
+    }
+
+    private var demoAccountsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(t("Demo аккаунты", "Demo accounts"))
+                .font(.headline)
+
+            ForEach(AuthViewModel.demoAccounts) { account in
+                Button {
+                    viewModel.applyDemoAccount(account)
+                    focusedField = .password
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Circle()
+                            .fill(Color.blue.opacity(0.12))
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .foregroundStyle(.blue)
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(account.displayName)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+
+                            Text(account.phone)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Text("\(t("Пароль", "Password")): \(account.password)")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Image(systemName: "arrow.down.left.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.blue)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
