@@ -1,5 +1,36 @@
 import Foundation
 
+enum AppJSONDecoderFactory {
+    static func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        let internetDateFormatter = ISO8601DateFormatter()
+        internetDateFormatter.formatOptions = [.withInternetDateTime]
+
+        let fractionalSecondsFormatter = ISO8601DateFormatter()
+        fractionalSecondsFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let rawValue = try container.decode(String.self)
+
+            if let date = fractionalSecondsFormatter.date(from: rawValue) ?? internetDateFormatter.date(from: rawValue) {
+                return date
+            }
+
+            if let unixTimestamp = Double(rawValue) {
+                return Date(timeIntervalSince1970: unixTimestamp)
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported server date format: \(rawValue)"
+            )
+        }
+
+        return decoder
+    }
+}
+
 public protocol AuthNetworking: Sendable {
     func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse?
     func verifyCode(
@@ -110,9 +141,7 @@ public struct RESTAuthService: AuthNetworking {
     }
 
     private static func makeJSONDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        AppJSONDecoderFactory.makeJSONDecoder()
     }
 }
 
@@ -229,9 +258,7 @@ public struct RESTProfileService: ProfileNetworking {
     }
 
 private static func makeJSONDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        AppJSONDecoderFactory.makeJSONDecoder()
     }
 }
 
@@ -285,9 +312,7 @@ public struct RESTContactsService: ContactsNetworking {
     }
 
     private static func makeJSONDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        AppJSONDecoderFactory.makeJSONDecoder()
     }
 }
 
@@ -497,8 +522,6 @@ public struct RESTChatService: ChatNetworking {
     }
 
     private static func makeJSONDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        AppJSONDecoderFactory.makeJSONDecoder()
     }
 }
