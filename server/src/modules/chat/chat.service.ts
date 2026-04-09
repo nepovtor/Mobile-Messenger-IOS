@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -152,16 +153,34 @@ export class ChatService implements OnModuleInit {
 
   async createChat(body: CreateChatDto, ownerID: string): Promise<Chat> {
     const participantIDs = Array.from(
-      new Set([...body.participantIds, ownerID]),
+      new Set([...body.participantIds.map((id) => id.toLowerCase()), ownerID]),
     );
+    const trimmedTitle = body.title.trim();
+    if (!trimmedTitle) {
+      throw new BadRequestException("Chat title must not be blank");
+    }
+
     const participants = await this.userRepository.findBy({
       id: In(participantIDs),
     });
+    if (participants.length !== participantIDs.length) {
+      throw new NotFoundException("One or more participants not found");
+    }
+
+    const isDirect = body.isDirect === true;
+    if (isDirect) {
+      const existingDirectChat =
+        await this.findExistingDirectChat(participantIDs);
+      if (existingDirectChat) {
+        return this.toChatDto(existingDirectChat, ownerID);
+      }
+    }
 
     const chat = this.chatRepository.create({
-      title: body.title.trim(),
+      title: trimmedTitle,
       participants,
       lastActivity: new Date(),
+      isDirect,
     });
 
     const savedChat = await this.chatRepository.save(chat);
@@ -294,9 +313,34 @@ export class ChatService implements OnModuleInit {
       title: "General Chat",
       lastActivity: new Date(),
       participants: [],
+      isDirect: false,
     });
     await this.chatRepository.save(chat);
     this.logger.log("Seeded General Chat");
+  }
+
+  private async findExistingDirectChat(
+    participantIDs: string[],
+  ): Promise<ChatEntity | null> {
+    const directChats = await this.chatRepository.find({
+      where: { isDirect: true },
+      relations: ["participants"],
+    });
+
+    return (
+      directChats.find((chat) => {
+        if (chat.participants.length !== participantIDs.length) {
+          return false;
+        }
+
+        const chatParticipantIDs = new Set(
+          chat.participants.map((participant) => participant.id),
+        );
+        return participantIDs.every((participantID) =>
+          chatParticipantIDs.has(participantID),
+        );
+      }) ?? null
+    );
   }
 
   private async requireChatAccess(
@@ -337,12 +381,23 @@ export class ChatService implements OnModuleInit {
     const unreadCount = await this.getUnreadCount(chat.id, userID);
     return {
       id: chat.id,
-      title: chat.title,
+      title: this.resolveChatTitle(chat, userID),
       lastMessagePreview: chat.lastMessagePreview,
       lastActivity: (chat.lastActivity ?? chat.createdAt).toISOString(),
       unreadCount,
       typingParticipants: this.getTypingParticipants(chat.id, userID),
     };
+  }
+
+  private resolveChatTitle(chat: ChatEntity, userID: string): string {
+    if (!chat.isDirect || chat.participants.length === 0) {
+      return chat.title;
+    }
+
+    const otherParticipant = chat.participants.find(
+      (participant) => participant.id !== userID,
+    );
+    return otherParticipant?.displayName ?? chat.title;
   }
 
   private toMessageDto(message: MessageEntity, chatId: string): Message {

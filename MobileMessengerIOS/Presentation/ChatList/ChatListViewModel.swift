@@ -8,8 +8,16 @@ struct ChatListItem: Identifiable, Hashable {
     let unreadCount: Int
     let typingParticipants: [String]
 
-    private static let formatter: RelativeDateTimeFormatter = {
+    private static let englishFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+
+    private static let russianFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
         formatter.unitsStyle = .full
         return formatter
     }()
@@ -23,8 +31,8 @@ struct ChatListItem: Identifiable, Hashable {
     }
 
     var relativeDateString: String {
-        Self.formatter.locale = AppLanguagePreference.current.locale
-        return Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
+        let formatter = AppLanguagePreference.current.isRussian ? Self.russianFormatter : Self.englishFormatter
+        return formatter.localizedString(for: updatedAt, relativeTo: Date())
     }
 }
 
@@ -32,7 +40,10 @@ struct ChatListItem: Identifiable, Hashable {
 public final class ChatListViewModel: ObservableObject {
     @Published private(set) var chats: [ChatListItem] = []
     @Published var searchQuery: String = "" {
-        didSet { scheduleSearch() }
+        didSet {
+            guard !suppressScheduledSearch else { return }
+            scheduleSearch()
+        }
     }
     @Published var isLoading = false
     @Published var isShowingError = false
@@ -44,6 +55,8 @@ public final class ChatListViewModel: ObservableObject {
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
     private var refreshLoopTask: Task<Void, Never>?
+    private var isRefreshing = false
+    private var suppressScheduledSearch = false
 
     init(loadChats: LoadChatListUseCase, createChat: CreateChatUseCase, analytics: AnalyticsService) {
         self.loadChats = loadChats
@@ -58,24 +71,36 @@ public final class ChatListViewModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else { return }
-                await self?.refresh()
+                guard let self, self.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                await self.refresh()
             }
         }
     }
 
     func onDisappear() {
+        searchTask?.cancel()
+        searchTask = nil
         refreshLoopTask?.cancel()
         refreshLoopTask = nil
     }
 
     func refresh() async {
-        guard !isLoading else { return }
+        guard !isRefreshing else { return }
+        isRefreshing = true
         let shouldShowLoader = chats.isEmpty
         if shouldShowLoader {
             isLoading = true
         }
+        defer {
+            isRefreshing = false
+            if shouldShowLoader {
+                isLoading = false
+            }
+        }
+
         do {
-            let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
+            let normalizedSearchQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            let chats = try await loadChats(searchQuery: normalizedSearchQuery.isEmpty ? nil : normalizedSearchQuery)
             var chatItems = chats.map(makeChatItem(from:))
 
             // Добавляем ИИ чат в начало списка
@@ -95,9 +120,6 @@ public final class ChatListViewModel: ObservableObject {
             isShowingError = true
             analytics.track(error: error, context: "chat_list_load")
         }
-        if shouldShowLoader {
-            isLoading = false
-        }
     }
 
     func createChat(title: String) async -> ChatListItem? {
@@ -116,7 +138,7 @@ public final class ChatListViewModel: ObservableObject {
             let chat = try await createChatUseCase(title: trimmedTitle, participantIDs: [])
             if !searchQuery.isEmpty {
                 searchTask?.cancel()
-                searchQuery = ""
+                setSearchQuery("", scheduleRefresh: false)
             }
             await refresh()
             return makeChatItem(from: chat)
@@ -138,6 +160,12 @@ public final class ChatListViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             await self?.refresh()
         }
+    }
+
+    private func setSearchQuery(_ value: String, scheduleRefresh: Bool) {
+        suppressScheduledSearch = !scheduleRefresh
+        searchQuery = value
+        suppressScheduledSearch = false
     }
 
     private func makeChatItem(from chat: Chat) -> ChatListItem {

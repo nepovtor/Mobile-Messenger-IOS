@@ -6,6 +6,7 @@ public protocol ChatLocalStore: Sendable {
     func upsert(messages: [Message], for chatID: UUID) async throws
     func append(message: Message, for chatID: UUID) async throws
     func fetchChat(id: UUID) async throws -> Chat?
+    func observeChat(id: UUID) -> AsyncStream<Chat>
     func loadMessages(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message]
     func observeMessages(for chatID: UUID) -> AsyncStream<Message>
     func fetchChats(searchQuery: String?) async throws -> [Chat]

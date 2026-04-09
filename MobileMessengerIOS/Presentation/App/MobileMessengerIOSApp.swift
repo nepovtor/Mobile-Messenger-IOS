@@ -7,7 +7,9 @@ struct MobileMessengerIOSApp: App {
 
     init() {
         configureAppearance()
-        Task { await PushNotificationManager.shared.registerForNotifications() }
+        if !ProcessInfo.processInfo.isRunningTests {
+            Task { await PushNotificationManager.shared.registerForNotifications() }
+        }
     }
 
     var body: some Scene {
@@ -29,5 +31,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         PushNotificationManager.shared.didFailToRegister(error: error)
+    }
+}
+
+private extension ProcessInfo {
+    var isRunningTests: Bool {
+        environment["XCTestConfigurationFilePath"] != nil
     }
 }

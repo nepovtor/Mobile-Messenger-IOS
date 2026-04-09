@@ -45,6 +45,7 @@
 		DECB1BF54D164D53ABC2FF8A /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914DF17C08C64D12BE15F460 /* SessionStore.swift */; };
 		EDF1A6F7F129450D8505C81B /* MessageStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE8F16C007F4E309EB5EC22 /* MessageStatus.swift */; };
 		EDFD428A5D0987645C8A675F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4347F46589A2539DD81D83DA /* Foundation.framework */; };
+		E11C0A1A4F3244D4A6A61C02 /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11C0A1A4F3244D4A6A61C01 /* ContactsView.swift */; };
 		F00190CB017745F3907414E0 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE4380CB81594638A1AB6346 /* Message.swift */; };
 		F3A1D0B74D134F5E81B9A422 /* CreateChatUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4C2E8D916A740A8B49DA364 /* CreateChatUseCase.swift */; };
 		F69B0FBED04C45E68F0CE844 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C29CD7B8D7D14E84B35CB1AA /* ReachabilityService.swift */; };
@@ -107,6 +108,7 @@
 		D6D781D61F364A96A102F352 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
 		D6FA3306B5854D3ABA5AFFAE /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
 		DF89FB281FD04A9CBC745CBA /* ObserveChatMessagesUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObserveChatMessagesUseCase.swift; sourceTree = "<group>"; };
+		E11C0A1A4F3244D4A6A61C01 /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
 		E4A3617C77F44C8DBCE2C5B1 /* MessageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageAttachment.swift; sourceTree = "<group>"; };
 		FC16929A4F094A5195C995A2 /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -298,6 +300,7 @@
 			children = (
 				0C0DD8640C1D499E8AE78247 /* App */,
 				83C11043049D47899A796D89 /* Auth */,
+				E11C0A1A4F3244D4A6A61C03 /* Contacts */,
 				F5A7C3D855D24316A77148F7 /* Chat */,
 				91FA14E4C4BA4B1A83C9255E /* ChatList */,
 				261DE431B9C24E5994BB6D8B /* Common */,
@@ -388,6 +391,14 @@
 				4347F46589A2539DD81D83DA /* Foundation.framework */,
 			);
 			name = iOS;
+			sourceTree = "<group>";
+		};
+		E11C0A1A4F3244D4A6A61C03 /* Contacts */ = {
+			isa = PBXGroup;
+			children = (
+				E11C0A1A4F3244D4A6A61C01 /* ContactsView.swift */,
+			);
+			path = Contacts;
 			sourceTree = "<group>";
 		};
 		F5A7C3D855D24316A77148F7 /* Chat */ = {
@@ -521,6 +532,7 @@
 				CD7FC55F2D0F41F8B8F2CAF9 /* ProfileView.swift in Sources */,
 				8CABE053E60442E992FBAC41 /* AuthView.swift in Sources */,
 				FE3E2CAFA1A64C8284B969C3 /* AuthViewModel.swift in Sources */,
+				E11C0A1A4F3244D4A6A61C02 /* ContactsView.swift in Sources */,
 				A0B4F5423F104646A3C3ECFA /* ChatViewModel.swift in Sources */,
 				C6A683DAE8D44309A32CA520 /* DialogueView.swift in Sources */,
 				1645C9DAF3F6422FA85D3E8C /* ChatListView.swift in Sources */,

@@ -17,6 +17,12 @@ export class User {
   @Column()
   displayName!: string;
 
+  @Column({ type: "text", nullable: true })
+  passwordHash!: string | null;
+
+  @Column({ default: false })
+  isDemo!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

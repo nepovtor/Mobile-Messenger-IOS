@@ -191,4 +191,74 @@ describe("Mobile Messenger backend", () => {
       ]),
     );
   });
+
+  it("supports demo password login and exposes demo contacts", async () => {
+    const signInWithPassword = async (contact: string, password: string) => {
+      const response = await request(app.getHttpServer())
+        .post("/api/auth/password-login")
+        .send({
+          method: "phone",
+          contact,
+          password,
+        });
+
+      expect(response.status).toBe(201);
+
+      return {
+        token: response.body.token as string,
+        userID: response.body.userID as string,
+        displayName: response.body.displayName as string,
+      };
+    };
+
+    const createAuthedRequest = (token: string) => (
+      method: "get" | "post",
+      path: string,
+    ) =>
+      request(app.getHttpServer())[method](path).set(
+        "Authorization",
+        `Bearer ${token}`,
+      );
+
+    const anna = await signInWithPassword("+15551230011", "demo1111");
+    const boris = await signInWithPassword("+15551230012", "demo2222");
+    const withAnnaAuth = createAuthedRequest(anna.token);
+    const withBorisAuth = createAuthedRequest(boris.token);
+
+    const contactsResponse = await withAnnaAuth("get", "/api/auth/contacts");
+    expect(contactsResponse.status).toBe(200);
+    expect(contactsResponse.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayName: "Анна Demo",
+          phone: "+15551230011",
+          isCurrentUser: true,
+        }),
+        expect.objectContaining({
+          displayName: "Борис Demo",
+          phone: "+15551230012",
+          isCurrentUser: false,
+        }),
+      ]),
+    );
+
+    const createChatResponse = await withAnnaAuth("post", "/api/chats").send({
+      title: "Demo direct chat",
+      participantIds: [boris.userID],
+      isDirect: true,
+    });
+
+    expect(createChatResponse.status).toBe(201);
+    expect(createChatResponse.body.title).toBe("Борис Demo");
+
+    const sameChatResponse = await withBorisAuth("post", "/api/chats").send({
+      title: "Demo direct chat",
+      participantIds: [anna.userID],
+      isDirect: true,
+    });
+
+    expect(sameChatResponse.status).toBe(201);
+    expect(sameChatResponse.body.id).toBe(createChatResponse.body.id);
+    expect(sameChatResponse.body.title).toBe("Анна Demo");
+  });
 });

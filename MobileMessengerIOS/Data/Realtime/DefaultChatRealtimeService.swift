@@ -243,9 +243,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     }
 
     private static func makeJSONDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        AppJSONDecoderFactory.makeJSONDecoder()
     }
 
     public func currentState(for chatID: UUID) -> State {

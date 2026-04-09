@@ -1,5 +1,13 @@
 import Foundation
 
+struct DemoAccountCredentials: Identifiable, Hashable {
+    let displayName: String
+    let phone: String
+    let password: String
+
+    var id: String { phone }
+}
+
 @MainActor
 public final class AuthViewModel: ObservableObject {
     public enum AuthState: Equatable {
@@ -10,6 +18,7 @@ public final class AuthViewModel: ObservableObject {
     @Published var method: AuthMethod = .phone
     @Published var displayName: String = ""
     @Published var contact: String = ""
+    @Published var password: String = ""
     @Published var code: String = ""
     @Published var isRequestingCode: Bool = false
     @Published var isVerifyingCode: Bool = false
@@ -20,6 +29,14 @@ public final class AuthViewModel: ObservableObject {
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
+
+    static let demoAccounts: [DemoAccountCredentials] = [
+        DemoAccountCredentials(displayName: "Анна Demo", phone: "+15551230011", password: "demo1111"),
+        DemoAccountCredentials(displayName: "Борис Demo", phone: "+15551230012", password: "demo2222"),
+        DemoAccountCredentials(displayName: "Вера Demo", phone: "+15551230013", password: "demo3333"),
+        DemoAccountCredentials(displayName: "Глеб Demo", phone: "+15551230014", password: "demo4444"),
+        DemoAccountCredentials(displayName: "Даша Demo", phone: "+15551230015", password: "demo5555")
+    ]
 
     init(authService: AuthNetworking, sessionStore: SessionStore) {
         self.authService = authService
@@ -49,6 +66,10 @@ public final class AuthViewModel: ObservableObject {
 
     var isCodeValid: Bool {
         code.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
+    }
+
+    var isPasswordValid: Bool {
+        password.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
     }
 
     func requestCode() async {
@@ -97,9 +118,36 @@ public final class AuthViewModel: ObservableObject {
         }
     }
 
+    func signInWithPassword() async {
+        guard !isVerifyingCode else { return }
+        errorMessage = nil
+        isVerifyingCode = true
+        defer { isVerifyingCode = false }
+
+        let sanitizedContact = sanitize(contact: contact)
+        let sanitizedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        do {
+            let response = try await authService.signInWithPassword(
+                method: method,
+                contact: sanitizedContact,
+                password: sanitizedPassword
+            )
+            sessionStore.authenticate(
+                token: response.token,
+                userID: response.userID,
+                displayName: response.displayName
+            )
+            state = .authenticated
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
     func reset() {
         displayName = ""
         contact = ""
+        password = ""
         resetVerificationState()
     }
 
@@ -110,6 +158,14 @@ public final class AuthViewModel: ObservableObject {
         isRequestingCode = false
         isVerifyingCode = false
         codeExpirationSeconds = nil
+    }
+
+    func applyDemoAccount(_ account: DemoAccountCredentials) {
+        method = .phone
+        contact = account.phone
+        password = account.password
+        errorMessage = nil
+        resetVerificationState()
     }
 
     private func sanitize(contact: String) -> String {

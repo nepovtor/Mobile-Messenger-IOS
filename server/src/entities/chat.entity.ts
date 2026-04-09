@@ -23,6 +23,9 @@ export class Chat {
   @Column({ type: "datetime", nullable: true })
   lastActivity!: Date | null;
 
+  @Column({ default: false })
+  isDirect!: boolean;
+
   @ManyToMany(() => User)
   @JoinTable()
   participants!: User[];

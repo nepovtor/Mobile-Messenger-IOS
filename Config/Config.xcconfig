@@ -1,0 +1,10 @@
+// Local overrides for physical-device development.
+// Current host address is set to the Mac LAN/hotspot IP so the iPhone can reach the backend.
+
+REST_BASE_URL = http\:\/\/172.20.10.4:8080/api
+WEBSOCKET_URL = ws\:\/\/172.20.10.4:8080
+
+FEATURE_REALTIME = YES
+FEATURE_PUSH = YES
+FEATURE_MEDIA = NO
+FEATURE_VERBOSE_LOGGING = YES
