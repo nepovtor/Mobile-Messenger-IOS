@@ -5,8 +5,10 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryColumn,
 } from "typeorm";
+import { MessageEntity } from "./message.entity";
 import { UserEntity } from "./user.entity";
 
 export enum MediaStatus {
@@ -48,4 +50,7 @@ export class MediaEntity {
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
+
+  @OneToMany(() => MessageEntity, (message) => message.media)
+  messages?: MessageEntity[];
 }

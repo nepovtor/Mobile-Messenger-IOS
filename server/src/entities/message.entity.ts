@@ -8,6 +8,7 @@ import {
   PrimaryColumn,
 } from "typeorm";
 import { ChatEntity } from "./chat.entity";
+import { MediaEntity } from "./media.entity";
 import { UserEntity } from "./user.entity";
 
 export enum MessageStatus {
@@ -16,6 +17,11 @@ export enum MessageStatus {
   DELIVERED = "delivered",
   READ = "read",
   FAILED = "failed",
+}
+
+export enum MessageKind {
+  TEXT = "text",
+  IMAGE = "image",
 }
 
 @Entity({ name: "messages" })
@@ -40,8 +46,18 @@ export class MessageEntity {
   @Column({ name: "client_message_id", type: "uuid" })
   clientMessageId!: string;
 
-  @Column({ type: "text" })
-  text!: string;
+  @Column({ type: "enum", enum: MessageKind, default: MessageKind.TEXT })
+  kind!: MessageKind;
+
+  @Column({ type: "text", nullable: true })
+  text!: string | null;
+
+  @Column({ name: "media_id", type: "uuid", nullable: true })
+  mediaId!: string | null;
+
+  @ManyToOne(() => MediaEntity, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "media_id" })
+  media!: MediaEntity | null;
 
   @Column({ type: "enum", enum: MessageStatus, default: MessageStatus.SENT })
   status!: MessageStatus;

@@ -7,7 +7,11 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { In, LessThanOrEqual, Not, Repository } from "typeorm";
 import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
-import { MessageEntity, MessageStatus } from "../../entities/message.entity";
+import {
+  MessageEntity,
+  MessageKind,
+  MessageStatus,
+} from "../../entities/message.entity";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { normalizeContact } from "../common/contact.utils";
@@ -31,7 +35,9 @@ export interface MessageResponse {
   chatID: string;
   authorID: string;
   authorName: string;
-  text: string;
+  kind: MessageKind;
+  text: string | null;
+  mediaID: string | null;
   status: MessageStatus;
   createdAt: Date;
 }
@@ -162,9 +168,13 @@ export class ChatService {
       where: { chatId: chatID },
     });
 
-    const trimmedText = dto.text.trim();
+    if (dto.kind !== MessageKind.TEXT) {
+      throw new BadRequestException("Unsupported message kind");
+    }
+
+    const trimmedText = dto.text?.trim();
     if (!trimmedText) {
-      throw new BadRequestException("Message text is required");
+      throw new BadRequestException("Text message must contain text");
     }
 
     const message = await this.messagesRepository.save(
@@ -172,7 +182,9 @@ export class ChatService {
         chatId: chatID,
         authorId: user.sub,
         clientMessageId: dto.messageID,
+        kind: dto.kind,
         text: trimmedText,
+        mediaId: null,
         status:
           participants.length > 1
             ? MessageStatus.DELIVERED
@@ -405,7 +417,9 @@ export class ChatService {
       chatID: message.chatId,
       authorID: message.authorId,
       authorName: message.author.displayName,
+      kind: message.kind,
       text: message.text,
+      mediaID: message.mediaId,
       status: message.status,
       createdAt: message.createdAt,
     };
