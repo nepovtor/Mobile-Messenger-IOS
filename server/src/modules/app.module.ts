@@ -3,6 +3,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuthModule } from "./auth/auth.module";
 import { ChatModule } from "./chat/chat.module";
 import { HealthModule } from "./health/health.module";
+import { MediaModule } from "./media/media.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { VersionModule } from "./version/version.module";
 
@@ -24,6 +25,7 @@ import { VersionModule } from "./version/version.module";
     VersionModule,
     AuthModule,
     RealtimeModule,
+    MediaModule,
     ChatModule,
   ],
 })

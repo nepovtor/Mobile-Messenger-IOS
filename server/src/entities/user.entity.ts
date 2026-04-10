@@ -7,6 +7,7 @@ import {
   PrimaryColumn,
 } from "typeorm";
 import { ChatParticipantEntity } from "./chat-participant.entity";
+import { MediaEntity } from "./media.entity";
 import { MessageEntity } from "./message.entity";
 
 export enum AuthMethod {
@@ -36,4 +37,7 @@ export class UserEntity {
 
   @OneToMany(() => MessageEntity, (message) => message.author)
   messages?: MessageEntity[];
+
+  @OneToMany(() => MediaEntity, (media) => media.uploadedBy)
+  uploadedMedia?: MediaEntity[];
 }
