@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common';
-import { VersionController } from './version.controller';
+import { Module } from "@nestjs/common";
+import { VersionController } from "./version.controller";
 
 @Module({
   controllers: [VersionController],

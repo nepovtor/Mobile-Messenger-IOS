@@ -1,0 +1,51 @@
+import { randomUUID } from "node:crypto";
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
+} from "typeorm";
+import { ChatEntity } from "./chat.entity";
+import { UserEntity } from "./user.entity";
+
+export enum MessageStatus {
+  SENDING = "sending",
+  SENT = "sent",
+  DELIVERED = "delivered",
+  READ = "read",
+  FAILED = "failed",
+}
+
+@Entity({ name: "messages" })
+export class MessageEntity {
+  @PrimaryColumn("uuid")
+  id = randomUUID();
+
+  @Column({ name: "chat_id", type: "uuid" })
+  chatId!: string;
+
+  @ManyToOne(() => ChatEntity, (chat) => chat.messages, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "chat_id" })
+  chat!: ChatEntity;
+
+  @Column({ name: "author_id", type: "uuid" })
+  authorId!: string;
+
+  @ManyToOne(() => UserEntity, (user) => user.messages, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "author_id" })
+  author!: UserEntity;
+
+  @Column({ name: "client_message_id", type: "uuid" })
+  clientMessageId!: string;
+
+  @Column({ type: "text" })
+  text!: string;
+
+  @Column({ type: "enum", enum: MessageStatus, default: MessageStatus.SENT })
+  status!: MessageStatus;
+
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
+  createdAt!: Date;
+}
