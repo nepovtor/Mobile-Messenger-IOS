@@ -55,7 +55,10 @@ export class MessageEntity {
   @Column({ name: "media_id", type: "uuid", nullable: true })
   mediaId!: string | null;
 
-  @ManyToOne(() => MediaEntity, { onDelete: "SET NULL", nullable: true })
+  @ManyToOne(() => MediaEntity, (media) => media.messages, {
+    onDelete: "SET NULL",
+    nullable: true,
+  })
   @JoinColumn({ name: "media_id" })
   media!: MediaEntity | null;
 

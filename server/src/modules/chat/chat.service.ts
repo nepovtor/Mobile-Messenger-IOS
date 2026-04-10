@@ -7,6 +7,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { In, LessThanOrEqual, Not, Repository } from "typeorm";
 import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
+import { MediaEntity } from "../../entities/media.entity";
 import {
   MessageEntity,
   MessageKind,
@@ -15,6 +16,7 @@ import {
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { normalizeContact } from "../common/contact.utils";
+import { MediaService } from "../media/media.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
@@ -38,6 +40,7 @@ export interface MessageResponse {
   kind: MessageKind;
   text: string | null;
   mediaID: string | null;
+  mediaURL: string | null;
   status: MessageStatus;
   createdAt: Date;
 }
@@ -53,7 +56,10 @@ export class ChatService {
     private readonly messagesRepository: Repository<MessageEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
+    @InjectRepository(MediaEntity)
+    private readonly mediaRepository: Repository<MediaEntity>,
     private readonly realtimeService: RealtimeService,
+    private readonly mediaService: MediaService,
   ) {}
 
   async createChat(
@@ -145,7 +151,7 @@ export class ChatService {
         chatId: chatID,
         ...(createdBefore ? { createdAt: LessThanOrEqual(createdBefore) } : {}),
       },
-      relations: { author: true },
+      relations: { author: true, media: true },
       order: { createdAt: "DESC" },
       take: Math.min(Math.max(limit, 1), 200),
     });
@@ -168,13 +174,23 @@ export class ChatService {
       where: { chatId: chatID },
     });
 
-    if (dto.kind !== MessageKind.TEXT) {
-      throw new BadRequestException("Unsupported message kind");
-    }
-
     const trimmedText = dto.text?.trim();
-    if (!trimmedText) {
-      throw new BadRequestException("Text message must contain text");
+    let media: MediaEntity | null = null;
+
+    if (dto.kind === MessageKind.TEXT) {
+      if (!trimmedText) {
+        throw new BadRequestException("Text message must contain text");
+      }
+    } else if (dto.kind === MessageKind.IMAGE) {
+      if (!dto.mediaID) {
+        throw new BadRequestException("Image message must contain mediaID");
+      }
+      media = await this.mediaService.getUploadedMediaOrFail(dto.mediaID);
+      if (media.uploadedById !== user.sub) {
+        throw new BadRequestException("Media belongs to another user");
+      }
+    } else {
+      throw new BadRequestException("Unsupported message kind");
     }
 
     const message = await this.messagesRepository.save(
@@ -183,8 +199,11 @@ export class ChatService {
         authorId: user.sub,
         clientMessageId: dto.messageID,
         kind: dto.kind,
-        text: trimmedText,
-        mediaId: null,
+        text:
+          dto.kind === MessageKind.TEXT
+            ? trimmedText || null
+            : trimmedText || null,
+        mediaId: media?.id ?? null,
         status:
           participants.length > 1
             ? MessageStatus.DELIVERED
@@ -202,13 +221,14 @@ export class ChatService {
     if (!chat) {
       throw new NotFoundException("Chat not found");
     }
-    chat.lastMessagePreview = trimmedText;
+    chat.lastMessagePreview =
+      dto.kind === MessageKind.IMAGE ? "Фото" : trimmedText || null;
     chat.lastActivity = message.createdAt;
     await this.chatsRepository.save(chat);
 
     const hydratedMessage = await this.messagesRepository.findOne({
       where: { id: message.id },
-      relations: { author: true },
+      relations: { author: true, media: true },
     });
     if (!hydratedMessage) {
       throw new NotFoundException("Message not found after save");
@@ -420,6 +440,7 @@ export class ChatService {
       kind: message.kind,
       text: message.text,
       mediaID: message.mediaId,
+      mediaURL: await this.mediaService.buildDownloadUrl(message.media),
       status: message.status,
       createdAt: message.createdAt,
     };
