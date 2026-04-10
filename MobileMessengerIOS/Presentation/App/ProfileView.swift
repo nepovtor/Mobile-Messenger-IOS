@@ -7,14 +7,15 @@ struct ProfileView: View {
         NavigationStack {
             Form {
                 Section("Профиль") {
+                    let profile = currentProfile
                     HStack {
                         Image(systemName: "person.circle.fill")
                             .font(.system(size: 48))
                             .foregroundColor(.blue)
                         VStack(alignment: .leading) {
-                            Text(SessionStore.Constants.currentUserDisplayName)
+                            Text(profile.displayName)
                                 .font(.headline)
-                            Text("ID: \(SessionStore.Constants.currentUserID.uuidString)")
+                            Text("ID: \(profile.userID.uuidString)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -29,6 +30,15 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Профиль")
+        }
+    }
+
+    private var currentProfile: (userID: UUID, displayName: String) {
+        switch sessionStore.state {
+        case .authenticated(_, let userID, let displayName):
+            return (userID, displayName)
+        case .unauthenticated:
+            return (SessionStore.Constants.currentUserID, SessionStore.Constants.currentUserDisplayName)
         }
     }
 }

@@ -9,30 +9,47 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     }
 
     private let baseURL: URL
+    private let session: URLSession
+    private let authTokenProvider: @Sendable () async -> String?
     private let analytics: AnalyticsService
     private let reachability: ReachabilityService
     private let featureFlags: FeatureFlags
+    private let decoder: JSONDecoder
     private var state: State = .disconnected
+    private var subscribedChats: Set<UUID> = []
     private var eventContinuations: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation] = [:]
     private let stateQueue = DispatchQueue(label: "realtime.state.queue")
+    private var connectionTask: Task<Void, Never>?
 
-    public init(baseURL: URL, analytics: AnalyticsService, reachability: ReachabilityService, featureFlags: FeatureFlags) {
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        authTokenProvider: @escaping @Sendable () async -> String?,
+        analytics: AnalyticsService,
+        reachability: ReachabilityService,
+        featureFlags: FeatureFlags
+    ) {
         self.baseURL = baseURL
+        self.session = session
+        self.authTokenProvider = authTokenProvider
         self.analytics = analytics
         self.reachability = reachability
         self.featureFlags = featureFlags
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.decoder = decoder
     }
 
     public func connect(to chatID: UUID) {
         guard featureFlags.isRealtimeEnabled else { return }
         stateQueue.async { [weak self] in
             guard let self else { return }
-            switch state {
-            case .connected:
-                break
-            default:
-                state = .connecting(retry: 0)
-                scheduleConnection(for: chatID, retry: 0)
+            subscribedChats.insert(chatID)
+            guard connectionTask == nil else { return }
+            state = .connecting(retry: 0)
+            connectionTask = Task { [weak self] in
+                await self?.runConnectionLoop(retry: 0)
             }
         }
     }
@@ -40,88 +57,150 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     public func disconnect(from chatID: UUID) {
         stateQueue.async { [weak self] in
             guard let self else { return }
-            state = .disconnected
-            eventContinuations[chatID]?.yield(.disconnected(nil))
+            subscribedChats.remove(chatID)
             eventContinuations[chatID]?.finish()
             eventContinuations[chatID] = nil
-        }
-    }
 
-    public func sendMessage(chatID: UUID, text: String, localID: UUID) async throws {
-        guard featureFlags.isRealtimeEnabled else { return }
-        try await Task.sleep(nanoseconds: 150_000_000) // simulate network
-        let message = Message(
-            id: Message.Identifier(chatID: chatID, messageID: UUID()),
-            localID: localID,
-            authorID: SessionStore.Constants.currentUserID,
-            authorName: SessionStore.Constants.currentUserDisplayName,
-            text: text,
-            createdAt: Date(),
-            status: .sent
-        )
-        eventContinuations[chatID]?.yield(.message(message))
+            guard subscribedChats.isEmpty else { return }
+            connectionTask?.cancel()
+            connectionTask = nil
+            state = .disconnected
+        }
     }
 
     public func observeEvents(for chatID: UUID) -> AsyncStream<ChatRealtimeEvent> {
         AsyncStream { continuation in
-            eventContinuations[chatID] = continuation
-            continuation.onTermination = { [weak self] _ in
-                self?.eventContinuations[chatID] = nil
-            }
-        }
-    }
-
-    private func scheduleConnection(for chatID: UUID, retry: Int) {
-        Task.detached { [weak self] in
-            guard let self else { return }
-            if !reachability.isReachable {
-                try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
-                scheduleReconnection(for: chatID, retry: retry + 1)
-                return
-            }
-            try? await Task.sleep(nanoseconds: 300_000_000)
             stateQueue.async { [weak self] in
-                guard let self else { return }
-                state = .connected
-                eventContinuations[chatID]?.yield(.connected)
-                spawnFakeStream(for: chatID)
+                self?.eventContinuations[chatID] = continuation
             }
-        }
-    }
-
-    private func scheduleReconnection(for chatID: UUID, retry: Int) {
-        stateQueue.async { [weak self] in
-            guard let self else { return }
-            state = .reconnecting(retry: retry)
-            scheduleConnection(for: chatID, retry: retry)
-        }
-    }
-
-    private func spawnFakeStream(for chatID: UUID) {
-        Task.detached { [weak self] in
-            guard let self else { return }
-            for await reachable in reachability.observe() {
-                if reachable {
-                    stateQueue.async { [weak self] in
-                        guard let self else { return }
-                        if case .reconnecting = state {
-                            state = .connected
-                            eventContinuations[chatID]?.yield(.connected)
-                        }
-                    }
-                } else {
-                    stateQueue.async { [weak self] in
-                        guard let self else { return }
-                        state = .reconnecting(retry: 0)
-                        eventContinuations[chatID]?.yield(.disconnected(nil))
-                    }
+            continuation.onTermination = { [weak self] _ in
+                self?.stateQueue.async {
+                    self?.eventContinuations[chatID] = nil
                 }
             }
         }
     }
 
+    private func runConnectionLoop(retry: Int) async {
+        guard let token = await authTokenProvider() else {
+            broadcast(event: .disconnected(AppError.unauthorized))
+            clearConnection()
+            return
+        }
+
+        if !reachability.isReachable {
+            try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
+            await runConnectionLoop(retry: retry + 1)
+            return
+        }
+
+        do {
+            var request = URLRequest(url: baseURL.appendingPathComponent("realtime/events"))
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
+                throw AppError.network(description: "Не удалось подключиться к SSE")
+            }
+
+            updateState(.connected)
+            broadcast(event: .connected)
+
+            var currentType = "message"
+            var currentData: [String] = []
+            for try await line in bytes.lines {
+                if Task.isCancelled { break }
+                if line.isEmpty {
+                    try handleEvent(type: currentType, data: currentData.joined(separator: "\n"))
+                    currentType = "message"
+                    currentData = []
+                    continue
+                }
+                if line.hasPrefix("event:") {
+                    currentType = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                    continue
+                }
+                if line.hasPrefix("data:") {
+                    currentData.append(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
+                }
+            }
+        } catch {
+            analytics.track(error: error, context: "sse_connect")
+            broadcast(event: .disconnected(error))
+            updateState(.reconnecting(retry: retry + 1))
+            try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
+            guard !Task.isCancelled else {
+                clearConnection()
+                return
+            }
+            await runConnectionLoop(retry: retry + 1)
+            return
+        }
+
+        clearConnection()
+    }
+
+    private func handleEvent(type: String, data: String) throws {
+        guard !data.isEmpty, type != "keepalive" else { return }
+        switch type {
+        case "message.created":
+            let payload = try decoder.decode(MessageCreatedEvent.self, from: Data(data.utf8))
+            deliver(chatID: payload.chatID, event: .message(payload.message.asDomainMessage()))
+        case "message.read":
+            let payload = try decoder.decode(MessageReadEvent.self, from: Data(data.utf8))
+            deliver(chatID: payload.chatID, event: .messageRead(messageID: payload.messageID))
+        case "typing.changed":
+            let payload = try decoder.decode(TypingEvent.self, from: Data(data.utf8))
+            deliver(chatID: payload.chatID, event: .typing(participants: payload.typingParticipants))
+        default:
+            break
+        }
+    }
+
+    private func deliver(chatID: UUID, event: ChatRealtimeEvent) {
+        stateQueue.async { [weak self] in
+            self?.eventContinuations[chatID]?.yield(event)
+        }
+    }
+
+    private func broadcast(event: ChatRealtimeEvent) {
+        stateQueue.async { [weak self] in
+            self?.eventContinuations.values.forEach { continuation in
+                continuation.yield(event)
+            }
+        }
+    }
+
+    private func clearConnection() {
+        stateQueue.async { [weak self] in
+            self?.connectionTask = nil
+            self?.state = .disconnected
+        }
+    }
+
+    private func updateState(_ newState: State) {
+        stateQueue.async { [weak self] in
+            self?.state = newState
+        }
+    }
+
     private func backoff(for retry: Int) -> Double {
-        min(pow(2.0, Double(retry)), 30)
+        min(pow(2.0, Double(retry)), 15)
     }
 }
 
+private struct MessageCreatedEvent: Decodable {
+    let chatID: UUID
+    let message: ServerMessage
+}
+
+private struct MessageReadEvent: Decodable {
+    let chatID: UUID
+    let messageID: UUID
+}
+
+private struct TypingEvent: Decodable {
+    let chatID: UUID
+    let typingParticipants: [String]
+}

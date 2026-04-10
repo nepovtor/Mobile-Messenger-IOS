@@ -1,10 +1,18 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct DialogueView: View {
     @StateObject private var viewModel: ChatViewModel
+    @State private var selectedPhotoItem: PhotosPickerItem?
 
-    init(chatID: UUID, title: String, container: AppContainer = .shared) {
+    @MainActor
+    init(chatID: UUID, title: String) {
+        self.init(chatID: chatID, title: title, container: .shared)
+    }
+
+    @MainActor
+    init(chatID: UUID, title: String, container: AppContainer) {
         _viewModel = StateObject(wrappedValue: container.makeChatViewModel(chatID: chatID, title: title))
     }
 
@@ -37,7 +45,7 @@ struct DialogueView: View {
                     }
                 }
                 .listStyle(.plain)
-                .onChange(of: viewModel.messages.count) { _ in
+                .onChange(of: viewModel.messages.count) {
                     if let last = viewModel.messages.last {
                         withAnimation(.easeInOut) {
                             proxy.scrollTo(last.id.messageID, anchor: .bottom)
@@ -57,14 +65,30 @@ struct DialogueView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { viewModel.onAppear() }
         .onDisappear { viewModel.onDisappear() }
+        .task(id: selectedPhotoItem) {
+            guard let selectedPhotoItem,
+                  let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else { return }
+            viewModel.sendImage(image)
+            self.selectedPhotoItem = nil
+        }
     }
 
     private var messageInput: some View {
         HStack(alignment: .bottom, spacing: 12) {
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                Image(systemName: "photo")
+                    .font(.system(size: 22))
+            }
+            .disabled(viewModel.isSendingMedia)
+
             TextEditor(text: $viewModel.inputText)
                 .frame(minHeight: 36, maxHeight: 120)
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 16).stroke(Color.gray.opacity(0.3)))
+                .onChange(of: viewModel.inputText) {
+                    viewModel.handleInputChanged(viewModel.inputText)
+                }
                 .onTapGesture {
                     if let last = viewModel.messages.last {
                         viewModel.markAsRead(messageID: last.id.messageID)
@@ -75,7 +99,10 @@ struct DialogueView: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 28))
             }
-            .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(
+                viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                viewModel.isSendingMedia
+            )
         }
         .padding()
         .background(VisualEffectView(style: .systemMaterial))
@@ -124,10 +151,25 @@ private struct MessageBubbleView: View {
                     .foregroundColor(.secondary)
             }
 
-            Text(message.text)
-                .padding(12)
-                .background(message.isOutgoing ? Color.blue.opacity(0.2) : Color.gray.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            if let imageURL = message.primaryImageURL {
+                AsyncImage(url: imageURL) { image in
+                    image
+                        .resizable()
+                        .scaledToFit()
+                } placeholder: {
+                    ProgressView()
+                        .frame(width: 180, height: 180)
+                }
+                .frame(maxWidth: 220, maxHeight: 260)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+            }
+
+            if !message.text.isEmpty || message.kind == .text {
+                Text(message.text)
+                    .padding(12)
+                    .background(message.isOutgoing ? Color.blue.opacity(0.2) : Color.gray.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
 
             HStack(spacing: 6) {
                 Text(message.createdAt, style: .time)

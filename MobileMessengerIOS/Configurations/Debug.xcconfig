@@ -1,6 +1,6 @@
-REST_BASE_URL = https://api.staging.example.com
+REST_BASE_URL = http://127.0.0.1:8080/api
 WEBSOCKET_URL = wss://ws.staging.example.com
 FEATURE_REALTIME = YES
 FEATURE_PUSH = YES
-FEATURE_MEDIA = NO
+FEATURE_MEDIA = YES
 FEATURE_VERBOSE_LOGGING = YES

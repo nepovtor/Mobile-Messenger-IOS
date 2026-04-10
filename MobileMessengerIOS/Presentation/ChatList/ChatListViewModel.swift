@@ -51,13 +51,16 @@ public final class ChatListViewModel: ObservableObject {
     }
     @Published public var isLoading = false
     @Published public var isShowingError = false
+    @Published public private(set) var isCreatingChat = false
 
     private let loadChats: LoadChatListUseCase
+    private let createChatUseCase: CreateChatUseCase
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
 
-    public init(loadChats: LoadChatListUseCase, analytics: AnalyticsService) {
+    public init(loadChats: LoadChatListUseCase, createChat: CreateChatUseCase, analytics: AnalyticsService) {
         self.loadChats = loadChats
+        self.createChatUseCase = createChat
         self.analytics = analytics
     }
 
@@ -85,6 +88,31 @@ public final class ChatListViewModel: ObservableObject {
             analytics.track(error: error, context: "chat_list_load")
         }
         isLoading = false
+    }
+
+    @discardableResult
+    public func createChat(title: String, participantContact: String) async -> ChatListItem? {
+        guard !isCreatingChat else { return nil }
+        isCreatingChat = true
+        defer { isCreatingChat = false }
+
+        do {
+            let chat = try await createChatUseCase(title: title, participantContact: participantContact)
+            let item = ChatListItem(
+                id: chat.id,
+                title: chat.title,
+                lastMessagePreview: chat.lastMessagePreview,
+                updatedAt: chat.lastActivity,
+                unreadCount: chat.unreadCount,
+                typingParticipants: chat.typingParticipants
+            )
+            chats.insert(item, at: 0)
+            return item
+        } catch {
+            isShowingError = true
+            analytics.track(error: error, context: "chat_create")
+            return nil
+        }
     }
 
     private func scheduleSearch() {

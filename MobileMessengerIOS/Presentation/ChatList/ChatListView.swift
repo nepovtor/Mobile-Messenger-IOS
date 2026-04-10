@@ -3,8 +3,15 @@ import SwiftUI
 struct ChatListView: View {
     @StateObject private var viewModel: ChatListViewModel
     @State private var isShowingCreateSheet = false
+    @State private var createdChat: ChatListItem?
 
-    init(container: AppContainer = .shared) {
+    @MainActor
+    init() {
+        self.init(container: .shared)
+    }
+
+    @MainActor
+    init(container: AppContainer) {
         _viewModel = StateObject(wrappedValue: container.makeChatListViewModel())
     }
 
@@ -29,6 +36,9 @@ struct ChatListView: View {
             }
             .listStyle(.plain)
             .refreshable { await viewModel.refresh() }
+            .navigationDestination(item: $createdChat) { chat in
+                DialogueView(chatID: chat.id, title: chat.title)
+            }
             .navigationDestination(for: ChatListItem.self) { chat in
                 DialogueView(chatID: chat.id, title: chat.title)
             }
@@ -41,7 +51,15 @@ struct ChatListView: View {
                 }
             }
             .sheet(isPresented: $isShowingCreateSheet) {
-                CreateChatSheet(isPresented: $isShowingCreateSheet)
+                CreateChatSheet(
+                    isPresented: $isShowingCreateSheet,
+                    isSubmitting: viewModel.isCreatingChat
+                ) { title, contact in
+                    if let chat = await viewModel.createChat(title: title, participantContact: contact) {
+                        createdChat = chat
+                        isShowingCreateSheet = false
+                    }
+                }
             }
             .overlay(alignment: .top) {
                 if viewModel.isShowingError {
@@ -134,13 +152,21 @@ private struct BannerView: View {
 
 private struct CreateChatSheet: View {
     @Binding var isPresented: Bool
+    let isSubmitting: Bool
+    let onCreate: (String, String) async -> Void
     @State private var title: String = ""
+    @State private var participantContact: String = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Название") {
                     TextField("Название чата", text: $title)
+                }
+                Section("Контакт участника") {
+                    TextField("Телефон или email", text: $participantContact)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
             }
             .navigationTitle("Новый чат")
@@ -149,8 +175,16 @@ private struct CreateChatSheet: View {
                     Button("Отмена") { isPresented = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Создать") { isPresented = false }
-                        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Создать") {
+                        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let contact = participantContact.trimmingCharacters(in: .whitespacesAndNewlines)
+                        Task { await onCreate(title, contact) }
+                    }
+                    .disabled(
+                        isSubmitting ||
+                        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        participantContact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                 }
             }
         }

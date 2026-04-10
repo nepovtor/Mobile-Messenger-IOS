@@ -1,7 +1,8 @@
 import Foundation
 
+@MainActor
 public final class AppContainer: ObservableObject {
-    public nonisolated(unsafe) static let shared = AppContainer()
+    public static let shared = AppContainer()
 
     private let configService: ConfigService
     public let sessionStore: SessionStore
@@ -9,6 +10,7 @@ public final class AppContainer: ObservableObject {
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
     private let chatRepository: ChatRepository
+    private let chatService: ChatNetworking
 
     private let realtimeService: ChatRealtimeService
     private let chatStore: ChatLocalStore
@@ -26,10 +28,18 @@ public final class AppContainer: ObservableObject {
 
         // Initialize main-actor isolated components safely
         sessionStore = SessionStore(tokenStore: tokenStore)
-        
+        let tokenProvider: @Sendable () async -> String? = { [sessionStore] in
+            await MainActor.run { sessionStore.authToken }
+        }
+
         chatStore = SwiftDataChatStore()
+        chatService = RESTChatService(
+            baseURL: configService.restBaseURL,
+            authTokenProvider: tokenProvider
+        )
         realtimeService = DefaultChatRealtimeService(
-            baseURL: configService.websocketURL,
+            baseURL: configService.restBaseURL,
+            authTokenProvider: tokenProvider,
             analytics: analytics,
             reachability: reachability,
             featureFlags: configService.features
@@ -39,6 +49,7 @@ public final class AppContainer: ObservableObject {
 
         chatRepository = DefaultChatRepository(
             store: chatStore,
+            remote: chatService,
             realtime: realtimeService,
             analytics: analytics
         )
@@ -52,6 +63,8 @@ public final class AppContainer: ObservableObject {
             observeMessages: ObserveChatMessagesUseCase(repository: chatRepository),
             loadHistory: LoadChatHistoryUseCase(repository: chatRepository),
             sendMessage: SendMessageUseCase(repository: chatRepository),
+            sendImageMessage: SendImageMessageUseCase(repository: chatRepository),
+            setTyping: SetTypingUseCase(repository: chatRepository),
             retryPending: RetryPendingMessagesUseCase(repository: chatRepository),
             markStatus: MarkMessageStatusUseCase(repository: chatRepository),
             analytics: analytics,
@@ -63,6 +76,7 @@ public final class AppContainer: ObservableObject {
     public func makeChatListViewModel() -> ChatListViewModel {
         ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: chatRepository),
+            createChat: CreateChatUseCase(repository: chatRepository),
             analytics: analytics
         )
     }

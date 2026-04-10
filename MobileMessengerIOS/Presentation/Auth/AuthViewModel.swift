@@ -63,7 +63,7 @@ public final class AuthViewModel: ObservableObject {
 
         do {
             let response = try await authService.verifyCode(method: method, contact: sanitizedContact, code: sanitizedCode)
-            sessionStore.authenticate(with: response.token)
+            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

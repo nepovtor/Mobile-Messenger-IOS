@@ -5,7 +5,13 @@ struct AuthView: View {
     @StateObject private var viewModel: AuthViewModel
     let onAuthorized: () -> Void
 
-    init(container: AppContainer = .shared, onAuthorized: @escaping () -> Void) {
+    @MainActor
+    init(onAuthorized: @escaping () -> Void) {
+        self.init(container: .shared, onAuthorized: onAuthorized)
+    }
+
+    @MainActor
+    init(container: AppContainer, onAuthorized: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: container.makeAuthViewModel())
         self.onAuthorized = onAuthorized
     }

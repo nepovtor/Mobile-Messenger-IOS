@@ -9,36 +9,64 @@ public final class SessionStore: ObservableObject {
     }
 
     public enum Constants {
-        public static let currentUserID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
-        public static let currentUserDisplayName = "Вы"
+        public static let defaultUserID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        public static let defaultUserDisplayName = "Вы"
+        public static var currentUserID = defaultUserID
+        public static var currentUserDisplayName = defaultUserDisplayName
         static let tokenKey = "auth.token"
+        static let userIDKey = "auth.user_id"
+        static let displayNameKey = "auth.display_name"
     }
 
     @Published public private(set) var state: State
     private let tokenStore: TokenStore
+    private let defaults: UserDefaults
 
-    public init(tokenStore: TokenStore) {
-        if let token = tokenStore.retrieveToken() {
-            state = .authenticated(token: token, userID: Constants.currentUserID, displayName: Constants.currentUserDisplayName)
+    public init(tokenStore: TokenStore, defaults: UserDefaults = .standard) {
+        self.tokenStore = tokenStore
+        self.defaults = defaults
+
+        if let token = tokenStore.retrieveToken(),
+           let storedUserID = defaults.string(forKey: Constants.userIDKey),
+           let userID = UUID(uuidString: storedUserID),
+           let displayName = defaults.string(forKey: Constants.displayNameKey) {
+            state = .authenticated(token: token, userID: userID, displayName: displayName)
+            updateCurrentUser(userID: userID, displayName: displayName)
         } else {
             state = .unauthenticated
+            resetCurrentUser()
         }
-        self.tokenStore = tokenStore
     }
 
-    public func authenticate(with token: String) {
+    public func authenticate(with token: String, userID: UUID, displayName: String) {
         tokenStore.store(token: token)
-        state = .authenticated(token: token, userID: Constants.currentUserID, displayName: Constants.currentUserDisplayName)
+        defaults.set(userID.uuidString, forKey: Constants.userIDKey)
+        defaults.set(displayName, forKey: Constants.displayNameKey)
+        updateCurrentUser(userID: userID, displayName: displayName)
+        state = .authenticated(token: token, userID: userID, displayName: displayName)
     }
 
     public func logout() {
         tokenStore.clear()
+        defaults.removeObject(forKey: Constants.userIDKey)
+        defaults.removeObject(forKey: Constants.displayNameKey)
+        resetCurrentUser()
         state = .unauthenticated
     }
 
     public var authToken: String? {
         if case .authenticated(let token, _, _) = state { return token }
         return nil
+    }
+
+    private func updateCurrentUser(userID: UUID, displayName: String) {
+        Constants.currentUserID = userID
+        Constants.currentUserDisplayName = displayName
+    }
+
+    private func resetCurrentUser() {
+        Constants.currentUserID = Constants.defaultUserID
+        Constants.currentUserDisplayName = Constants.defaultUserDisplayName
     }
 }
 
