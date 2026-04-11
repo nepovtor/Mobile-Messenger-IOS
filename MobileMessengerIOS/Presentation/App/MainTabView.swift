@@ -19,5 +19,8 @@ struct MainTabView: View {
                     Label("Профиль", systemImage: "person.crop.circle")
                 }
         }
+        .task {
+            await PushNotificationManager.shared.registerForNotifications()
+        }
     }
 }

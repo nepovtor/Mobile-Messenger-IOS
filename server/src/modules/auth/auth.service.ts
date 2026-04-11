@@ -6,13 +6,42 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { UserEntity } from "../../entities/user.entity";
+import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { buildDisplayName, normalizeContact } from "../common/contact.utils";
+import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
 
+type AuthResult = {
+  token: string;
+  userID: string;
+  displayName: string;
+};
+
+type DemoAccount = {
+  method: AuthMethod;
+  contact: string;
+  displayName: string;
+  password: string;
+};
+
 @Injectable()
 export class AuthService {
+  private readonly demoAccounts: DemoAccount[] = [
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230011",
+      displayName: "Анна Demo",
+      password: "demo1111",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230012",
+      displayName: "Борис Demo",
+      password: "demo2222",
+    },
+  ];
+
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
@@ -31,42 +60,37 @@ export class AuthService {
   }> {
     const normalizedContact = normalizeContact(dto.method, dto.contact);
     const expectedCode = process.env.AUTH_TEST_CODE || "1111";
+    const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
 
     if (dto.code !== expectedCode) {
       throw new UnauthorizedException("Invalid verification code");
     }
 
-    let user = await this.usersRepository.findOne({
-      where: { method: dto.method, contact: normalizedContact },
-    });
-
-    if (!user) {
-      user = this.usersRepository.create({
-        method: dto.method,
-        contact: normalizedContact,
-        displayName: buildDisplayName(dto.method, normalizedContact),
-      });
-      user = await this.usersRepository.save(user);
-    }
-
-    const token = await this.jwtService.signAsync(
-      {
-        sub: user.id,
-        displayName: user.displayName,
-        contact: user.contact,
-        method: user.method,
-      },
-      {
-        secret: process.env.JWT_SECRET || "dev-secret",
-        expiresIn: "30d",
-      },
+    const user = await this.findOrCreateUser(
+      dto.method,
+      normalizedContact,
+      demoAccount?.displayName,
     );
 
-    return {
-      token,
-      userID: user.id,
-      displayName: user.displayName,
-    };
+    return this.buildAuthResult(user);
+  }
+
+  async login(dto: LoginAuthDto): Promise<AuthResult> {
+    const normalizedContact = normalizeContact(dto.method, dto.contact);
+    const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
+    const password = dto.password.trim();
+
+    if (!demoAccount || password !== demoAccount.password) {
+      throw new UnauthorizedException("Invalid demo credentials");
+    }
+
+    const user = await this.findOrCreateUser(
+      dto.method,
+      normalizedContact,
+      demoAccount.displayName,
+    );
+
+    return this.buildAuthResult(user);
   }
 
   async getMe(userID: string): Promise<{
@@ -87,6 +111,66 @@ export class AuthService {
       displayName: user.displayName,
       contact: user.contact,
       method: user.method,
+    };
+  }
+
+  private findDemoAccount(
+    method: AuthMethod,
+    contact: string,
+  ): DemoAccount | undefined {
+    return this.demoAccounts.find(
+      (account) => account.method === method && account.contact === contact,
+    );
+  }
+
+  private async findOrCreateUser(
+    method: AuthMethod,
+    contact: string,
+    preferredDisplayName?: string,
+  ): Promise<UserEntity> {
+    let user = await this.usersRepository.findOne({
+      where: { method, contact },
+    });
+
+    const displayName =
+      preferredDisplayName ?? buildDisplayName(method, contact);
+
+    if (!user) {
+      user = this.usersRepository.create({
+        method,
+        contact,
+        displayName,
+      });
+
+      return this.usersRepository.save(user);
+    }
+
+    if (preferredDisplayName && user.displayName !== preferredDisplayName) {
+      user.displayName = preferredDisplayName;
+      return this.usersRepository.save(user);
+    }
+
+    return user;
+  }
+
+  private async buildAuthResult(user: UserEntity): Promise<AuthResult> {
+    const token = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+        displayName: user.displayName,
+        contact: user.contact,
+        method: user.method,
+      },
+      {
+        secret: process.env.JWT_SECRET || "dev-secret",
+        expiresIn: "30d",
+      },
+    );
+
+    return {
+      token,
+      userID: user.id,
+      displayName: user.displayName,
     };
   }
 }

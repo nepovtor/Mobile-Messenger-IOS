@@ -1,5 +1,6 @@
-REST_BASE_URL = http://127.0.0.1:8080/api
-WEBSOCKET_URL = wss://ws.staging.example.com
+SLASH = /
+REST_BASE_URL = http:$(SLASH)$(SLASH)127.0.0.1:8080/api
+WEBSOCKET_URL = wss:$(SLASH)$(SLASH)ws.staging.example.com
 FEATURE_REALTIME = YES
 FEATURE_PUSH = YES
 FEATURE_MEDIA = YES

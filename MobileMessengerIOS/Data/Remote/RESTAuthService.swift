@@ -3,6 +3,7 @@ import Foundation
 public protocol AuthNetworking: Sendable {
     func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse?
     func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse
+    func signIn(method: AuthMethod, contact: String, password: String) async throws -> AuthVerifyResponse
 }
 
 public struct RESTAuthService: AuthNetworking {
@@ -29,6 +30,14 @@ public struct RESTAuthService: AuthNetworking {
         ])
     }
 
+    public func signIn(method: AuthMethod, contact: String, password: String) async throws -> AuthVerifyResponse {
+        try await sendRequest(endpoint: "/auth/login", payload: [
+            "method": method.rawValue,
+            "contact": contact,
+            "password": password
+        ])
+    }
+
     private func sendRequest<Response: Decodable>(endpoint: String, payload: [String: String]) async throws -> Response {
         var request = URLRequest(url: baseURL.appendingPathComponent(endpoint))
         request.httpMethod = "POST"
@@ -43,21 +52,80 @@ public struct RESTAuthService: AuthNetworking {
             do {
                 let (data, response) = try await session.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
-                    throw AppError.network(description: "Некорректный ответ сервера")
+                    throw RequestError(description: "Некорректный ответ сервера", isRetryable: true)
                 }
                 guard 200..<300 ~= httpResponse.statusCode else {
-                    throw AppError.network(description: "Ошибка сервера \(httpResponse.statusCode)")
+                    throw RequestError(
+                        description: makeErrorDescription(from: data, statusCode: httpResponse.statusCode),
+                        isRetryable: httpResponse.statusCode >= 500
+                    )
                 }
                 return try JSONDecoder().decode(Response.self, from: data)
             } catch {
                 lastError = error
+                if !shouldRetry(after: error) {
+                    break
+                }
                 attempt += 1
+                guard attempt < maxAttempts else { break }
                 let delay = pow(2.0, Double(attempt))
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         } while attempt < maxAttempts
 
         throw lastError ?? AppError.unknown
+    }
+
+    private func shouldRetry(after error: Error) -> Bool {
+        if let requestError = error as? RequestError {
+            return requestError.isRetryable
+        }
+
+        guard let urlError = error as? URLError else {
+            return false
+        }
+
+        switch urlError.code {
+        case .timedOut,
+             .cannotFindHost,
+             .cannotConnectToHost,
+             .networkConnectionLost,
+             .dnsLookupFailed,
+             .notConnectedToInternet,
+             .resourceUnavailable:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func makeErrorDescription(from data: Data, statusCode: Int) -> String {
+        if let payload = try? JSONDecoder().decode(ServerErrorPayload.self, from: data),
+           let message = payload.message,
+           !message.isEmpty {
+            return message
+        }
+
+        if let rawMessage = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawMessage.isEmpty {
+            return rawMessage
+        }
+
+        return "Ошибка сервера \(statusCode)"
+    }
+}
+
+private struct ServerErrorPayload: Decodable {
+    let message: String?
+}
+
+private struct RequestError: LocalizedError {
+    let description: String
+    let isRetryable: Bool
+
+    var errorDescription: String? {
+        description
     }
 }
 

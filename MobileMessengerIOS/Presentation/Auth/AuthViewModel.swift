@@ -1,10 +1,51 @@
 import Foundation
 
+public enum AuthScreenMode: String, CaseIterable, Sendable {
+    case signIn
+    case signUp
+
+    public var title: String {
+        switch self {
+        case .signIn:
+            return "Sign In"
+        case .signUp:
+            return "Sign Up"
+        }
+    }
+}
+
+public enum AuthCredentialMode: String, CaseIterable, Sendable {
+    case password
+    case code
+
+    public var title: String {
+        rawValue.capitalized
+    }
+}
+
+public struct AuthDemoAccount: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let contact: String
+    public let password: String
+
+    public init(displayName: String, contact: String, password: String) {
+        self.id = contact
+        self.displayName = displayName
+        self.contact = contact
+        self.password = password
+    }
+}
+
 @MainActor
 public final class AuthViewModel: ObservableObject {
+    @Published public var screenMode: AuthScreenMode = .signIn
+    @Published public var credentialMode: AuthCredentialMode = .password
     @Published public var method: AuthMethod = .phone
     @Published public var contact: String = ""
+    @Published public var password: String = ""
     @Published public var code: String = ""
+    @Published public var isSigningInWithPassword: Bool = false
     @Published public var isRequestingCode: Bool = false
     @Published public var isVerifyingCode: Bool = false
     @Published public var errorMessage: String?
@@ -13,6 +54,10 @@ public final class AuthViewModel: ObservableObject {
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
+    public let demoAccounts: [AuthDemoAccount] = [
+        AuthDemoAccount(displayName: "Анна Demo", contact: "+15551230011", password: "demo1111"),
+        AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222")
+    ]
 
     public init(authService: AuthNetworking, sessionStore: SessionStore) {
         self.authService = authService
@@ -32,6 +77,38 @@ public final class AuthViewModel: ObservableObject {
 
     public var isCodeValid: Bool {
         code.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
+    }
+
+    public var isPasswordValid: Bool {
+        password.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
+    }
+
+    public var isPasswordFlow: Bool {
+        screenMode == .signIn && credentialMode == .password
+    }
+
+    public var isCodeFlow: Bool {
+        !isPasswordFlow
+    }
+
+    public func setScreenMode(_ mode: AuthScreenMode) {
+        guard screenMode != mode else { return }
+        screenMode = mode
+        if mode == .signUp {
+            credentialMode = .code
+        } else {
+            credentialMode = .password
+        }
+        clearTransientState(keepContact: true)
+        if mode == .signUp {
+            password = ""
+        }
+    }
+
+    public func setCredentialMode(_ mode: AuthCredentialMode) {
+        guard screenMode == .signIn, credentialMode != mode else { return }
+        credentialMode = mode
+        clearTransientState(keepContact: true)
     }
 
     public func requestCode() async {
@@ -69,14 +146,49 @@ public final class AuthViewModel: ObservableObject {
         }
     }
 
-    public func reset() {
-        contact = ""
-        code = ""
+    public func signInWithPassword() async {
+        guard !isSigningInWithPassword else { return }
         errorMessage = nil
-        isCodeSent = false
-        isRequestingCode = false
-        isVerifyingCode = false
-        codeExpirationSeconds = nil
+        isSigningInWithPassword = true
+        defer { isSigningInWithPassword = false }
+
+        let sanitizedContact = sanitize(contact: contact)
+        let sanitizedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        do {
+            let response = try await authService.signIn(
+                method: method,
+                contact: sanitizedContact,
+                password: sanitizedPassword
+            )
+            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    public func selectDemoAccount(_ account: AuthDemoAccount) {
+        method = .phone
+        screenMode = .signIn
+        credentialMode = .password
+        contact = account.contact
+        password = account.password
+        clearTransientState(keepContact: true)
+    }
+
+    public func signInDemoAccount(_ account: AuthDemoAccount) async {
+        selectDemoAccount(account)
+        await signInWithPassword()
+    }
+
+    public func reset() {
+        screenMode = .signIn
+        credentialMode = .password
+        method = .phone
+        contact = ""
+        password = ""
+        code = ""
+        clearTransientState(keepContact: true)
     }
 
     private func sanitize(contact: String) -> String {
@@ -88,5 +200,18 @@ public final class AuthViewModel: ObservableObject {
         case .email:
             return trimmed.lowercased()
         }
+    }
+
+    private func clearTransientState(keepContact: Bool) {
+        if !keepContact {
+            contact = ""
+        }
+        code = ""
+        errorMessage = nil
+        isCodeSent = false
+        isSigningInWithPassword = false
+        isRequestingCode = false
+        isVerifyingCode = false
+        codeExpirationSeconds = nil
     }
 }

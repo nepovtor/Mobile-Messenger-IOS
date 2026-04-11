@@ -7,7 +7,6 @@ struct MobileMessengerIOSApp: App {
 
     init() {
         configureAppearance()
-        Task { await PushNotificationManager.shared.registerForNotifications() }
     }
 
     var body: some Scene {

@@ -3,6 +3,7 @@ import { CurrentUser } from "./decorators/current-user.decorator";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
+import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
 
@@ -18,6 +19,11 @@ export class AuthController {
   @Post("verify")
   verifyCode(@Body() dto: VerifyAuthDto) {
     return this.authService.verifyCode(dto);
+  }
+
+  @Post("login")
+  login(@Body() dto: LoginAuthDto) {
+    return this.authService.login(dto);
   }
 
   @Get("me")
