@@ -29,6 +29,8 @@ export interface ChatSummary {
   lastActivity: Date;
   unreadCount: number;
   typingParticipants: string[];
+  participantNames: string[];
+  participantCount: number;
 }
 
 export interface MessageResponse {
@@ -76,10 +78,6 @@ export class ChatService {
       user.sub,
       ...otherUsers.map((item) => item.id),
     ]);
-
-    if (participantIDs.size < 2) {
-      throw new BadRequestException("A chat must include at least two users");
-    }
 
     const chat = await this.chatsRepository.save(
       this.chatsRepository.create({
@@ -405,6 +403,10 @@ export class ChatService {
     participant: ChatParticipantEntity,
     userID: string,
   ): Promise<ChatSummary> {
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chat.id },
+      relations: { user: true },
+    });
     const unreadQuery = this.messagesRepository
       .createQueryBuilder("message")
       .where("message.chat_id = :chatID", { chatID: chat.id })
@@ -427,6 +429,10 @@ export class ChatService {
         chat.id,
         userID,
       ),
+      participantNames: participants
+        .filter((item) => item.userId !== userID)
+        .map((item) => item.user.displayName),
+      participantCount: participants.length,
     };
   }
 

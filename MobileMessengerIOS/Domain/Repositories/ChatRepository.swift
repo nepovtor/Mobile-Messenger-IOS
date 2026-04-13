@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol ChatRepository {
-    func createChat(title: String, participantContact: String) async throws -> Chat
+    func createChat(title: String, participantContacts: [String]) async throws -> Chat
     func listChats(searchQuery: String?) async throws -> [Chat]
     func observeMessages(for chatID: UUID) -> AsyncStream<Message>
     func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message]

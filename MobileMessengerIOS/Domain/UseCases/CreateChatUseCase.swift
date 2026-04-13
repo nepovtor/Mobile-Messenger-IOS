@@ -7,7 +7,7 @@ public struct CreateChatUseCase {
         self.repository = repository
     }
 
-    public func callAsFunction(title: String, participantContact: String) async throws -> Chat {
-        try await repository.createChat(title: title, participantContact: participantContact)
+    public func callAsFunction(title: String, participantContacts: [String] = []) async throws -> Chat {
+        try await repository.createChat(title: title, participantContacts: participantContacts)
     }
 }

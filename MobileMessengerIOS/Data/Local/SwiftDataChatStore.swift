@@ -125,9 +125,9 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
                 title: title,
                 lastMessagePreview: lastMessage?.text,
                 lastActivity: lastMessage?.createdAt ?? lastUpdated,
-                unreadCount: unreadCount
+                unreadCount: unreadCount,
+                participantCount: 1
             )
         }
     }
 }
-

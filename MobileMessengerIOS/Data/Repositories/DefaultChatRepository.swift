@@ -18,8 +18,8 @@ public final class DefaultChatRepository: ChatRepository {
         self.analytics = analytics
     }
 
-    public func createChat(title: String, participantContact: String) async throws -> Chat {
-        try await remote.createChat(title: title, participantContact: participantContact).asDomainChat()
+    public func createChat(title: String, participantContacts: [String]) async throws -> Chat {
+        try await remote.createChat(title: title, participantContacts: participantContacts).asDomainChat()
     }
 
     public func listChats(searchQuery: String?) async throws -> [Chat] {
@@ -142,7 +142,9 @@ private extension ServerChat {
             lastMessagePreview: lastMessagePreview,
             lastActivity: lastActivity,
             unreadCount: unreadCount,
-            typingParticipants: typingParticipants
+            typingParticipants: typingParticipants,
+            participantNames: participantNames,
+            participantCount: participantCount
         )
     }
 }

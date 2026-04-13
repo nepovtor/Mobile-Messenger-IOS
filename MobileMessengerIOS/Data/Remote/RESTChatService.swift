@@ -7,6 +7,8 @@ public struct ServerChat: Codable, Sendable {
     public let lastActivity: Date
     public let unreadCount: Int
     public let typingParticipants: [String]
+    public let participantNames: [String]
+    public let participantCount: Int
 }
 
 public struct ServerMessage: Codable, Sendable {
@@ -62,7 +64,7 @@ public struct MediaUploadTarget: Codable, Sendable {
 
 public protocol ChatNetworking: Sendable {
     func listChats(searchQuery: String?) async throws -> [ServerChat]
-    func createChat(title: String, participantContact: String) async throws -> ServerChat
+    func createChat(title: String, participantContacts: [String]) async throws -> ServerChat
     func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage]
     func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage
     func markRead(chatID: UUID, messageID: UUID) async throws
@@ -100,14 +102,17 @@ public struct RESTChatService: ChatNetworking {
         guard let url = components?.url else {
             throw AppError.network(description: "Некорректный URL списка чатов")
         }
-        return try await perform(request: authorizedRequest(url: url))
+        return try await perform(request: authenticatedRequest(url: url))
     }
 
-    public func createChat(title: String, participantContact: String) async throws -> ServerChat {
+    public func createChat(title: String, participantContacts: [String]) async throws -> ServerChat {
         var request = try await authorizedRequest(path: "chats", method: "POST")
+        let normalizedContacts = participantContacts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         request.httpBody = try encode([
             "title": title,
-            "participantContacts": [participantContact]
+            "participantContacts": normalizedContacts.isEmpty ? nil : normalizedContacts
         ])
         return try await perform(request: request)
     }
@@ -123,7 +128,7 @@ public struct RESTChatService: ChatNetworking {
         guard let url = components?.url else {
             throw AppError.network(description: "Некорректный URL истории сообщений")
         }
-        return try await perform(request: authorizedRequest(url: url))
+        return try await perform(request: authenticatedRequest(url: url))
     }
 
     public func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage {
@@ -199,6 +204,10 @@ public struct RESTChatService: ChatNetworking {
 
     private func authorizedRequest(path: String, method: String = "GET") async throws -> URLRequest {
         authorizedRequest(url: baseURL.appendingPathComponent(path), method: method, token: try await requireToken())
+    }
+
+    private func authenticatedRequest(url: URL, method: String = "GET") async throws -> URLRequest {
+        authorizedRequest(url: url, method: method, token: try await requireToken())
     }
 
     private func authorizedRequest(url: URL, method: String = "GET", token: String? = nil) -> URLRequest {
