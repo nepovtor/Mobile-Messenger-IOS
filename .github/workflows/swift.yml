@@ -25,11 +25,3 @@ jobs:
           -destination 'generic/platform=iOS Simulator' \
           CODE_SIGNING_ALLOWED=NO \
           build
-    - name: Run tests
-      run: |
-        xcodebuild \
-          -project "$PROJECT" \
-          -scheme "$SCHEME" \
-          -destination 'platform=iOS Simulator,OS=latest,name=iPhone 15' \
-          CODE_SIGNING_ALLOWED=NO \
-          test

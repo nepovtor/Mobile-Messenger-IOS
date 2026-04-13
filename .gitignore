@@ -1,7 +1,17 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Backend
 server/node_modules/
 server/dist/
 server/.env
-build/
-*.xcuserstate
-*.xcworkspace/xcuserdata/
-.DS_Store
+server/.env.*
+!server/.env.example
