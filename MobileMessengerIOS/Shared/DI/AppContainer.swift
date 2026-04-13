@@ -11,6 +11,7 @@ public final class AppContainer: ObservableObject {
     private let reachability: ReachabilityService
     private let chatRepository: ChatRepository
     private let chatService: ChatNetworking
+    private let contactsService: ContactsNetworking
 
     private let realtimeService: ChatRealtimeService
     private let chatStore: ChatLocalStore
@@ -34,6 +35,10 @@ public final class AppContainer: ObservableObject {
 
         chatStore = SwiftDataChatStore()
         chatService = RESTChatService(
+            baseURL: configService.restBaseURL,
+            authTokenProvider: tokenProvider
+        )
+        contactsService = RESTContactsService(
             baseURL: configService.restBaseURL,
             authTokenProvider: tokenProvider
         )
@@ -77,8 +82,23 @@ public final class AppContainer: ObservableObject {
         ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: chatRepository),
             createChat: CreateChatUseCase(repository: chatRepository),
+            contactsService: contactsService,
             analytics: analytics
         )
+    }
+
+    /// Creates and returns a new ContactsViewModel.
+    func makeContactsViewModel() -> ContactsViewModel {
+        ContactsViewModel(
+            contactsService: contactsService,
+            createChat: CreateChatUseCase(repository: chatRepository),
+            analytics: analytics
+        )
+    }
+
+    /// Creates and returns a new ProfileViewModel.
+    func makeProfileViewModel() -> ProfileViewModel {
+        ProfileViewModel(contactsService: contactsService)
     }
 
     /// Creates and returns a new AuthViewModel.

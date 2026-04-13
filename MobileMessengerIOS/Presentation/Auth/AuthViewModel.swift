@@ -56,7 +56,10 @@ public final class AuthViewModel: ObservableObject {
     let sessionStore: SessionStore
     public let demoAccounts: [AuthDemoAccount] = [
         AuthDemoAccount(displayName: "Анна Demo", contact: "+15551230011", password: "demo1111"),
-        AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222")
+        AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222"),
+        AuthDemoAccount(displayName: "Вера Demo", contact: "+15551230013", password: "demo3333"),
+        AuthDemoAccount(displayName: "Глеб Demo", contact: "+15551230014", password: "demo4444"),
+        AuthDemoAccount(displayName: "Даша Demo", contact: "+15551230015", password: "demo5555")
     ]
 
     public init(authService: AuthNetworking, sessionStore: SessionStore) {

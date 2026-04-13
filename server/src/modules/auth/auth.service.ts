@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -26,7 +27,7 @@ type DemoAccount = {
 };
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly demoAccounts: DemoAccount[] = [
     {
       method: AuthMethod.PHONE,
@@ -40,6 +41,24 @@ export class AuthService {
       displayName: "Борис Demo",
       password: "demo2222",
     },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230013",
+      displayName: "Вера Demo",
+      password: "demo3333",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230014",
+      displayName: "Глеб Demo",
+      password: "demo4444",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230015",
+      displayName: "Даша Demo",
+      password: "demo5555",
+    },
   ];
 
   constructor(
@@ -47,6 +66,16 @@ export class AuthService {
     private readonly usersRepository: Repository<UserEntity>,
     private readonly jwtService: JwtService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    for (const account of this.demoAccounts) {
+      await this.findOrCreateUser(
+        account.method,
+        account.contact,
+        account.displayName,
+      );
+    }
+  }
 
   async requestCode(dto: RequestAuthDto): Promise<{ expiresIn: number }> {
     normalizeContact(dto.method, dto.contact);
@@ -112,6 +141,61 @@ export class AuthService {
       contact: user.contact,
       method: user.method,
     };
+  }
+
+  async listContacts(userID: string): Promise<
+    Array<{
+      userID: string;
+      displayName: string;
+      contact: string;
+      method: AuthMethod;
+      isCurrentUser: boolean;
+    }>
+  > {
+    await this.getMe(userID);
+
+    const demoOrder = new Map(
+      this.demoAccounts.map((account, index) => [account.contact, index]),
+    );
+
+    const demoContacts = new Set(this.demoAccounts.map((account) => account.contact));
+    const users = await this.usersRepository.find();
+
+    return users
+      .filter((user) => user.id === userID || demoContacts.has(user.contact))
+      .sort((left, right) => {
+        if (left.id === userID) {
+          return -1;
+        }
+        if (right.id === userID) {
+          return 1;
+        }
+
+        const leftOrder = demoOrder.get(left.contact);
+        const rightOrder = demoOrder.get(right.contact);
+        if (
+          leftOrder !== undefined &&
+          rightOrder !== undefined &&
+          leftOrder !== rightOrder
+        ) {
+          return leftOrder - rightOrder;
+        }
+        if (leftOrder !== undefined) {
+          return -1;
+        }
+        if (rightOrder !== undefined) {
+          return 1;
+        }
+
+        return left.displayName.localeCompare(right.displayName);
+      })
+      .map((user) => ({
+        userID: user.id,
+        displayName: user.displayName,
+        contact: user.contact,
+        method: user.method,
+        isCurrentUser: user.id === userID,
+      }));
   }
 
   private findDemoAccount(

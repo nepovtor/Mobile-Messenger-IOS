@@ -143,3 +143,56 @@ public struct AuthVerifyResponse: Codable {
     public let userID: UUID
     public let displayName: String
 }
+
+public protocol ContactsNetworking: Sendable {
+    func listContacts() async throws -> [ContactDTO]
+}
+
+public struct ContactDTO: Codable, Identifiable, Hashable, Sendable {
+    public let userID: UUID
+    public let displayName: String
+    public let contact: String
+    public let isCurrentUser: Bool
+
+    public var id: UUID { userID }
+}
+
+public struct RESTContactsService: ContactsNetworking {
+    private let baseURL: URL
+    private let session: URLSession
+    private let authTokenProvider: @Sendable () async -> String?
+
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        authTokenProvider: @escaping @Sendable () async -> String?
+    ) {
+        self.baseURL = baseURL
+        self.session = session
+        self.authTokenProvider = authTokenProvider
+    }
+
+    public func listContacts() async throws -> [ContactDTO] {
+        var request = URLRequest(url: baseURL.appendingPathComponent("auth/contacts"))
+        request.httpMethod = "GET"
+        if let token = await authTokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            throw AppError.unauthorized
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: "Некорректный ответ сервера")
+        }
+        if httpResponse.statusCode == 401 {
+            throw AppError.unauthorized
+        }
+        guard 200..<300 ~= httpResponse.statusCode else {
+            let message = String(data: data, encoding: .utf8) ?? "Ошибка сервера \(httpResponse.statusCode)"
+            throw AppError.network(description: message)
+        }
+
+        return try JSONDecoder().decode([ContactDTO].self, from: data)
+    }
+}
