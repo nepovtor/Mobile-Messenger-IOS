@@ -45,13 +45,13 @@
 		CA58DA842F815CAE000D87A4 /* MessageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA2B2F815CAE000D87A4 /* MessageAttachment.swift */; };
 		CA58DA852F815CAE000D87A4 /* RESTAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA242F815CAE000D87A4 /* RESTAuthService.swift */; };
 		CA58DA862F815CAE000D87A4 /* ChatRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA212F815CAE000D87A4 /* ChatRealtimeService.swift */; };
+		CA58DA872F815CAE000D87A4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA5E2F815CAE000D87A4 /* Assets.xcassets */; };
+		CA58DA882F815CAE000D87A4 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA4B2F815CAE000D87A4 /* Preview Assets.xcassets */; };
+		CA58DA8C2F815CAE000D87A4 /* Contents.json in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA4A2F815CAE000D87A4 /* Contents.json */; };
 		CA58DA8D2F815CAE000D87A4 /* RESTChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA912F815CAE000D87A4 /* RESTChatService.swift */; };
 		CA58DA8E2F815CAE000D87A4 /* CreateChatUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA922F815CAE000D87A4 /* CreateChatUseCase.swift */; };
 		CA58DA8F2F815CAE000D87A4 /* SendImageMessageUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */; };
 		CA58DA902F815CAE000D87A4 /* SetTypingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */; };
-		CA58DA872F815CAE000D87A4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA5E2F815CAE000D87A4 /* Assets.xcassets */; };
-		CA58DA882F815CAE000D87A4 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA4B2F815CAE000D87A4 /* Preview Assets.xcassets */; };
-		CA58DA8C2F815CAE000D87A4 /* Contents.json in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA4A2F815CAE000D87A4 /* Contents.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -544,6 +544,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_ASSET_PATHS = "MobileMessengerIOS/Preview\\ Content";
+				DEVELOPMENT_TEAM = TUNYHP729L;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -612,6 +613,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_ASSET_PATHS = "MobileMessengerIOS/Preview\\ Content";
+				DEVELOPMENT_TEAM = TUNYHP729L;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
