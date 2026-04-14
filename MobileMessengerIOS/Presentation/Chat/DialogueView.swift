@@ -2,6 +2,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+@MainActor
 struct DialogueView: View {
     let chat: ChatListItem
 
