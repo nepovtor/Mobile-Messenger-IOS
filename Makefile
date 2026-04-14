@@ -1,10 +1,7 @@
-cat > Makefile <<'EOF'
 SHELL := /bin/bash
 
 PROJECT_DIR := $(CURDIR)
 SERVER_DIR := $(PROJECT_DIR)/server
-IOS_CONFIG := $(PROJECT_DIR)/MobileMessengerIOS/Shared/Config/AppConfig.swift
-IOS_PLIST := $(PROJECT_DIR)/MobileMessengerIOS/Info.plist
 BUILD_DIR := $(PROJECT_DIR)/build-ios
 
 DEVICE_NAME := iPhone S
@@ -138,4 +135,3 @@ status:
 
 clean:
 	@rm -rf "$(BUILD_DIR)" "$(TUNNEL_LOG)" "$(TUNNEL_URL_FILE)" "$(SERVER_PID_FILE)" "$(TUNNEL_PID_FILE)" "$(PROJECT_DIR)/.server.log"
-EOF
