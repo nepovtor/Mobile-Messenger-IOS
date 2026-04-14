@@ -93,7 +93,7 @@ struct DialogueView: View {
                     Circle()
                         .fill(Color.white.opacity(0.86))
 
-                    if isSendingMedia {
+                    if viewModel.isSendingMedia {
                         ProgressView()
                             .progressViewStyle(.circular)
                     } else {
@@ -105,7 +105,7 @@ struct DialogueView: View {
                 .frame(width: 42, height: 42)
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
             }
-            .disabled(isSendingMedia)
+            .disabled(viewModel.isSendingMedia)
 
             HStack(alignment: .bottom, spacing: 10) {
                 ZStack(alignment: .topLeading) {
@@ -148,11 +148,11 @@ struct DialogueView: View {
                 }
                 .disabled(
                     viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    isSendingMedia
+                    viewModel.isSendingMedia
                 )
                 .opacity(
                     viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    isSendingMedia ? 0.55 : 1
+                    viewModel.isSendingMedia ? 0.55 : 1
                 )
             }
             .padding(.leading, 14)
