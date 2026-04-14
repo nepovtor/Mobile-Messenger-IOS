@@ -21,6 +21,7 @@ struct DialogueView: View {
     }
 
     var body: some View {
+        let isSendingMedia = isSendingMedia
         ZStack {
             ChatWallpaper()
 
@@ -92,7 +93,7 @@ struct DialogueView: View {
                     Circle()
                         .fill(Color.white.opacity(0.86))
 
-                    if viewModel.isSendingMedia {
+                    if isSendingMedia {
                         ProgressView()
                             .progressViewStyle(.circular)
                     } else {
@@ -104,7 +105,7 @@ struct DialogueView: View {
                 .frame(width: 42, height: 42)
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
             }
-            .disabled(viewModel.isSendingMedia)
+            .disabled(isSendingMedia)
 
             HStack(alignment: .bottom, spacing: 10) {
                 ZStack(alignment: .topLeading) {
@@ -147,11 +148,11 @@ struct DialogueView: View {
                 }
                 .disabled(
                     viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.isSendingMedia
+                    isSendingMedia
                 )
                 .opacity(
                     viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.isSendingMedia ? 0.55 : 1
+                    isSendingMedia ? 0.55 : 1
                 )
             }
             .padding(.leading, 14)
@@ -231,6 +232,7 @@ private struct ChatHeaderView: View {
     let chat: ChatListItem
 
     var body: some View {
+        let isSendingMedia = isSendingMedia
         HStack(spacing: 10) {
             ZStack {
                 if chat.isGroup {
@@ -283,6 +285,7 @@ private struct MessageBubbleView: View {
     let isGroup: Bool
 
     var body: some View {
+        let isSendingMedia = isSendingMedia
         VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 6) {
             if isGroup && !message.isOutgoing {
                 Text(message.authorName)
@@ -360,6 +363,7 @@ private struct MessageAttachmentImageView: View {
     let attachment: MessageAttachment
 
     var body: some View {
+        let isSendingMedia = isSendingMedia
         Group {
             if let localPath = attachment.localPath,
                let localImage = UIImage(contentsOfFile: localPath.path) {
@@ -395,6 +399,7 @@ private struct MessageSkeletonBubble: View {
     let isOutgoing: Bool
 
     var body: some View {
+        let isSendingMedia = isSendingMedia
         HStack {
             if isOutgoing { Spacer(minLength: 54) }
 
@@ -420,6 +425,7 @@ private struct MessageSkeletonBubble: View {
 
 private struct ChatWallpaper: View {
     var body: some View {
+        let isSendingMedia = isSendingMedia
         ZStack {
             LinearGradient(
                 colors: [
