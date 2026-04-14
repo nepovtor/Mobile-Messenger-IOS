@@ -45,7 +45,11 @@ export class MediaEntity {
   @JoinColumn({ name: "uploaded_by_id" })
   uploadedBy!: UserEntity;
 
-  @Column({ type: "enum", enum: MediaStatus, default: MediaStatus.PENDING })
+  @Column({
+    type: "simple-enum",
+    enum: MediaStatus,
+    default: MediaStatus.PENDING,
+  })
   status!: MediaStatus;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })

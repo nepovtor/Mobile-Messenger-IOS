@@ -297,20 +297,8 @@ private struct MessageBubbleView: View {
                         .foregroundStyle(message.isOutgoing ? Color.white.opacity(0.85) : .secondary)
                 }
 
-                if let imageURL = message.primaryImageURL {
-                    AsyncImage(url: imageURL) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color.white.opacity(0.28))
-                            ProgressView()
-                        }
-                    }
-                    .frame(maxWidth: 240, maxHeight: 240)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                if let imageAttachment = message.attachments.first(where: { $0.kind == .image }) {
+                    MessageAttachmentImageView(attachment: imageAttachment)
                 }
 
                 if !message.text.isEmpty || message.kind == .text {
@@ -364,6 +352,41 @@ private struct MessageBubbleView: View {
 
     private var borderColor: Color {
         message.isOutgoing ? Color.white.opacity(0.16) : Color.white.opacity(0.55)
+    }
+}
+
+private struct MessageAttachmentImageView: View {
+    let attachment: MessageAttachment
+
+    var body: some View {
+        Group {
+            if let localPath = attachment.localPath,
+               let localImage = UIImage(contentsOfFile: localPath.path) {
+                Image(uiImage: localImage)
+                    .resizable()
+                    .scaledToFill()
+            } else if let imageURL = attachment.url {
+                AsyncImage(url: imageURL) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    placeholder
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(maxWidth: 240, maxHeight: 240)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.28))
+            ProgressView()
+        }
     }
 }
 

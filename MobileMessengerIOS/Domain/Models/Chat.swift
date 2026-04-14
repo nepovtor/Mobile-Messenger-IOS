@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Chat: Identifiable, Hashable, Sendable {
+public struct Chat: Identifiable, Hashable, Sendable, Codable {
     public let id: UUID
     public let title: String
     public let lastMessagePreview: String?

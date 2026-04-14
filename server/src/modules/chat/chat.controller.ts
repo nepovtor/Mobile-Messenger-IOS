@@ -31,8 +31,11 @@ export class ChatController {
   }
 
   @Get()
-  listChats(@CurrentUser() user: AuthenticatedUser) {
-    return this.chatService.listChats(user.sub);
+  listChats(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("search") search?: string,
+  ) {
+    return this.chatService.listChats(user.sub, search);
   }
 
   @Get(":chatID/messages")

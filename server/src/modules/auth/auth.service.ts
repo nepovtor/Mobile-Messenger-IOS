@@ -3,12 +3,19 @@ import {
   Injectable,
   OnModuleInit,
   UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { buildDisplayName, normalizeContact } from "../common/contact.utils";
+import {
+  areDemoAccountsEnabled,
+  getJwtSecret,
+  isPasswordLoginEnabled,
+  shouldExposeDebugAuthCode,
+} from "../common/runtime-config";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
@@ -28,6 +35,10 @@ type DemoAccount = {
 
 @Injectable()
 export class AuthService implements OnModuleInit {
+  private readonly verificationCodes = new Map<
+    string,
+    { code: string; expiresAt: number }
+  >();
   private readonly demoAccounts: DemoAccount[] = [
     {
       method: AuthMethod.PHONE,
@@ -68,6 +79,10 @@ export class AuthService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    if (!areDemoAccountsEnabled()) {
+      return;
+    }
+
     for (const account of this.demoAccounts) {
       await this.findOrCreateUser(
         account.method,
@@ -77,9 +92,26 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async requestCode(dto: RequestAuthDto): Promise<{ expiresIn: number }> {
-    normalizeContact(dto.method, dto.contact);
-    return { expiresIn: 300 };
+  async requestCode(dto: RequestAuthDto): Promise<{
+    expiresIn: number;
+    debugCode?: string;
+  }> {
+    const normalizedContact = normalizeContact(dto.method, dto.contact);
+    const expiresIn = 300;
+    const debugCode = this.generateVerificationCode();
+
+    this.verificationCodes.set(
+      this.makeVerificationKey(dto.method, normalizedContact),
+      {
+        code: debugCode,
+        expiresAt: Date.now() + expiresIn * 1000,
+      },
+    );
+
+    return {
+      expiresIn,
+      ...(shouldExposeDebugAuthCode() ? { debugCode } : {}),
+    };
   }
 
   async verifyCode(dto: VerifyAuthDto): Promise<{
@@ -88,12 +120,22 @@ export class AuthService implements OnModuleInit {
     displayName: string;
   }> {
     const normalizedContact = normalizeContact(dto.method, dto.contact);
-    const expectedCode = process.env.AUTH_TEST_CODE || "1111";
     const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
+    const verificationKey = this.makeVerificationKey(
+      dto.method,
+      normalizedContact,
+    );
+    const verificationCode = this.verificationCodes.get(verificationKey);
 
-    if (dto.code !== expectedCode) {
+    if (
+      !verificationCode ||
+      verificationCode.expiresAt < Date.now() ||
+      dto.code !== verificationCode.code
+    ) {
       throw new UnauthorizedException("Invalid verification code");
     }
+
+    this.verificationCodes.delete(verificationKey);
 
     const user = await this.findOrCreateUser(
       dto.method,
@@ -105,6 +147,10 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(dto: LoginAuthDto): Promise<AuthResult> {
+    if (!areDemoAccountsEnabled() || !isPasswordLoginEnabled()) {
+      throw new ForbiddenException("Password login is disabled");
+    }
+
     const normalizedContact = normalizeContact(dto.method, dto.contact);
     const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
     const password = dto.password.trim();
@@ -158,11 +204,18 @@ export class AuthService implements OnModuleInit {
       this.demoAccounts.map((account, index) => [account.contact, index]),
     );
 
-    const demoContacts = new Set(this.demoAccounts.map((account) => account.contact));
+    const demoContacts = new Set(
+      this.demoAccounts.map((account) => account.contact),
+    );
     const users = await this.usersRepository.find();
 
     return users
-      .filter((user) => user.id === userID || demoContacts.has(user.contact))
+      .filter(
+        (user) =>
+          user.id === userID ||
+          !areDemoAccountsEnabled() ||
+          demoContacts.has(user.contact),
+      )
       .sort((left, right) => {
         if (left.id === userID) {
           return -1;
@@ -246,7 +299,7 @@ export class AuthService implements OnModuleInit {
         method: user.method,
       },
       {
-        secret: process.env.JWT_SECRET || "dev-secret",
+        secret: getJwtSecret(),
         expiresIn: "30d",
       },
     );
@@ -256,5 +309,13 @@ export class AuthService implements OnModuleInit {
       userID: user.id,
       displayName: user.displayName,
     };
+  }
+
+  private generateVerificationCode(): string {
+    return String(Math.floor(1000 + Math.random() * 9000));
+  }
+
+  private makeVerificationKey(method: AuthMethod, contact: string): string {
+    return `${method}:${contact}`;
   }
 }

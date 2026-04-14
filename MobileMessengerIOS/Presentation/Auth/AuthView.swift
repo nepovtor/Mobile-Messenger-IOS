@@ -3,6 +3,8 @@ import Combine
 
 struct AuthView: View {
     @StateObject private var viewModel: AuthViewModel
+    private let container: AppContainer
+    @State private var serverURLDraft: String
     let onAuthorized: () -> Void
 
     @MainActor
@@ -13,6 +15,8 @@ struct AuthView: View {
     @MainActor
     init(container: AppContainer, onAuthorized: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: container.makeAuthViewModel())
+        _serverURLDraft = State(initialValue: container.restBaseURLString)
+        self.container = container
         self.onAuthorized = onAuthorized
     }
 
@@ -32,6 +36,7 @@ struct AuthView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     heroSection
                     authCard
+                    backendCard
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
@@ -124,6 +129,76 @@ struct AuthView: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.28), radius: 28, x: 0, y: 18)
+    }
+
+    private var backendCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                Image(systemName: "network")
+                    .font(.system(size: 20, weight: .semibold))
+                Text("Backend")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(.white)
+
+            Text("Simulator can use 127.0.0.1. A real iPhone must use your Mac Wi-Fi IP, and `/api` will be added automatically if needed.")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextField("http://127.0.0.1:8080/api", text: $serverURLDraft)
+                .keyboardType(.URL)
+                .textContentType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 17, weight: .medium, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .frame(height: 64)
+                .background(fieldBackground)
+
+            VStack(alignment: .leading, spacing: 8) {
+                statusLine(
+                    title: "Current",
+                    value: container.restBaseURLString
+                )
+                statusLine(
+                    title: "Default",
+                    value: container.defaultRESTBaseURLString
+                )
+            }
+
+            HStack(spacing: 12) {
+                compactActionButton(
+                    title: "Apply URL",
+                    systemImage: "checkmark.circle.fill",
+                    prominent: true,
+                    action: applyServerURL
+                )
+
+                compactActionButton(
+                    title: container.isUsingCustomRESTBaseURL ? "Use Default" : "Use Localhost",
+                    systemImage: "arrow.counterclockwise",
+                    prominent: false,
+                    action: resetServerURL
+                )
+            }
+
+            Text(container.isUsingCustomRESTBaseURL ? "Custom debug backend is active. The app resets the current session after switching servers." : "Default local debug backend is active.")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(Color(red: 0.01, green: 0.03, blue: 0.08).opacity(0.9))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 12)
     }
 
     private var contactField: some View {
@@ -256,6 +331,20 @@ struct AuthView: View {
         .foregroundStyle(.white)
     }
 
+    private func statusLine(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.45))
+
+            Text(value)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.92))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func primaryButton(
         title: String,
         systemImage: String,
@@ -286,6 +375,31 @@ struct AuthView: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
+    }
+
+    private func compactActionButton(
+        title: String,
+        systemImage: String,
+        prominent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(.white.opacity(prominent ? 1 : 0.82))
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(prominent ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func segment<Value: Hashable>(
@@ -339,6 +453,18 @@ struct AuthView: View {
                 onAuthorized()
             }
         }
+    }
+
+    private func applyServerURL() {
+        do {
+            try container.updateRESTBaseURL(serverURLDraft)
+        } catch {
+            viewModel.errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func resetServerURL() {
+        container.resetRESTBaseURL()
     }
 }
 

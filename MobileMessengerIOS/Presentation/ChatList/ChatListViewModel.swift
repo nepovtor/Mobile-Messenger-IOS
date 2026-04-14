@@ -123,6 +123,7 @@ public final class ChatListViewModel: ObservableObject {
         do {
             let chat = try await createChatUseCase(title: title, participantContacts: participantContacts)
             let item = Self.mapChat(chat)
+            chats.removeAll { $0.id == item.id }
             chats.insert(item, at: 0)
             return item
         } catch {

@@ -20,7 +20,7 @@ export class UserEntity {
   @PrimaryColumn("uuid")
   id = randomUUID();
 
-  @Column({ type: "enum", enum: AuthMethod })
+  @Column({ type: "simple-enum", enum: AuthMethod })
   method!: AuthMethod;
 
   @Column({ type: "varchar", unique: true })

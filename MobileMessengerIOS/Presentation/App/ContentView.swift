@@ -21,6 +21,7 @@ struct ContentView: View {
                 }
             }
         }
+        .id(container.configurationRevision)
         .environmentObject(sessionStore)
         .environmentObject(container)
     }

@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { isDatabaseSynchronizationEnabled } from "./common/runtime-config";
 import { AuthModule } from "./auth/auth.module";
 import { ChatModule } from "./chat/chat.module";
+import { DocsModule } from "./docs/docs.module";
 import { HealthModule } from "./health/health.module";
 import { MediaModule } from "./media/media.module";
 import { RealtimeModule } from "./realtime/realtime.module";
@@ -17,10 +19,11 @@ import { VersionModule } from "./version/version.module";
       password: process.env.DB_PASSWORD || "postgres",
       database: process.env.DB_NAME || "messenger",
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: isDatabaseSynchronizationEnabled(),
       retryAttempts: 5,
       retryDelay: 2000,
     }),
+    DocsModule,
     HealthModule,
     VersionModule,
     AuthModule,

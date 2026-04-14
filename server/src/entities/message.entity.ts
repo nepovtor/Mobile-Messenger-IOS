@@ -46,7 +46,7 @@ export class MessageEntity {
   @Column({ name: "client_message_id", type: "uuid" })
   clientMessageId!: string;
 
-  @Column({ type: "enum", enum: MessageKind, default: MessageKind.TEXT })
+  @Column({ type: "simple-enum", enum: MessageKind, default: MessageKind.TEXT })
   kind!: MessageKind;
 
   @Column({ type: "text", nullable: true })
@@ -62,7 +62,11 @@ export class MessageEntity {
   @JoinColumn({ name: "media_id" })
   media!: MediaEntity | null;
 
-  @Column({ type: "enum", enum: MessageStatus, default: MessageStatus.SENT })
+  @Column({
+    type: "simple-enum",
+    enum: MessageStatus,
+    default: MessageStatus.SENT,
+  })
   status!: MessageStatus;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })

@@ -5,7 +5,7 @@
 - `MobileMessengerIOS/` и `MobileMessengerIOS.xcodeproj/` — iOS-клиент на SwiftUI.
 - `server/` — локальный backend на NestJS + PostgreSQL + MinIO.
 
-В репозитории сейчас нет Tailwind, web-фронтенда, CocoaPods и iOS test target. README ниже описывает только то, что реально существует и запускается.
+В репозитории сейчас нет Tailwind, web-фронтенда и CocoaPods. README ниже описывает только то, что реально существует и запускается.
 
 ## Структура
 
@@ -89,17 +89,43 @@ xcodebuild \
 
 ## Демо-авторизация
 
-Локальный backend автоматически подготавливает демо-аккаунты:
+Локальный backend в development-режиме автоматически подготавливает демо-аккаунты:
 
 - `+15551230011` / `demo1111` — Анна Demo
 - `+15551230012` / `demo2222` — Борис Demo
 
-Для входа по коду подтверждения:
+Для входа по коду подтверждения backend теперь генерирует одноразовый debug-код и, если в `.env` включен `AUTH_EXPOSE_DEBUG_CODE=true`, возвращает его в ответе `POST /api/auth/request`.
 
-- код: `1111`
+Безопасные флаги окружения для backend:
+
+- `JWT_SECRET` обязателен и больше не имеет fail-open fallback.
+- `DB_SYNCHRONIZE` управляет авто-синхронизацией схемы и по умолчанию предназначен только для локальной разработки.
+- `AUTH_ENABLE_DEMO_ACCOUNTS`, `AUTH_ALLOW_PASSWORD_LOGIN`, `AUTH_EXPOSE_DEBUG_CODE` позволяют держать демо-поведение только в local/dev.
+- `CORS_ORIGINS` ограничивает список разрешенных браузерных origin вместо полностью открытого CORS.
+
+## Тесты
+
+iOS unit-тесты:
+
+```bash
+xcodebuild \
+  -project MobileMessengerIOS.xcodeproj \
+  -scheme MobileMessengerIOS \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  CODE_SIGNING_ALLOWED=NO \
+  test
+```
+
+Backend e2e:
+
+```bash
+cd server
+npm install
+npm test
+```
 
 ## GitHub / CI
 
 - В git должны храниться только исходники и нужные проектные файлы.
 - Пользовательские Xcode-артефакты, `.DS_Store`, локальные `.env`, `build/`, `server/dist/` и `server/node_modules/` игнорируются.
-- GitHub Actions сейчас проверяет реальную вещь: сборку iOS-приложения. Отдельного test target в проекте пока нет.
+- GitHub Actions теперь запускает iOS unit-тесты и backend pipeline: `lint` + `e2e` + `build`.

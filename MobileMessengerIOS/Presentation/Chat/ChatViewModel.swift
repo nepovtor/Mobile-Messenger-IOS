@@ -35,9 +35,12 @@ public final class ChatViewModel: ObservableObject {
     private let markStatus: MarkMessageStatusUseCase
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
+    private let reachability: ReachabilityService
 
     private var observeTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
+    private var reachabilityTask: Task<Void, Never>?
+    private var isReachable = true
     init(
         chatID: UUID,
         title: String,
@@ -49,7 +52,8 @@ public final class ChatViewModel: ObservableObject {
         retryPending: RetryPendingMessagesUseCase,
         markStatus: MarkMessageStatusUseCase,
         analytics: AnalyticsService,
-        notificationManager: PushNotificationManager
+        notificationManager: PushNotificationManager,
+        reachability: ReachabilityService
     ) {
         self.chatID = chatID
         self.title = title
@@ -62,17 +66,22 @@ public final class ChatViewModel: ObservableObject {
         self.markStatus = markStatus
         self.analytics = analytics
         self.notificationManager = notificationManager
+        self.reachability = reachability
     }
 
     deinit {
         observeTask?.cancel()
         typingTask?.cancel()
+        reachabilityTask?.cancel()
     }
 
     public func onAppear() {
         guard observeTask == nil else { return }
         observeTask = Task { [weak self] in
             await self?.bindMessages()
+        }
+        reachabilityTask = Task { [weak self] in
+            await self?.observeReachability()
         }
         Task { await loadInitialHistory() }
     }
@@ -81,6 +90,8 @@ public final class ChatViewModel: ObservableObject {
         observeTask?.cancel()
         observeTask = nil
         typingTask?.cancel()
+        reachabilityTask?.cancel()
+        reachabilityTask = nil
         Task { await setTypingUseCase(chatID: chatID, isTyping: false) }
     }
 
@@ -94,7 +105,7 @@ public final class ChatViewModel: ObservableObject {
             do {
                 let message = try await sendMessageUseCase(chatID: chatID, text: trimmed, localID: UUID())
                 upsert(message: message)
-                analytics.track(event: AppAnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
+                updateBannerState()
             } catch {
                 banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
                 analytics.track(error: error, context: "send_message")
@@ -103,6 +114,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     public func retryFailedMessages() {
+        banner = isReachable ? nil : .offline
         Task { await retryPending(chatID: chatID) }
     }
 
@@ -134,6 +146,7 @@ public final class ChatViewModel: ObservableObject {
                     localID: UUID()
                 )
                 upsert(message: message)
+                updateBannerState()
             } catch {
                 banner = .error("Не удалось отправить фото")
                 analytics.track(error: error, context: "send_image")
@@ -163,6 +176,7 @@ public final class ChatViewModel: ObservableObject {
         for await message in stream {
             await MainActor.run {
                 upsert(message: message)
+                updateBannerState()
                 if !message.isOutgoing {
                     notificationManager.scheduleLocalNotification(for: message)
                 }
@@ -181,7 +195,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func upsert(message: Message) {
-        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+        if let index = messages.firstIndex(where: { $0.id == message.id || $0.localID == message.localID }) {
             messages[index] = message
         } else {
             messages.append(message)
@@ -191,6 +205,38 @@ public final class ChatViewModel: ObservableObject {
                 return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
             }
             return lhs.createdAt < rhs.createdAt
+        }
+    }
+
+    private func observeReachability() async {
+        isReachable = reachability.isReachable
+        await MainActor.run {
+            updateBannerState()
+        }
+        for await reachable in reachability.observe() {
+            await MainActor.run {
+                isReachable = reachable
+                updateBannerState()
+            }
+        }
+    }
+
+    private func updateBannerState() {
+        if messages.contains(where: { $0.isOutgoing && $0.status == .failed }) {
+            banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
+            return
+        }
+        if !isReachable {
+            banner = .offline
+            return
+        }
+        if case .offline = banner {
+            banner = nil
+            return
+        }
+        if case .error = banner,
+           !messages.contains(where: { $0.isOutgoing && $0.status == .failed }) {
+            banner = nil
         }
     }
 }

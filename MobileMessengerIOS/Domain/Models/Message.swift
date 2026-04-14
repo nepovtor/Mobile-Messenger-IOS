@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Message: Identifiable, Hashable, Sendable {
+public struct Message: Identifiable, Hashable, Sendable, Codable {
     public enum Kind: String, Codable, Sendable {
         case text
         case image

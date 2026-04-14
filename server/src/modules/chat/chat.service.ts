@@ -78,6 +78,16 @@ export class ChatService {
       user.sub,
       ...otherUsers.map((item) => item.id),
     ]);
+    const normalizedParticipantIDs = Array.from(participantIDs).sort();
+
+    if (normalizedParticipantIDs.length === 2) {
+      const existingDirectChat = await this.findExistingDirectChat(
+        normalizedParticipantIDs,
+      );
+      if (existingDirectChat) {
+        return this.getChatSummary(existingDirectChat.id, user.sub);
+      }
+    }
 
     const chat = await this.chatsRepository.save(
       this.chatsRepository.create({
@@ -107,7 +117,7 @@ export class ChatService {
     return summary;
   }
 
-  async listChats(userID: string): Promise<ChatSummary[]> {
+  async listChats(userID: string, search?: string): Promise<ChatSummary[]> {
     const participants = await this.participantsRepository.find({
       where: { userId: userID },
       relations: { chat: true },
@@ -116,13 +126,37 @@ export class ChatService {
 
     const summaries = await Promise.all(
       participants.map((participant) =>
-        this.buildChatSummary(participant.chat, participant, userID),
+        this.buildChatSummaryEnvelope(participant.chat, participant, userID),
       ),
     );
-    return summaries.sort(
+
+    const normalizedSearch = search?.trim().toLowerCase();
+    const filtered = summaries.filter(({ summary }) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return [
+        summary.title,
+        summary.lastMessagePreview ?? "",
+        ...summary.participantNames,
+      ].some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+
+    filtered.sort(
       (left, right) =>
-        right.lastActivity.getTime() - left.lastActivity.getTime(),
+        right.summary.lastActivity.getTime() -
+        left.summary.lastActivity.getTime(),
     );
+
+    const deduped = new Map<string, ChatSummary>();
+    for (const item of filtered) {
+      if (!deduped.has(item.dedupeKey)) {
+        deduped.set(item.dedupeKey, item.summary);
+      }
+    }
+
+    return Array.from(deduped.values());
   }
 
   async getMessages(
@@ -395,14 +429,16 @@ export class ChatService {
     userID: string,
   ): Promise<ChatSummary> {
     const participant = await this.getParticipantOrFail(chatID, userID);
-    return this.buildChatSummary(participant.chat, participant, userID);
+    return (
+      await this.buildChatSummaryEnvelope(participant.chat, participant, userID)
+    ).summary;
   }
 
-  private async buildChatSummary(
+  private async buildChatSummaryEnvelope(
     chat: ChatEntity,
     participant: ChatParticipantEntity,
     userID: string,
-  ): Promise<ChatSummary> {
+  ): Promise<{ summary: ChatSummary; dedupeKey: string }> {
     const participants = await this.participantsRepository.find({
       where: { chatId: chat.id },
       relations: { user: true },
@@ -419,20 +455,32 @@ export class ChatService {
     }
 
     const unreadCount = await unreadQuery.getCount();
+    const otherParticipants = participants.filter(
+      (item) => item.userId !== userID,
+    );
     return {
-      id: chat.id,
-      title: chat.title,
-      lastMessagePreview: chat.lastMessagePreview,
-      lastActivity: chat.lastActivity,
-      unreadCount,
-      typingParticipants: this.realtimeService.getTypingParticipants(
-        chat.id,
-        userID,
-      ),
-      participantNames: participants
-        .filter((item) => item.userId !== userID)
-        .map((item) => item.user.displayName),
-      participantCount: participants.length,
+      summary: {
+        id: chat.id,
+        title: chat.title,
+        lastMessagePreview: chat.lastMessagePreview,
+        lastActivity: chat.lastActivity,
+        unreadCount,
+        typingParticipants: this.realtimeService.getTypingParticipants(
+          chat.id,
+          userID,
+        ),
+        participantNames: otherParticipants.map(
+          (item) => item.user.displayName,
+        ),
+        participantCount: participants.length,
+      },
+      dedupeKey:
+        participants.length === 2
+          ? `direct:${otherParticipants
+              .map((item) => item.userId)
+              .sort()
+              .join(":")}`
+          : `chat:${chat.id}`,
     };
   }
 
@@ -450,5 +498,74 @@ export class ChatService {
       status: message.status,
       createdAt: message.createdAt,
     };
+  }
+
+  private async findExistingDirectChat(
+    participantIDs: string[],
+  ): Promise<ChatEntity | null> {
+    if (participantIDs.length !== 2) {
+      return null;
+    }
+
+    const candidateParticipants = await this.participantsRepository.find({
+      where: {
+        userId: In(participantIDs),
+      },
+      relations: {
+        chat: true,
+      },
+    });
+
+    const candidateChatIDs = Array.from(
+      candidateParticipants.reduce((result, participant) => {
+        const chatParticipants =
+          result.get(participant.chatId) ?? new Set<string>();
+        chatParticipants.add(participant.userId);
+        result.set(participant.chatId, chatParticipants);
+        return result;
+      }, new Map<string, Set<string>>()),
+    )
+      .filter(([, userIDs]) => userIDs.size === participantIDs.length)
+      .map(([chatID]) => chatID);
+
+    if (candidateChatIDs.length === 0) {
+      return null;
+    }
+
+    const fullParticipants = await this.participantsRepository.find({
+      where: {
+        chatId: In(candidateChatIDs),
+      },
+      relations: {
+        chat: true,
+      },
+    });
+
+    const normalizedParticipantsKey = participantIDs.slice().sort().join(":");
+    const matchedChats = Array.from(
+      fullParticipants.reduce((result, participant) => {
+        const entry = result.get(participant.chatId) ?? {
+          userIDs: [] as string[],
+          chat: participant.chat,
+        };
+        entry.userIDs.push(participant.userId);
+        result.set(participant.chatId, entry);
+        return result;
+      }, new Map<string, { userIDs: string[]; chat: ChatEntity }>()),
+    )
+      .filter(([, entry]) => {
+        const key = entry.userIDs.slice().sort().join(":");
+        return (
+          entry.userIDs.length === participantIDs.length &&
+          key === normalizedParticipantsKey
+        );
+      })
+      .map(([, entry]) => entry.chat)
+      .sort(
+        (left, right) =>
+          right.lastActivity.getTime() - left.lastActivity.getTime(),
+      );
+
+    return matchedChats[0] ?? null;
   }
 }
