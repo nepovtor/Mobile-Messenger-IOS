@@ -21,7 +21,6 @@ struct DialogueView: View {
     }
 
     var body: some View {
-        let isSendingMedia = isSendingMedia
         ZStack {
             ChatWallpaper()
 
@@ -86,6 +85,7 @@ struct DialogueView: View {
         }
     }
 
+    @MainActor
     private var messageInput: some View {
         HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -232,7 +232,6 @@ private struct ChatHeaderView: View {
     let chat: ChatListItem
 
     var body: some View {
-        let isSendingMedia = isSendingMedia
         HStack(spacing: 10) {
             ZStack {
                 if chat.isGroup {
@@ -285,7 +284,6 @@ private struct MessageBubbleView: View {
     let isGroup: Bool
 
     var body: some View {
-        let isSendingMedia = isSendingMedia
         VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 6) {
             if isGroup && !message.isOutgoing {
                 Text(message.authorName)
@@ -363,7 +361,6 @@ private struct MessageAttachmentImageView: View {
     let attachment: MessageAttachment
 
     var body: some View {
-        let isSendingMedia = isSendingMedia
         Group {
             if let localPath = attachment.localPath,
                let localImage = UIImage(contentsOfFile: localPath.path) {
@@ -399,7 +396,6 @@ private struct MessageSkeletonBubble: View {
     let isOutgoing: Bool
 
     var body: some View {
-        let isSendingMedia = isSendingMedia
         HStack {
             if isOutgoing { Spacer(minLength: 54) }
 
@@ -425,7 +421,6 @@ private struct MessageSkeletonBubble: View {
 
 private struct ChatWallpaper: View {
     var body: some View {
-        let isSendingMedia = isSendingMedia
         ZStack {
             LinearGradient(
                 colors: [
