@@ -92,7 +92,7 @@ build-ios:
 	@xcodebuild \
 		-project MobileMessengerIOS.xcodeproj \
 		-scheme MobileMessengerIOS \
-		-destination 'platform=iOS,name=$(DEVICE_NAME)' \
+		-destination 'id=$(DEVICE_ID)' \
 		-derivedDataPath "$(BUILD_DIR)" \
 		build
 
