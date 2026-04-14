@@ -26,7 +26,7 @@ public enum ConfigError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .emptyRESTBaseURL:
-            return "Введите адрес backend, например http://172.20.10.3:8080/api"
+            return "Введите адрес backend, например https://monitoring-scale-transportation-tasks.trycloudflare.com/api"
         case .invalidRESTBaseURL(let value):
             return "Некорректный адрес backend: \(value)"
         }
@@ -85,7 +85,7 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
             return url
         }
 
-        return URL(string: "http://172.20.10.3:8080/api")!
+        return URL(string: "https://monitoring-scale-transportation-tasks.trycloudflare.com/api")!
     }
 
     private static func readURL(from bundle: Bundle, key: String, fallback: String) -> URL {
