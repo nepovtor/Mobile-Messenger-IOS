@@ -32,7 +32,7 @@ let AuthService = AuthService_1 = class AuthService {
         const code = "123456";
         this.logger.log(`Verification code generated for ${contact}`);
         this.logger.debug(`Verification code for ${contact}: ${code}`);
-        return { expiresIn: 300, marker: "deploy-check-3e2f139" };
+        return { expiresIn: 300 };
     }
     async verifyCode({ method, contact, code, displayName }) {
         if (method !== "phone") {

@@ -8,7 +8,6 @@ export declare class AuthController {
     constructor(authService: AuthService);
     requestCode(body: RequestCodeDto): Promise<{
         expiresIn: number;
-        marker: string;
     }>;
     verifyCode(body: VerifyCodeDto): Promise<{
         token: string;

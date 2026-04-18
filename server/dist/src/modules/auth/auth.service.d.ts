@@ -11,7 +11,6 @@ export declare class AuthService {
     constructor(userRepository: Repository<User>, jwtService: JwtService);
     requestCode({ method, contact }: RequestCodeDto): Promise<{
         expiresIn: number;
-        marker: string;
     }>;
     verifyCode({ method, contact, code, displayName }: VerifyCodeDto): Promise<{
         token: string;
