@@ -10,13 +10,25 @@ import { ChatModule } from "./chat/chat.module";
 import { HealthModule } from "./health/health.module";
 import { VersionModule } from "./version/version.module";
 
+const isProduction = process.env.NODE_ENV === "production";
+const usePostgres = Boolean(process.env.DATABASE_URL);
+
+const databaseConfig = usePostgres
+  ? {
+      type: "postgres" as const,
+      url: process.env.DATABASE_URL!,
+    }
+  : {
+      type: "sqlite" as const,
+      database: process.env.SQLITE_PATH ?? "database.sqlite",
+    };
+
 @Module({
   imports: [
     TypeOrmModule.forRoot({
-      type: "sqlite",
-      database: process.env.SQLITE_PATH ?? "database.sqlite",
+      ...databaseConfig,
       entities: [User, Chat, Message, ChatReadState],
-      synchronize: process.env.NODE_ENV !== "production",
+      synchronize: process.env.TYPEORM_SYNC === "true" || !isProduction,
     }),
     HealthModule,
     VersionModule,
