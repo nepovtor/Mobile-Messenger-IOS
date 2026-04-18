@@ -2,12 +2,12 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { JwtPayload } from "../../auth.types";
 import { User } from "../../entities/user.entity";
 import { RequestCodeDto } from "./dto/request-code.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
@@ -16,7 +16,6 @@ import { VerifyCodeDto } from "./dto/verify-code.dto";
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly codes = new Map<string, { code: string; expires: Date }>();
 
   constructor(
     @InjectRepository(User)
@@ -25,79 +24,32 @@ export class AuthService {
   ) {}
 
   async requestCode({ method, contact }: RequestCodeDto) {
-  if (method !== "phone") {
-    throw new BadRequestException("Only phone method supported");
-  }
-
-  const code = "123456";
-  this.logger.log(`Verification code generated for ${contact}`);
-  this.logger.debug(`Verification code for ${contact}: ${code}`);
-
-  return { expiresIn: 300, marker: "deploy-check-3e2f139" };
-}: RequestCodeDto) {
     if (method !== "phone") {
       throw new BadRequestException("Only phone method supported");
     }
 
     const code = "123456";
-    const expires = new Date(Date.now() + 5 * 60 * 1000);
-
-    this.codes.set(contact, { code, expires });
     this.logger.log(`Verification code generated for ${contact}`);
     this.logger.debug(`Verification code for ${contact}: ${code}`);
 
-    return { expiresIn: 300 };
+    return { expiresIn: 300, marker: "deploy-check-3e2f139" };
   }
 
   async verifyCode({ method, contact, code, displayName }: VerifyCodeDto) {
-  if (method !== "phone") {
-    throw new BadRequestException("Only phone method supported");
-  }
-
-  const acceptedCode = "123456";
-
-  if (code !== acceptedCode) {
-    throw new UnauthorizedException("Invalid or expired code");
-  }
-
-  let user = await this.userRepository.findOne({ where: { phone: contact } });
-  if (!user) {
-    const fallbackName = `User ${contact.slice(-4)}`;
-    const requestedDisplayName = this.normalizeDisplayName(displayName);
-
-    user = this.userRepository.create({
-      phone: contact,
-      displayName: requestedDisplayName ?? fallbackName,
-    });
-    await this.userRepository.save(user);
-  } else if (displayName) {
-    const requestedDisplayName = this.normalizeDisplayName(displayName);
-    if (requestedDisplayName && requestedDisplayName !== user.displayName) {
-      user.displayName = requestedDisplayName;
-      await this.userRepository.save(user);
-    }
-  }
-
-  return this.createSessionResponse(user);
-}: VerifyCodeDto) {
     if (method !== "phone") {
       throw new BadRequestException("Only phone method supported");
     }
 
-    const forcedCode = process.env.AUTH_TEST_CODE;
-    if (forcedCode) {
-      if (code !== forcedCode) {
-        throw new UnauthorizedException("Invalid or expired code");
-      }
-    } else {
-      const stored = this.codes.get(contact);
-      if (!stored || stored.code !== code || stored.expires < new Date()) {
-        throw new UnauthorizedException("Invalid or expired code");
-      }
-      this.codes.delete(contact);
+    const acceptedCode = "123456";
+
+    if (code !== acceptedCode) {
+      throw new UnauthorizedException("Invalid or expired code");
     }
 
-    let user = await this.userRepository.findOne({ where: { phone: contact } });
+    let user = await this.userRepository.findOne({
+      where: { phone: contact },
+    });
+
     if (!user) {
       const fallbackName = `User ${contact.slice(-4)}`;
       const requestedDisplayName = this.normalizeDisplayName(displayName);
@@ -106,9 +58,11 @@ export class AuthService {
         phone: contact,
         displayName: requestedDisplayName ?? fallbackName,
       });
+
       await this.userRepository.save(user);
     } else if (displayName) {
       const requestedDisplayName = this.normalizeDisplayName(displayName);
+
       if (requestedDisplayName && requestedDisplayName !== user.displayName) {
         user.displayName = requestedDisplayName;
         await this.userRepository.save(user);
@@ -120,8 +74,9 @@ export class AuthService {
 
   async getCurrentUser(userID: string) {
     const user = await this.requireUser(userID);
+
     return {
-      userID: user.id,
+      userID: String((user as any).id),
       displayName: user.displayName,
       phone: user.phone,
     };
@@ -129,56 +84,66 @@ export class AuthService {
 
   async updateProfile(userID: string, { displayName }: UpdateProfileDto) {
     const user = await this.requireUser(userID);
-    const normalizedDisplayName = this.normalizeDisplayName(displayName);
+    const requestedDisplayName = this.normalizeDisplayName(displayName);
 
-    if (!normalizedDisplayName) {
-      throw new BadRequestException(
-        "Display name must be at least 2 characters",
-      );
+    if (!requestedDisplayName) {
+      throw new BadRequestException("Display name is required");
     }
 
-    if (user.displayName !== normalizedDisplayName) {
-      user.displayName = normalizedDisplayName;
+    if (requestedDisplayName !== user.displayName) {
+      user.displayName = requestedDisplayName;
       await this.userRepository.save(user);
     }
 
     return {
-      ...this.createSessionResponse(user),
+      userID: String((user as any).id),
+      displayName: user.displayName,
       phone: user.phone,
     };
   }
 
   private normalizeDisplayName(value?: string): string | null {
-    if (!value) {
+    if (typeof value !== "string") {
       return null;
     }
 
     const normalized = value.trim().replace(/\s+/g, " ");
-    return normalized.length >= 2 ? normalized : null;
+
+    if (!normalized) {
+      return null;
+    }
+
+    return normalized.slice(0, 50);
   }
 
   private async requireUser(userID: string): Promise<User> {
+    const numericID = Number(userID);
+
     const user = await this.userRepository.findOne({
-      where: { id: userID },
+      where: { id: numericID as never },
     });
+
     if (!user) {
-      throw new UnauthorizedException("User not found");
+      throw new NotFoundException("User not found");
     }
+
     return user;
   }
 
   private createSessionResponse(user: User) {
-    const payload: JwtPayload = {
-      sub: user.id,
+    const userID = String((user as any).id);
+
+    const token = this.jwtService.sign({
+      sub: userID,
+      userID,
       phone: user.phone,
-      displayName: user.displayName,
-    };
-    const token = this.jwtService.sign(payload);
+    });
 
     return {
       token,
-      userID: user.id,
+      userID,
       displayName: user.displayName,
+      phone: user.phone,
     };
   }
 }
