@@ -29,7 +29,7 @@ export class AuthService {
     throw new BadRequestException("Only phone method supported");
   }
 
-  const code = process.env.AUTH_TEST_CODE ?? "123456";
+  const code = "123456";
   this.logger.log(`Verification code generated for ${contact}`);
   this.logger.debug(`Verification code for ${contact}: ${code}`);
 
@@ -39,7 +39,7 @@ export class AuthService {
       throw new BadRequestException("Only phone method supported");
     }
 
-    const code = process.env.AUTH_TEST_CODE ?? "123456";
+    const code = "123456";
     const expires = new Date(Date.now() + 5 * 60 * 1000);
 
     this.codes.set(contact, { code, expires });
@@ -54,7 +54,7 @@ export class AuthService {
     throw new BadRequestException("Only phone method supported");
   }
 
-  const acceptedCode = process.env.AUTH_TEST_CODE ?? "123456";
+  const acceptedCode = "123456";
 
   if (code !== acceptedCode) {
     throw new UnauthorizedException("Invalid or expired code");
