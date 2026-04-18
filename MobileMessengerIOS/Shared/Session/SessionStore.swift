@@ -5,10 +5,10 @@ import Combine
 public final class SessionStore: ObservableObject {
     public struct AuthenticatedSession: Codable, Equatable, Sendable {
         public let token: String
-        public let userID: UUID
+        public let userID: String
         public let displayName: String
 
-        public init(token: String, userID: UUID, displayName: String) {
+        public init(token: String, userID: String, displayName: String) {
             self.token = token
             self.userID = userID
             self.displayName = displayName
@@ -32,7 +32,7 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    public func authenticate(token: String, userID: UUID, displayName: String) {
+    public func authenticate(token: String, userID: String, displayName: String) {
         let session = AuthenticatedSession(token: token, userID: userID, displayName: displayName)
         tokenStore.store(session: session)
         state = .authenticated(session)
@@ -65,7 +65,7 @@ public final class SessionStore: ObservableObject {
         return nil
     }
 
-    public var currentUserID: UUID? {
+    public var currentUserID: String? {
         currentSession?.userID
     }
 

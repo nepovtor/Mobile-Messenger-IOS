@@ -356,7 +356,7 @@ struct ProfileView: View {
         guard let userID = sessionStore.currentUserID else {
             return t("ID: не определён", "ID: unavailable")
         }
-        return "ID: \(userID.uuidString.prefix(8))..."
+        return "ID: \(userID.prefix(8))..."
     }
 
     private var selectedTheme: AppThemePreference {

@@ -281,7 +281,7 @@ public final class DefaultChatRepository: ChatRepository {
     private func makeMessage(
         from dto: MessageDTO,
         chatID: UUID,
-        currentUserID: UUID?,
+        currentUserID: String?,
         fallbackLocalID: UUID = UUID()
     ) -> Message {
         Message(

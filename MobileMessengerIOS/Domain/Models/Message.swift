@@ -13,7 +13,7 @@ public struct Message: Identifiable, Hashable, Sendable {
 
     public let id: Identifier
     public let localID: UUID
-    public let authorID: UUID
+    public let authorID: String
     public let authorName: String
     public let text: String
     public let createdAt: Date
@@ -26,7 +26,7 @@ public struct Message: Identifiable, Hashable, Sendable {
     public init(
         id: Identifier,
         localID: UUID,
-        authorID: UUID,
+        authorID: String,
         authorName: String,
         text: String,
         createdAt: Date,

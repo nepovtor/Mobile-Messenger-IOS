@@ -141,7 +141,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private func consumeEventStream(
         bytes: URLSession.AsyncBytes,
         chatID: UUID,
-        currentUserID: UUID
+        currentUserID: String
     ) async throws {
         var eventName = "message"
         var dataLines: [String] = []
@@ -177,7 +177,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         named eventName: String,
         dataLines: [String],
         chatID: UUID,
-        currentUserID: UUID
+        currentUserID: String
     ) throws {
         guard !dataLines.isEmpty else { return }
 

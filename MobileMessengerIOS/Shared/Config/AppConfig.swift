@@ -17,23 +17,23 @@ public struct DefaultConfigService: ConfigService {
     public init() {}
 
     public var restBaseURL: URL {
+#if DEBUG
+        return URL(string: "https://mobile-messenger-ios-production.up.railway.app/api")!
+#else
         if let url = urlFromInfoDictionary(key: "REST_BASE_URL") {
             return url
         }
-#if DEBUG
-        return URL(string: "http://127.0.0.1:8080/api")!
-#else
         return URL(string: "https://api.example.com")!
 #endif
     }
 
     public var websocketURL: URL {
+#if DEBUG
+        return URL(string: "wss://mobile-messenger-ios-production.up.railway.app")!
+#else
         if let url = urlFromInfoDictionary(key: "WEBSOCKET_URL") {
             return url
         }
-#if DEBUG
-        return URL(string: "ws://127.0.0.1:8080")!
-#else
         return URL(string: "wss://ws.example.com")!
 #endif
     }

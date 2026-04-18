@@ -110,8 +110,9 @@ public struct AuthCodeResponse: Codable {
 
 public struct AuthVerifyResponse: Codable {
     public let token: String
-    public let userID: UUID
+    public let userID: String
     public let displayName: String
+    public let phone: String
 }
 
 // MARK: - Profile Networking
@@ -122,14 +123,14 @@ public protocol ProfileNetworking: Sendable {
 }
 
 public struct ProfileDTO: Codable, Sendable {
-    public let userID: UUID
+    public let userID: String
     public let displayName: String
     public let phone: String
 }
 
 public struct ProfileUpdateResponse: Codable, Sendable {
     public let token: String
-    public let userID: UUID
+    public let userID: String
     public let displayName: String
     public let phone: String
 }
@@ -246,12 +247,12 @@ public struct MessageDTO: Codable, Identifiable {
     public let id: UUID
     public let messageID: UUID
     public let text: String
-    public let authorID: UUID
+    public let authorID: String
     public let authorName: String
     public let createdAt: Date
     public let status: String
     
-    public init(id: UUID, messageID: UUID, text: String, authorID: UUID, authorName: String, createdAt: Date, status: String) {
+    public init(id: UUID, messageID: UUID, text: String, authorID: String, authorName: String, createdAt: Date, status: String) {
         self.id = id
         self.messageID = messageID
         self.text = text
