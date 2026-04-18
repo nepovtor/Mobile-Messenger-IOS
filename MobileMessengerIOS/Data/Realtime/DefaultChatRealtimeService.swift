@@ -1,13 +1,6 @@
 import Foundation
 
 public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked Sendable {
-    public enum State: Equatable {
-        case disconnected
-        case connecting(retry: Int)
-        case connected
-        case reconnecting(retry: Int)
-    }
-
     private let baseURL: URL
     private let session: URLSession
     private let authTokenProvider: @Sendable () async -> String?
@@ -15,9 +8,12 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private let reachability: ReachabilityService
     private let featureFlags: FeatureFlags
     private let decoder: JSONDecoder
-    private var state: State = .disconnected
+    private var state: ChatRealtimeConnectionState = .disconnected
+    private var shouldMaintainConnection = false
     private var subscribedChats: Set<UUID> = []
     private var eventContinuations: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation] = [:]
+    private var globalEventContinuations: [UUID: AsyncStream<ChatRealtimeEnvelope>.Continuation] = [:]
+    private var stateContinuations: [UUID: AsyncStream<ChatRealtimeConnectionState>.Continuation] = [:]
     private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var connectionTask: Task<Void, Never>?
 
@@ -41,16 +37,35 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         self.decoder = decoder
     }
 
+    public func activate() {
+        guard featureFlags.isRealtimeEnabled else { return }
+        stateQueue.async { [weak self] in
+            guard let self else { return }
+            shouldMaintainConnection = true
+            guard connectionTask == nil else { return }
+            updateState(.connecting(retry: 0))
+            connectionTask = Task { [weak self] in
+                await self?.runConnectionLoop(retry: 0)
+            }
+        }
+    }
+
+    public func deactivate() {
+        stateQueue.async { [weak self] in
+            guard let self else { return }
+            shouldMaintainConnection = false
+            connectionTask?.cancel()
+            connectionTask = nil
+            updateState(.disconnected)
+            broadcast(event: .disconnected(nil))
+        }
+    }
+
     public func connect(to chatID: UUID) {
         guard featureFlags.isRealtimeEnabled else { return }
         stateQueue.async { [weak self] in
             guard let self else { return }
             subscribedChats.insert(chatID)
-            guard connectionTask == nil else { return }
-            state = .connecting(retry: 0)
-            connectionTask = Task { [weak self] in
-                await self?.runConnectionLoop(retry: 0)
-            }
         }
     }
 
@@ -61,10 +76,10 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             eventContinuations[chatID]?.finish()
             eventContinuations[chatID] = nil
 
-            guard subscribedChats.isEmpty else { return }
+            guard subscribedChats.isEmpty, !shouldMaintainConnection else { return }
             connectionTask?.cancel()
             connectionTask = nil
-            state = .disconnected
+            updateState(.disconnected)
         }
     }
 
@@ -76,6 +91,36 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             continuation.onTermination = { [weak self] _ in
                 self?.stateQueue.async {
                     self?.eventContinuations[chatID] = nil
+                }
+            }
+        }
+    }
+
+    public func observeAllEvents() -> AsyncStream<ChatRealtimeEnvelope> {
+        AsyncStream { continuation in
+            let id = UUID()
+            stateQueue.async { [weak self] in
+                self?.globalEventContinuations[id] = continuation
+            }
+            continuation.onTermination = { [weak self] _ in
+                self?.stateQueue.async {
+                    self?.globalEventContinuations[id] = nil
+                }
+            }
+        }
+    }
+
+    public func observeConnectionState() -> AsyncStream<ChatRealtimeConnectionState> {
+        AsyncStream { continuation in
+            let id = UUID()
+            stateQueue.async { [weak self] in
+                guard let self else { return }
+                stateContinuations[id] = continuation
+                continuation.yield(state)
+            }
+            continuation.onTermination = { [weak self] _ in
+                self?.stateQueue.async {
+                    self?.stateContinuations[id] = nil
                 }
             }
         }
@@ -138,7 +183,18 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             return
         }
 
-        clearConnection()
+        guard !Task.isCancelled else {
+            clearConnection()
+            return
+        }
+        broadcast(event: .disconnected(nil))
+        updateState(.reconnecting(retry: retry + 1))
+        try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
+        guard shouldReconnect else {
+            clearConnection()
+            return
+        }
+        await runConnectionLoop(retry: retry + 1)
     }
 
     private func handleEvent(type: String, data: String) throws {
@@ -160,6 +216,9 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     private func deliver(chatID: UUID, event: ChatRealtimeEvent) {
         stateQueue.async { [weak self] in
+            self?.globalEventContinuations.values.forEach { continuation in
+                continuation.yield(ChatRealtimeEnvelope(chatID: chatID, event: event))
+            }
             self?.eventContinuations[chatID]?.yield(event)
         }
     }
@@ -175,13 +234,22 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private func clearConnection() {
         stateQueue.async { [weak self] in
             self?.connectionTask = nil
-            self?.state = .disconnected
+            self?.updateState(.disconnected)
         }
     }
 
-    private func updateState(_ newState: State) {
+    private var shouldReconnect: Bool {
+        stateQueue.sync {
+            shouldMaintainConnection
+        }
+    }
+
+    private func updateState(_ newState: ChatRealtimeConnectionState) {
         stateQueue.async { [weak self] in
             self?.state = newState
+            self?.stateContinuations.values.forEach { continuation in
+                continuation.yield(newState)
+            }
         }
     }
 

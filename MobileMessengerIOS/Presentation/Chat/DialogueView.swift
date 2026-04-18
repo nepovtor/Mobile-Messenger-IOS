@@ -87,13 +87,16 @@ struct DialogueView: View {
 
     @MainActor
     private var messageInput: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        let isSendingMedia = viewModel.isSendingMedia
+        let isSendDisabled = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingMedia
+
+        return HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ZStack {
                     Circle()
                         .fill(Color.white.opacity(0.86))
 
-                    if viewModel.isSendingMedia {
+                    if isSendingMedia {
                         ProgressView()
                             .progressViewStyle(.circular)
                     } else {
@@ -105,7 +108,7 @@ struct DialogueView: View {
                 .frame(width: 42, height: 42)
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
             }
-            .disabled(viewModel.isSendingMedia)
+            .disabled(isSendingMedia)
 
             HStack(alignment: .bottom, spacing: 10) {
                 ZStack(alignment: .topLeading) {
@@ -146,14 +149,8 @@ struct DialogueView: View {
                                 )
                         )
                 }
-                .disabled(
-                    viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.isSendingMedia
-                )
-                .opacity(
-                    viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.isSendingMedia ? 0.55 : 1
-                )
+                .disabled(isSendDisabled)
+                .opacity(isSendDisabled ? 0.55 : 1)
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)

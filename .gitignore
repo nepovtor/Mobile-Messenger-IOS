@@ -3,11 +3,21 @@
 
 # Xcode
 build/
+build-ios/
+build-ios-device/
+build-ios-sim/
 DerivedData/
 *.xcuserstate
 *.xcuserdatad/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+
+# Local runtime artifacts
+.cloudflared.log
+.cloudflared.pid
+.server.log
+.server.pid
+.tunnel_url
 
 # Backend
 server/node_modules/

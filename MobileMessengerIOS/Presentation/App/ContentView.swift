@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var container: AppContainer
     @StateObject private var sessionStore: SessionStore
 
@@ -24,5 +25,11 @@ struct ContentView: View {
         .id(container.configurationRevision)
         .environmentObject(sessionStore)
         .environmentObject(container)
+        .task {
+            container.handleScenePhase(scenePhase)
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            container.handleScenePhase(newValue)
+        }
     }
 }

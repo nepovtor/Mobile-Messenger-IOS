@@ -1,8 +1,55 @@
 import Foundation
 import Combine
+import SwiftUI
 
 @MainActor
 public final class AppContainer: ObservableObject {
+    public enum ConnectionStatus: Equatable {
+        case offline
+        case connecting
+        case reconnecting
+        case online
+
+        public var title: String {
+            switch self {
+            case .offline:
+                return "Оффлайн"
+            case .connecting:
+                return "Подключение"
+            case .reconnecting:
+                return "Переподключаемся"
+            case .online:
+                return "Онлайн"
+            }
+        }
+
+        public var subtitle: String {
+            switch self {
+            case .offline:
+                return "Показываем сохраненные данные"
+            case .connecting:
+                return "Поднимаем соединение"
+            case .reconnecting:
+                return "Восстанавливаем realtime и синхронизацию"
+            case .online:
+                return "Синхронизация работает"
+            }
+        }
+
+        public var systemImage: String {
+            switch self {
+            case .offline:
+                return "wifi.slash"
+            case .connecting:
+                return "antenna.radiowaves.left.and.right"
+            case .reconnecting:
+                return "arrow.triangle.2.circlepath"
+            case .online:
+                return "checkmark.circle.fill"
+            }
+        }
+    }
+
     public static let shared = AppContainer()
 
     private let configService: DefaultConfigService
@@ -16,15 +63,16 @@ public final class AppContainer: ObservableObject {
     private var chatService: ChatNetworking!
     private var contactsService: ContactsNetworking!
     private var realtimeService: ChatRealtimeService!
+    private var sessionStateCancellable: AnyCancellable?
+    private var connectionStateTask: Task<Void, Never>?
+    private var isSceneActive = false
+    private var latestRealtimeState: ChatRealtimeConnectionState = .disconnected
+    @Published public private(set) var connectionStatus: ConnectionStatus = .offline
 
     @Published public private(set) var configurationRevision: Int = 0
 
     private init() {
-        #if DEBUG
-        let tokenStore = InMemoryTokenStore()
-        #else
         let tokenStore = KeychainTokenStore()
-        #endif
 
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
@@ -39,6 +87,8 @@ public final class AppContainer: ObservableObject {
         chatStore = SwiftDataChatStore()
         notificationManager = PushNotificationManager.shared
         configureNetworkingServices()
+        bindSessionState()
+        bindConnectionState()
     }
 
     public var restBaseURLString: String {
@@ -85,6 +135,7 @@ public final class AppContainer: ObservableObject {
     public func makeChatListViewModel() -> ChatListViewModel {
         ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: chatRepository),
+            observeChats: ObserveChatListUseCase(repository: chatRepository),
             createChat: CreateChatUseCase(repository: chatRepository),
             contactsService: contactsService,
             analytics: analytics
@@ -137,7 +188,87 @@ public final class AppContainer: ObservableObject {
 
     private func applyConfigurationChange() {
         configureNetworkingServices()
-        sessionStore.logout()
+        bindConnectionState()
         configurationRevision += 1
+        if isSceneActive {
+            Task { await refreshApplicationState() }
+        }
+    }
+
+    public func handleScenePhase(_ scenePhase: ScenePhase) {
+        switch scenePhase {
+        case .active:
+            isSceneActive = true
+            Task { await refreshApplicationState() }
+        case .inactive, .background:
+            isSceneActive = false
+            realtimeService.deactivate()
+            updateConnectionStatus()
+        @unknown default:
+            break
+        }
+    }
+
+    private func bindSessionState() {
+        sessionStateCancellable = sessionStore.$state.sink { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .authenticated:
+                if isSceneActive {
+                    Task { await self.refreshApplicationState() }
+                }
+            case .unauthenticated:
+                realtimeService?.deactivate()
+                connectionStatus = .offline
+            }
+        }
+    }
+
+    private func bindConnectionState() {
+        connectionStateTask?.cancel()
+        connectionStateTask = Task { [weak self] in
+            guard let self else { return }
+            for await state in realtimeService.observeConnectionState() {
+                await MainActor.run {
+                    self.latestRealtimeState = state
+                    self.updateConnectionStatus()
+                }
+            }
+        }
+        updateConnectionStatus()
+    }
+
+    private func refreshApplicationState() async {
+        guard sessionStore.authToken != nil else {
+            realtimeService.deactivate()
+            connectionStatus = .offline
+            return
+        }
+        realtimeService.activate()
+        updateConnectionStatus()
+        await chatRepository.refreshForForeground()
+    }
+
+    private func updateConnectionStatus() {
+        guard sessionStore.authToken != nil else {
+            connectionStatus = .offline
+            return
+        }
+        guard isSceneActive else {
+            connectionStatus = reachability.isReachable ? .reconnecting : .offline
+            return
+        }
+        guard reachability.isReachable else {
+            connectionStatus = .offline
+            return
+        }
+        switch latestRealtimeState {
+        case .connected:
+            connectionStatus = .online
+        case .connecting:
+            connectionStatus = .connecting
+        case .reconnecting, .disconnected:
+            connectionStatus = .reconnecting
+        }
     }
 }

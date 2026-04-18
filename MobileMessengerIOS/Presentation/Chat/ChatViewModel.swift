@@ -160,6 +160,12 @@ public final class ChatViewModel: ObservableObject {
 
     private func loadInitialHistory() async {
         isLoadingHistory = true
+        let cachedHistory = await loadHistory.cached(chatID: chatID, limit: 100, before: nil)
+        if !cachedHistory.isEmpty {
+            messages = cachedHistory
+            isLoadingHistory = false
+        }
+
         do {
             let history = try await loadHistory(chatID: chatID, limit: 100, before: nil)
             messages = history

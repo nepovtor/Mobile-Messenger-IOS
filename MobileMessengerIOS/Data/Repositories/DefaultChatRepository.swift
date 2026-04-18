@@ -9,6 +9,7 @@ public final class DefaultChatRepository: ChatRepository {
     private let fileManager: FileManager
     private let pendingSendCoordinator = PendingSendCoordinator()
     private var reachabilityTask: Task<Void, Never>?
+    private var realtimeTask: Task<Void, Never>?
 
     public init(
         store: ChatLocalStore,
@@ -28,6 +29,9 @@ public final class DefaultChatRepository: ChatRepository {
         reachabilityTask = Task { [weak self] in
             await self?.observeReachability()
         }
+        realtimeTask = Task { [weak self] in
+            await self?.observeRealtime()
+        }
         Task { [weak self] in
             await self?.retryAllPendingMessages()
         }
@@ -35,12 +39,17 @@ public final class DefaultChatRepository: ChatRepository {
 
     deinit {
         reachabilityTask?.cancel()
+        realtimeTask?.cancel()
     }
 
     public func createChat(title: String, participantContacts: [String]) async throws -> Chat {
         let chat = try await remote.createChat(title: title, participantContacts: participantContacts).asDomainChat()
         try await store.upsert(chats: [chat])
         return chat
+    }
+
+    public func cachedChats(searchQuery: String?) async -> [Chat] {
+        (try? await store.fetchChats(searchQuery: searchQuery)) ?? []
     }
 
     public func listChats(searchQuery: String?) async throws -> [Chat] {
@@ -56,39 +65,16 @@ public final class DefaultChatRepository: ChatRepository {
         }
     }
 
+    public func observeChats() -> AsyncStream<[Chat]> {
+        store.observeChats()
+    }
+
+    public func cachedHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async -> [Message] {
+        (try? await store.loadMessages(for: chatID, limit: limit, before: messageID)) ?? []
+    }
+
     public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
-        let storeStream = store.observeMessages(for: chatID)
-        let realtimeStream = realtime.observeEvents(for: chatID)
-        realtime.connect(to: chatID)
-
-        return AsyncStream { continuation in
-            let realtimeTask = Task {
-                for await event in realtimeStream {
-                    switch event {
-                    case .message(let message):
-                        try? await store.ensureChatExists(id: chatID, title: "Диалог")
-                        try? await store.append(message: message, for: chatID)
-                    case .messageRead(let messageID):
-                        try? await store.updateStatus(for: messageID, in: chatID, status: .read)
-                    case .connected, .disconnected, .typing:
-                        break
-                    }
-                }
-            }
-
-            let storeTask = Task {
-                for await message in storeStream {
-                    continuation.yield(message)
-                }
-                continuation.finish()
-            }
-
-            continuation.onTermination = { _ in
-                realtimeTask.cancel()
-                storeTask.cancel()
-                self.realtime.disconnect(from: chatID)
-            }
-        }
+        store.observeMessages(for: chatID)
     }
 
     public func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
@@ -178,6 +164,16 @@ public final class DefaultChatRepository: ChatRepository {
         }
     }
 
+    public func refreshForForeground() async {
+        await retryAllPendingMessages()
+        do {
+            let chats = try await remote.listChats(searchQuery: nil).map { try $0.asDomainChat() }
+            try await store.upsert(chats: chats)
+        } catch {
+            analytics.track(error: error, context: "foreground_refresh_chats")
+        }
+    }
+
     public func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws {
         if status == .read {
             try await remote.markRead(chatID: chatID, messageID: messageID)
@@ -251,6 +247,23 @@ public final class DefaultChatRepository: ChatRepository {
         for await isReachable in reachability.observe() {
             guard isReachable else { continue }
             await retryAllPendingMessages()
+        }
+    }
+
+    private func observeRealtime() async {
+        for await envelope in realtime.observeAllEvents() {
+            switch envelope.event {
+            case .message(let message):
+                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
+                try? await store.append(message: message, for: envelope.chatID)
+            case .messageRead(let messageID):
+                try? await store.updateStatus(for: messageID, in: envelope.chatID, status: .read)
+            case .typing(let participants):
+                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
+                try? await store.updateTypingParticipants(participants, in: envelope.chatID)
+            case .connected, .disconnected:
+                break
+            }
         }
     }
 

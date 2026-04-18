@@ -258,8 +258,69 @@ struct MainTabView: View {
                     Label("Профиль", systemImage: "person.crop.circle")
                 }
         }
+        .overlay(alignment: .top) {
+            ConnectionStatusBanner(status: container.connectionStatus)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+        }
         .task {
             await PushNotificationManager.shared.registerForNotifications()
+        }
+    }
+}
+
+private struct ConnectionStatusBanner: View {
+    let status: AppContainer.ConnectionStatus
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: status.systemImage)
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(status.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(strokeColor, lineWidth: 1)
+        }
+        .foregroundStyle(foregroundColor)
+        .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
+    }
+
+    private var strokeColor: Color {
+        switch status {
+        case .online:
+            return Color.green.opacity(0.28)
+        case .connecting:
+            return Color.blue.opacity(0.24)
+        case .reconnecting:
+            return Color.orange.opacity(0.28)
+        case .offline:
+            return Color.red.opacity(0.24)
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch status {
+        case .online:
+            return .green
+        case .connecting:
+            return .blue
+        case .reconnecting:
+            return .orange
+        case .offline:
+            return .red
         }
     }
 }

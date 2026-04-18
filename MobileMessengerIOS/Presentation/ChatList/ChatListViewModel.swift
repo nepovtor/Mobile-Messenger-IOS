@@ -79,39 +79,58 @@ public final class ChatListViewModel: ObservableObject {
     @Published public private(set) var createContactsError: String?
 
     private let loadChats: LoadChatListUseCase
+    private let observeChats: ObserveChatListUseCase
     private let createChatUseCase: CreateChatUseCase
     private let contactsService: ContactsNetworking
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
+    private var observeTask: Task<Void, Never>?
     private var hasLoadedCreateContacts = false
+    private var allChats: [Chat] = []
 
     public init(
         loadChats: LoadChatListUseCase,
+        observeChats: ObserveChatListUseCase,
         createChat: CreateChatUseCase,
         contactsService: ContactsNetworking,
         analytics: AnalyticsService
     ) {
         self.loadChats = loadChats
+        self.observeChats = observeChats
         self.createChatUseCase = createChat
         self.contactsService = contactsService
         self.analytics = analytics
     }
 
     public func onAppear() {
-        Task { await refresh() }
+        guard observeTask == nil else { return }
+        observeTask = Task { [weak self] in
+            await self?.bindChats()
+        }
+        Task { await loadLocalFirstContent() }
     }
 
     public func refresh() async {
-        isLoading = true
+        isLoading = chats.isEmpty
         do {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
-            self.chats = chats.map(Self.mapChat)
+            applyChats(chats)
             isShowingError = false
         } catch {
             isShowingError = true
             analytics.track(error: error, context: "chat_list_load")
         }
         isLoading = false
+    }
+
+    private func loadLocalFirstContent() async {
+        let query = searchQuery.isEmpty ? nil : searchQuery
+        let cachedChats = await loadChats.cached(searchQuery: query)
+        if !cachedChats.isEmpty {
+            applyChats(cachedChats)
+            isShowingError = false
+        }
+        await refresh()
     }
 
     @discardableResult
@@ -125,6 +144,8 @@ public final class ChatListViewModel: ObservableObject {
             let item = Self.mapChat(chat)
             chats.removeAll { $0.id == item.id }
             chats.insert(item, at: 0)
+            allChats.removeAll { $0.id == chat.id }
+            allChats.insert(chat, at: 0)
             return item
         } catch {
             isShowingError = true
@@ -154,12 +175,37 @@ public final class ChatListViewModel: ObservableObject {
     }
 
     private func scheduleSearch() {
+        applyCurrentFilter()
         searchTask?.cancel()
         searchTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard !Task.isCancelled else { return }
             await self?.refresh()
         }
+    }
+
+    private func bindChats() async {
+        for await chats in observeChats() {
+            await MainActor.run {
+                applyChats(chats)
+            }
+        }
+    }
+
+    private func applyChats(_ chats: [Chat]) {
+        allChats = chats
+        applyCurrentFilter()
+    }
+
+    private func applyCurrentFilter() {
+        let normalizedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let visibleChats = allChats.filter { chat in
+            guard !normalizedQuery.isEmpty else { return true }
+            return chat.title.lowercased().contains(normalizedQuery) ||
+            (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false) ||
+            chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
+        }
+        chats = visibleChats.map(Self.mapChat)
     }
 
     private static func mapChat(_ chat: Chat) -> ChatListItem {
