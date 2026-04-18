@@ -179,8 +179,12 @@ let ChatService = ChatService_1 = class ChatService {
                 message.status = "read";
             }
             await this.messageRepository.save(updatedMessages);
+            for (const message of updatedMessages) {
+                this.chatEventsService.publishMessageRead(normalizedChatID, message.messageID);
+            }
         }
         const chatDto = await this.toChatDto(chat, userID);
+        this.chatEventsService.publishTypingChanged(normalizedChatID, chatDto.typingParticipants);
         await this.publishChatUpdated(chat);
         return chatDto;
     }
@@ -253,6 +257,11 @@ let ChatService = ChatService_1 = class ChatService {
     }
     async toChatDto(chat, userID) {
         const unreadCount = await this.getUnreadCount(chat.id, userID);
+        const participantNames = (chat.participants ?? [])
+            .filter((participant) => participant.id !== userID)
+            .map((participant) => participant.displayName)
+            .sort((left, right) => left.localeCompare(right));
+        const participantCount = Math.max(chat.participants?.length ?? 0, 1);
         return {
             id: chat.id,
             title: chat.title,
@@ -260,6 +269,8 @@ let ChatService = ChatService_1 = class ChatService {
             lastActivity: (chat.lastActivity ?? chat.createdAt).toISOString(),
             unreadCount,
             typingParticipants: this.getTypingParticipants(chat.id, userID),
+            participantNames,
+            participantCount,
         };
     }
     toMessageDto(message, chatId) {
@@ -267,7 +278,10 @@ let ChatService = ChatService_1 = class ChatService {
             id: message.id,
             chatID: chatId,
             messageID: message.messageID,
+            kind: "text",
             text: message.text,
+            mediaID: null,
+            mediaURL: null,
             authorID: message.author.id,
             authorName: message.author.displayName,
             createdAt: message.createdAt.toISOString(),

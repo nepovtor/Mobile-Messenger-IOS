@@ -91,6 +91,19 @@ export class ChatController {
     );
   }
 
+  @Post(":chatId/messages/:messageID/read")
+  markMessageRead(
+    @Param("chatId") chatId: string,
+    @Param("messageID") messageID: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.chatService.markChatRead(
+      chatId,
+      request.user.sub,
+      messageID,
+    );
+  }
+
   @Post(":chatId/typing")
   updateTyping(
     @Param("chatId") chatId: string,

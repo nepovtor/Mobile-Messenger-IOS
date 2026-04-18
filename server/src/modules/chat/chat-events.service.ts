@@ -11,6 +11,7 @@ type Subscriber = {
 @Injectable()
 export class ChatEventsService {
   private readonly subscribers = new Map<string, Map<string, Subscriber>>();
+  private readonly globalSubscribers = new Map<string, Subscriber>();
 
   subscribe(
     chatID: string,
@@ -44,16 +45,47 @@ export class ChatEventsService {
     );
   }
 
+  subscribeAll(userID: string): Observable<MessageEvent> {
+    const subscriptionID = `${userID}_global_${Date.now()}_${Math.random()
+      .toString(16)
+      .slice(2)}`;
+    const subject = new Subject<MessageEvent>();
+
+    this.globalSubscribers.set(subscriptionID, {
+      userID,
+      subject,
+    });
+
+    subject.next({
+      type: "keepalive",
+      data: { ok: true },
+    });
+
+    return subject.asObservable().pipe(
+      finalize(() => {
+        this.globalSubscribers.delete(subscriptionID);
+      }),
+    );
+  }
+
   publishMessage(chatID: string, message: Message) {
     const subscribers = this.subscribers.get(chatID);
-    if (!subscribers) {
-      return;
-    }
-
     const event = this.makeMessageEvent("message", message);
 
-    for (const subscriber of subscribers.values()) {
-      subscriber.subject.next(event);
+    if (subscribers) {
+      for (const subscriber of subscribers.values()) {
+        subscriber.subject.next(event);
+      }
+    }
+
+    for (const subscriber of this.globalSubscribers.values()) {
+      subscriber.subject.next({
+        type: "message.created",
+        data: {
+          chatID,
+          message,
+        },
+      });
     }
   }
 
@@ -74,6 +106,30 @@ export class ChatEventsService {
         );
       }),
     );
+  }
+
+  publishMessageRead(chatID: string, messageID: string) {
+    for (const subscriber of this.globalSubscribers.values()) {
+      subscriber.subject.next({
+        type: "message.read",
+        data: {
+          chatID,
+          messageID,
+        },
+      });
+    }
+  }
+
+  publishTypingChanged(chatID: string, typingParticipants: string[]) {
+    for (const subscriber of this.globalSubscribers.values()) {
+      subscriber.subject.next({
+        type: "typing.changed",
+        data: {
+          chatID,
+          typingParticipants,
+        },
+      });
+    }
   }
 
   private makeMessageEvent(type: string, data: Chat | Message): MessageEvent {

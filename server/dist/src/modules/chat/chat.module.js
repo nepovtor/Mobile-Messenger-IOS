@@ -18,6 +18,7 @@ const chat_controller_1 = require("./chat.controller");
 const chat_events_service_1 = require("./chat-events.service");
 const chat_gateway_1 = require("./chat.gateway");
 const chat_service_1 = require("./chat.service");
+const realtime_controller_1 = require("./realtime.controller");
 function resolveJwtSecret() {
     if (process.env.JWT_SECRET) {
         return process.env.JWT_SECRET;
@@ -38,7 +39,7 @@ exports.ChatModule = ChatModule = __decorate([
                 secret: resolveJwtSecret(),
             }),
         ],
-        controllers: [chat_controller_1.ChatController],
+        controllers: [chat_controller_1.ChatController, realtime_controller_1.RealtimeController],
         providers: [chat_service_1.ChatService, chat_gateway_1.ChatGateway, chat_events_service_1.ChatEventsService],
         exports: [chat_service_1.ChatService, chat_events_service_1.ChatEventsService],
     })

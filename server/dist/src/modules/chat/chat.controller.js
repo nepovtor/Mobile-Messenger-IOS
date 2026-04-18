@@ -48,6 +48,9 @@ let ChatController = class ChatController {
     markChatRead(chatId, body, request) {
         return this.chatService.markChatRead(chatId, request.user.sub, body.messageID);
     }
+    markMessageRead(chatId, messageID, request) {
+        return this.chatService.markChatRead(chatId, request.user.sub, messageID);
+    }
     updateTyping(chatId, body, request) {
         return this.chatService.setTyping(chatId, request.user.sub, body.isTyping);
     }
@@ -110,6 +113,15 @@ __decorate([
     __metadata("design:paramtypes", [String, mark_chat_read_dto_1.MarkChatReadDto, Object]),
     __metadata("design:returntype", void 0)
 ], ChatController.prototype, "markChatRead", null);
+__decorate([
+    (0, common_1.Post)(":chatId/messages/:messageID/read"),
+    __param(0, (0, common_1.Param)("chatId")),
+    __param(1, (0, common_1.Param)("messageID")),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], ChatController.prototype, "markMessageRead", null);
 __decorate([
     (0, common_1.Post)(":chatId/typing"),
     __param(0, (0, common_1.Param)("chatId")),

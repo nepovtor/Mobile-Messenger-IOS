@@ -9,6 +9,7 @@ import { ChatController } from "./chat.controller";
 import { ChatEventsService } from "./chat-events.service";
 import { ChatGateway } from "./chat.gateway";
 import { ChatService } from "./chat.service";
+import { RealtimeController } from "./realtime.controller";
 
 function resolveJwtSecret(): string {
   if (process.env.JWT_SECRET) {
@@ -29,7 +30,7 @@ function resolveJwtSecret(): string {
       secret: resolveJwtSecret(),
     }),
   ],
-  controllers: [ChatController],
+  controllers: [ChatController, RealtimeController],
   providers: [ChatService, ChatGateway, ChatEventsService],
   exports: [ChatService, ChatEventsService],
 })

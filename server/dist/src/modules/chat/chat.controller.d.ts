@@ -18,5 +18,6 @@ export declare class ChatController {
     sendMessage(chatId: string, body: SendMessageDto, request: AuthenticatedRequest): Promise<import("./chat.service").Message>;
     createChat(body: CreateChatDto, request: AuthenticatedRequest): Promise<import("./chat.service").Chat>;
     markChatRead(chatId: string, body: MarkChatReadDto, request: AuthenticatedRequest): Promise<import("./chat.service").Chat>;
+    markMessageRead(chatId: string, messageID: string, request: AuthenticatedRequest): Promise<import("./chat.service").Chat>;
     updateTyping(chatId: string, body: UpdateTypingDto, request: AuthenticatedRequest): Promise<import("./chat.service").Chat>;
 }

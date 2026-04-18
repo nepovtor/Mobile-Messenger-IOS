@@ -11,7 +11,10 @@ export interface Message {
     id: string;
     chatID: string;
     messageID: string;
+    kind: "text";
     text: string;
+    mediaID: string | null;
+    mediaURL: string | null;
     authorID: string;
     authorName: string;
     createdAt: string;
@@ -24,6 +27,8 @@ export interface Chat {
     lastActivity: string;
     unreadCount: number;
     typingParticipants: string[];
+    participantNames: string[];
+    participantCount: number;
 }
 export declare class ChatService implements OnModuleInit {
     private readonly chatRepository;

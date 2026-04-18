@@ -13,6 +13,7 @@ const operators_1 = require("rxjs/operators");
 let ChatEventsService = class ChatEventsService {
     constructor() {
         this.subscribers = new Map();
+        this.globalSubscribers = new Map();
     }
     subscribe(chatID, userID, initialChat) {
         const subscriptionID = `${userID}_${Date.now()}_${Math.random()
@@ -34,14 +35,39 @@ let ChatEventsService = class ChatEventsService {
             }
         }));
     }
+    subscribeAll(userID) {
+        const subscriptionID = `${userID}_global_${Date.now()}_${Math.random()
+            .toString(16)
+            .slice(2)}`;
+        const subject = new rxjs_1.Subject();
+        this.globalSubscribers.set(subscriptionID, {
+            userID,
+            subject,
+        });
+        subject.next({
+            type: "keepalive",
+            data: { ok: true },
+        });
+        return subject.asObservable().pipe((0, operators_1.finalize)(() => {
+            this.globalSubscribers.delete(subscriptionID);
+        }));
+    }
     publishMessage(chatID, message) {
         const subscribers = this.subscribers.get(chatID);
-        if (!subscribers) {
-            return;
-        }
         const event = this.makeMessageEvent("message", message);
-        for (const subscriber of subscribers.values()) {
-            subscriber.subject.next(event);
+        if (subscribers) {
+            for (const subscriber of subscribers.values()) {
+                subscriber.subject.next(event);
+            }
+        }
+        for (const subscriber of this.globalSubscribers.values()) {
+            subscriber.subject.next({
+                type: "message.created",
+                data: {
+                    chatID,
+                    message,
+                },
+            });
         }
     }
     async publishChatUpdated(chatID, resolveChatForUser) {
@@ -53,6 +79,28 @@ let ChatEventsService = class ChatEventsService {
             const chat = await resolveChatForUser(subscriber.userID);
             subscriber.subject.next(this.makeMessageEvent("chatUpdated", chat));
         }));
+    }
+    publishMessageRead(chatID, messageID) {
+        for (const subscriber of this.globalSubscribers.values()) {
+            subscriber.subject.next({
+                type: "message.read",
+                data: {
+                    chatID,
+                    messageID,
+                },
+            });
+        }
+    }
+    publishTypingChanged(chatID, typingParticipants) {
+        for (const subscriber of this.globalSubscribers.values()) {
+            subscriber.subject.next({
+                type: "typing.changed",
+                data: {
+                    chatID,
+                    typingParticipants,
+                },
+            });
+        }
     }
     makeMessageEvent(type, data) {
         return {
