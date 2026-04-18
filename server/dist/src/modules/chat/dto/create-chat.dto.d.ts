@@ -1,4 +1,5 @@
 export declare class CreateChatDto {
     title: string;
-    participantIds: string[];
+    participantIds?: string[];
+    participantContacts?: string[];
 }

@@ -151,8 +151,19 @@ export class ChatService implements OnModuleInit {
   }
 
   async createChat(body: CreateChatDto, ownerID: string): Promise<Chat> {
+    const participantIDsFromContacts = body.participantContacts?.length
+      ? (
+          await this.userRepository.findBy({
+            phone: In(body.participantContacts),
+          })
+        ).map((user) => user.id)
+      : [];
     const participantIDs = Array.from(
-      new Set([...body.participantIds, ownerID]),
+      new Set([
+        ...(body.participantIds ?? []),
+        ...participantIDsFromContacts,
+        ownerID,
+      ]),
     );
     const participants = await this.userRepository.findBy({
       id: In(participantIDs),

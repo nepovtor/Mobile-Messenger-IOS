@@ -10,6 +10,7 @@ import {
 import { AuthenticatedRequest } from "../../auth.types";
 import { JwtAuthGuard } from "../../jwt-auth.guard";
 import { AuthService } from "./auth.service";
+import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestCodeDto } from "./dto/request-code.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { VerifyCodeDto } from "./dto/verify-code.dto";
@@ -28,10 +29,21 @@ export class AuthController {
     return this.authService.verifyCode(body);
   }
 
+  @Post("login")
+  async login(@Body() body: LoginAuthDto) {
+    return this.authService.login(body);
+  }
+
   @Get("me")
   @UseGuards(JwtAuthGuard)
   async getCurrentUser(@Req() request: AuthenticatedRequest) {
     return this.authService.getCurrentUser(request.user.sub);
+  }
+
+  @Get("contacts")
+  @UseGuards(JwtAuthGuard)
+  async listContacts(@Req() request: AuthenticatedRequest) {
+    return this.authService.listContacts(request.user.sub);
   }
 
   @Patch("me")

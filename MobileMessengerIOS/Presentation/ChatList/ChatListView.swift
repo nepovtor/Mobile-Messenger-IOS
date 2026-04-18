@@ -1,250 +1,200 @@
 import SwiftUI
 
-@MainActor
 struct ChatListView: View {
     @StateObject private var viewModel: ChatListViewModel
     @State private var isShowingCreateSheet = false
-    @State private var navigationPath = NavigationPath()
-    @AppStorage(AppPreferenceKeys.language) private var languagePreference = AppLanguagePreference.system.rawValue
+    @State private var createdChat: ChatListItem?
 
     @MainActor
-    init(container: AppContainer? = nil) {
-        let container = container ?? .shared
+    init() {
+        self.init(container: .shared)
+    }
+
+    @MainActor
+    init(container: AppContainer) {
         _viewModel = StateObject(wrappedValue: container.makeChatListViewModel())
     }
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(uiColor: .systemGroupedBackground),
-                        Color.blue.opacity(0.06),
-                        Color(uiColor: .systemBackground)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                ChatListBackdrop()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        header
-
-                        LazyVStack(spacing: 14) {
-                            if viewModel.isLoading {
-                                ForEach(0..<5, id: \.self) { _ in
-                                    ChatRowSkeleton()
-                                }
-                            } else if viewModel.chats.isEmpty {
-                                EmptyChatStateView(
-                                    title: t("Чаты не найдены", "No chats found"),
-                                    subtitle: viewModel.searchQuery.isEmpty
-                                        ? t("Создайте первый диалог и начните общение.", "Create your first conversation and start chatting.")
-                                        : t("Попробуйте изменить запрос или очистить поиск.", "Try another query or clear the search field.")
-                                )
-                            } else {
-                                ForEach(viewModel.chats) { chat in
-                                    NavigationLink(value: chat) {
-                                        ChatRowView(chat: chat, language: language)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
+                List {
+                    if viewModel.isLoading {
+                        Section {
+                            ForEach(0..<5, id: \.self) { _ in
+                                ChatRowSkeleton()
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
                             }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 28)
+                    } else {
+                        Section {
+                            ForEach(viewModel.chats) { chat in
+                                NavigationLink(value: chat) {
+                                    ChatRowView(chat: chat)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                            }
+                        }
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
                 .refreshable { await viewModel.refresh() }
+                .navigationDestination(item: $createdChat) { chat in
+                    DialogueView(chat: chat)
+                }
+                .navigationDestination(for: ChatListItem.self) { chat in
+                    DialogueView(chat: chat)
+                }
+                .searchable(text: $viewModel.searchQuery, prompt: "Поиск чатов")
+                .navigationTitle("Чаты")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { isShowingCreateSheet = true }) {
+                            Image(systemName: "person.3.sequence.fill")
+                        }
+                    }
+                }
+                .sheet(isPresented: $isShowingCreateSheet) {
+                    CreateGroupChatSheet(
+                        isPresented: $isShowingCreateSheet,
+                        viewModel: viewModel
+                    ) { title, participantContacts in
+                        if let chat = await viewModel.createChat(title: title, participantContacts: participantContacts) {
+                            createdChat = chat
+                            isShowingCreateSheet = false
+                        }
+                    }
+                }
                 .overlay(alignment: .top) {
                     if viewModel.isShowingError {
-                        BannerView(message: t("Не удалось загрузить список чатов", "Failed to load chats"))
+                        BannerView(message: "Не удалось загрузить список чатов")
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .padding(.horizontal, 16)
                             .padding(.top, 8)
-                            .padding(.horizontal, 20)
                     }
                 }
-            }
-            .navigationDestination(for: ChatListItem.self) { chat in
-                DialogueView(chatID: chat.id, title: chat.title)
-            }
-            .searchable(text: $viewModel.searchQuery, prompt: t("Поиск чатов", "Search chats"))
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $isShowingCreateSheet) {
-                CreateChatSheet(isPresented: $isShowingCreateSheet, viewModel: viewModel) { createdChat in
-                    navigationPath.append(createdChat)
-                }
+                .task { viewModel.onAppear() }
             }
         }
-        .task { viewModel.onAppear() }
-        .onDisappear { viewModel.onDisappear() }
-        .onChange(of: languagePreference) { _, _ in
-            Task { await viewModel.refresh() }
-        }
-    }
-
-    private var header: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.00, green: 0.48, blue: 1.00),
-                    Color(red: 0.24, green: 0.51, blue: 0.95),
-                    Color(red: 0.35, green: 0.34, blue: 0.84)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(height: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(Color.white.opacity(0.14))
-                    .frame(width: 170, height: 170)
-                    .offset(x: 40, y: -40)
-            }
-
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(t("Чаты", "Chats"))
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                        Text(t("Быстрые диалоги, живые статусы и аккуратные карточки сообщений.", "Fast conversations, live statuses and polished message cards."))
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Color.white.opacity(0.86))
-                    }
-
-                    Spacer()
-
-                    Button(action: { isShowingCreateSheet = true }) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(14)
-                            .background(Color.white.opacity(0.18), in: Circle())
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    StatChip(title: t("Всего", "Total"), value: "\(viewModel.chats.count)")
-                    StatChip(title: t("Непрочитано", "Unread"), value: "\(viewModel.chats.reduce(0) { $0 + $1.unreadCount })")
-                }
-            }
-            .padding(24)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-    }
-
-    private var language: AppLanguagePreference {
-        AppLanguagePreference(rawValue: languagePreference) ?? .system
-    }
-
-    private func t(_ ru: String, _ en: String) -> String {
-        language.text(ru: ru, en: en)
     }
 }
 
 private struct ChatRowView: View {
     let chat: ChatListItem
-    let language: AppLanguagePreference
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(spacing: 14) {
             avatar
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(chat.title)
-                        .font(.headline)
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Spacer(minLength: 12)
+                        .lineLimit(1)
+
+                    if chat.isGroup {
+                        Text("Группа")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.white.opacity(0.65)))
+                            .foregroundStyle(Color.blue.opacity(0.9))
+                    }
+
+                    Spacer(minLength: 8)
+
                     Text(chat.relativeDateString)
-                        .font(.caption.weight(.medium))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                if let participants = chat.participantsSummary {
+                    Text(participants)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 if !chat.typingParticipants.isEmpty {
-                    HStack(spacing: 8) {
-                        TypingDotsView()
-                        Text(language.text(ru: "Печатает: \(chat.typingParticipants.joined(separator: ", "))", en: "Typing: \(chat.typingParticipants.joined(separator: ", "))"))
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.blue)
-                    }
-                } else if let preview = chat.lastMessagePreview {
+                    Text("Печатает: \(chat.typingParticipants.joined(separator: ", "))")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.blue.opacity(0.9))
+                        .lineLimit(2)
+                } else if let preview = chat.lastMessagePreview, !preview.isEmpty {
                     Text(preview)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 } else {
-                    Text(language.text(ru: "Сообщений пока нет", en: "No messages yet"))
+                    Text(chat.isGroup ? "Групповой чат готов к общению" : "Напишите первое сообщение")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+            }
 
-                if chat.unreadCount > 0 {
-                    Text(language.text(ru: "\(chat.unreadCount) новых", en: "\(chat.unreadCount) new"))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.blue))
-                }
+            if chat.unreadCount > 0 {
+                Text("\(chat.unreadCount)")
+                    .font(.footnote.bold())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.blue))
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
+        .padding(16)
+        .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+                .fill(.ultraThinMaterial)
         )
-        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 8)
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.45), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 10)
     }
 
     private var avatar: some View {
-        Circle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.00, green: 0.48, blue: 1.00),
-                        Color(red: 0.35, green: 0.34, blue: 0.84)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 56, height: 56)
-            .overlay(
+        ZStack {
+            if chat.isGroup {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.85), Color.cyan.opacity(0.75)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                Image(systemName: "person.3.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+            } else {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.95), Color.blue.opacity(0.18)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
                 Text(chat.initials)
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.white)
-            )
-    }
-}
-
-private struct EmptyChatStateView: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 34))
-                .foregroundStyle(.blue)
-
-            Text(title)
-                .font(.headline)
-
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.blue.opacity(0.85))
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 38)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .frame(width: 54, height: 54)
     }
 }
 
@@ -252,21 +202,22 @@ private struct ChatRowSkeleton: View {
     var body: some View {
         HStack(spacing: 16) {
             SkeletonView(isActive: true)
-                .frame(width: 56, height: 56)
-                .clipShape(Circle())
-
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             VStack(alignment: .leading, spacing: 8) {
                 SkeletonView(isActive: true)
                     .frame(height: 16)
+                    .clipShape(Capsule())
                 SkeletonView(isActive: true)
                     .frame(height: 12)
-                SkeletonView(isActive: true)
-                    .frame(width: 70, height: 10)
+                    .clipShape(Capsule())
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.45))
+        )
     }
 }
 
@@ -282,115 +233,245 @@ private struct BannerView: View {
         }
         .padding()
         .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
-private struct StatChip: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Color.white.opacity(0.76))
-            Text(value)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-}
-
-private struct TypingDotsView: View {
-    @State private var animate = false
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(Color.blue.opacity(0.45 + (Double(index) * 0.15)))
-                    .frame(width: 6, height: 6)
-                    .offset(y: animate && index != 1 ? -2 : 2)
-                    .animation(
-                        .easeInOut(duration: 0.6)
-                            .repeatForever()
-                            .delay(Double(index) * 0.12),
-                        value: animate
-                    )
-            }
-        }
-        .onAppear {
-            animate = true
-        }
-    }
-}
-
-private struct CreateChatSheet: View {
+private struct CreateGroupChatSheet: View {
     @Binding var isPresented: Bool
     @ObservedObject var viewModel: ChatListViewModel
-    let onChatCreated: (ChatListItem) -> Void
+    let onCreate: (String, [String]) async -> Void
+
     @State private var title: String = ""
-    @AppStorage(AppPreferenceKeys.language) private var languagePreference = AppLanguagePreference.system.rawValue
+    @State private var searchQuery: String = ""
+    @State private var selectedContactIDs: Set<UUID> = []
+
+    private var filteredContacts: [ContactDTO] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return viewModel.availableContacts }
+
+        return viewModel.availableContacts.filter { contact in
+            contact.displayName.lowercased().contains(query) ||
+            contact.contact.lowercased().contains(query)
+        }
+    }
+
+    private var selectedContacts: [ContactDTO] {
+        viewModel.availableContacts.filter { selectedContactIDs.contains($0.userID) }
+    }
+
+    private var canCreate: Bool {
+        !viewModel.isCreatingChat &&
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        selectedContactIDs.count >= 2
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(t("Название", "Title")) {
-                    TextField(t("Название чата", "Chat title"), text: $title)
-                }
+            ZStack {
+                ChatListBackdrop()
 
-                if let error = viewModel.createChatErrorMessage {
+                List {
                     Section {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                if viewModel.isCreatingChat {
-                    Section {
-                        HStack(spacing: 12) {
-                            ProgressView()
-                            Text(t("Создаем чат...", "Creating chat..."))
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Соберите группу")
+                                .font(.title3.weight(.semibold))
+                            Text("Выберите минимум двух собеседников, задайте название и откройте общий чат.")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
+                        .padding(.vertical, 6)
+                        .listRowBackground(Color.clear)
                     }
-                }
-            }
-            .navigationTitle(t("Новый чат", "New chat"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(t("Отмена", "Cancel")) { isPresented = false }
-                        .disabled(viewModel.isCreatingChat)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(t("Создать", "Create")) {
-                        Task {
-                            if let createdChat = await viewModel.createChat(title: title) {
-                                title = ""
-                                isPresented = false
-                                onChatCreated(createdChat)
+
+                    Section("Название") {
+                        TextField("Например, Команда iOS", text: $title)
+                            .textInputAutocapitalization(.words)
+                    }
+
+                    if !selectedContacts.isEmpty {
+                        Section("Выбрано: \(selectedContacts.count)") {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(selectedContacts) { contact in
+                                        SelectedContactChip(contact: contact) {
+                                            selectedContactIDs.remove(contact.userID)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
                             }
                         }
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isCreatingChat)
+
+                    Section {
+                        if viewModel.isLoadingCreateContacts {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                Text("Загружаю контакты")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 6)
+                        } else if let error = viewModel.createContactsError {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(error)
+                                    .font(.subheadline)
+                                Button("Повторить загрузку") {
+                                    Task { await viewModel.loadCreateContactsIfNeeded(force: true) }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        } else if filteredContacts.isEmpty {
+                            Text(searchQuery.isEmpty ? "Нет доступных контактов для группы" : "Ничего не найдено")
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 6)
+                        } else {
+                            ForEach(filteredContacts) { contact in
+                                Button {
+                                    toggleSelection(for: contact)
+                                } label: {
+                                    GroupContactRow(
+                                        contact: contact,
+                                        isSelected: selectedContactIDs.contains(contact.userID)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    } header: {
+                        Text("Участники")
+                    } footer: {
+                        Text("Для группового чата выберите минимум двух контактов.")
+                    }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+            }
+            .navigationTitle("Новая группа")
+            .searchable(text: $searchQuery, prompt: "Поиск контактов")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { isPresented = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Создать") {
+                        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let contacts = selectedContacts.map(\.contact)
+                        Task { await onCreate(title, contacts) }
+                    }
+                    .disabled(!canCreate)
                 }
             }
-            .onAppear {
-                viewModel.clearCreateChatState()
+            .task {
+                await viewModel.loadCreateContactsIfNeeded()
             }
         }
     }
 
-    private var language: AppLanguagePreference {
-        AppLanguagePreference(rawValue: languagePreference) ?? .system
+    private func toggleSelection(for contact: ContactDTO) {
+        if selectedContactIDs.contains(contact.userID) {
+            selectedContactIDs.remove(contact.userID)
+        } else {
+            selectedContactIDs.insert(contact.userID)
+        }
+    }
+}
+
+private struct GroupContactRow: View {
+    let contact: ContactDTO
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(Color.blue.opacity(isSelected ? 0.22 : 0.12))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Text(initials)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.blue.opacity(0.9))
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(contact.displayName)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text(contact.contact)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isSelected ? .blue : .secondary)
+        }
+        .contentShape(Rectangle())
     }
 
-    private func t(_ ru: String, _ en: String) -> String {
-        language.text(ru: ru, en: en)
+    private var initials: String {
+        let words = contact.displayName.split(separator: " ")
+        if let first = words.first, let second = words.dropFirst().first {
+            return String(first.prefix(1)) + String(second.prefix(1))
+        }
+        return String(contact.displayName.prefix(2))
+    }
+}
+
+private struct SelectedContactChip: View {
+    let contact: ContactDTO
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(contact.displayName)
+                .font(.footnote.weight(.medium))
+                .lineLimit(1)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.thinMaterial, in: Capsule())
+    }
+}
+
+private struct ChatListBackdrop: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.94, green: 0.97, blue: 1.00),
+                    Color(red: 0.89, green: 0.95, blue: 0.98),
+                    Color(red: 0.96, green: 0.98, blue: 1.00)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 240, height: 240)
+                .blur(radius: 10)
+                .offset(x: 130, y: -250)
+
+            Circle()
+                .fill(Color.cyan.opacity(0.12))
+                .frame(width: 280, height: 280)
+                .offset(x: -150, y: 260)
+
+            RoundedRectangle(cornerRadius: 48, style: .continuous)
+                .fill(Color.blue.opacity(0.06))
+                .frame(width: 220, height: 220)
+                .rotationEffect(.degrees(18))
+                .offset(x: 160, y: 240)
+        }
+        .ignoresSafeArea()
     }
 }

@@ -1,345 +1,326 @@
 import Foundation
 
 public final class DefaultChatRepository: ChatRepository {
-    private enum RepositoryConstants {
-        static let remoteSyncInterval: UInt64 = 2_000_000_000
-    }
-
     private let store: ChatLocalStore
+    private let remote: ChatNetworking
     private let realtime: ChatRealtimeService
     private let analytics: AnalyticsService
-    private let userSessionProvider: @Sendable () -> SessionStore.AuthenticatedSession?
-    private let chatNetworking: ChatNetworking?
+    private let reachability: ReachabilityService
+    private let fileManager: FileManager
+    private let pendingSendCoordinator = PendingSendCoordinator()
+    private var reachabilityTask: Task<Void, Never>?
+    private var realtimeTask: Task<Void, Never>?
 
     public init(
         store: ChatLocalStore,
+        remote: ChatNetworking,
         realtime: ChatRealtimeService,
         analytics: AnalyticsService,
-        userSessionProvider: @escaping @Sendable () -> SessionStore.AuthenticatedSession?,
-        chatNetworking: ChatNetworking? = nil
+        reachability: ReachabilityService,
+        fileManager: FileManager = .default
     ) {
         self.store = store
+        self.remote = remote
         self.realtime = realtime
         self.analytics = analytics
-        self.userSessionProvider = userSessionProvider
-        self.chatNetworking = chatNetworking
+        self.reachability = reachability
+        self.fileManager = fileManager
+
+        reachabilityTask = Task { [weak self] in
+            await self?.observeReachability()
+        }
+        realtimeTask = Task { [weak self] in
+            await self?.observeRealtime()
+        }
+        Task { [weak self] in
+            await self?.retryAllPendingMessages()
+        }
+    }
+
+    deinit {
+        reachabilityTask?.cancel()
+        realtimeTask?.cancel()
+    }
+
+    public func createChat(title: String, participantContacts: [String]) async throws -> Chat {
+        let chat = try await remote.createChat(title: title, participantContacts: participantContacts).asDomainChat()
+        try await store.upsert(chats: [chat])
+        return chat
+    }
+
+    public func cachedChats(searchQuery: String?) async -> [Chat] {
+        (try? await store.fetchChats(searchQuery: searchQuery)) ?? []
     }
 
     public func listChats(searchQuery: String?) async throws -> [Chat] {
-        if let networking = chatNetworking {
-            do {
-                let dtos = try await networking.listChats()
-                let chats = dtos.map(makeChat(from:))
-                try await store.upsert(chats: chats)
-                return filterChats(chats, searchQuery: searchQuery)
-            } catch {
-                analytics.track(error: error, context: "listChats")
-                return try await store.fetchChats(searchQuery: searchQuery)
-            }
+        do {
+            let chats = try await remote.listChats(searchQuery: searchQuery).map { try $0.asDomainChat() }
+            try await store.upsert(chats: chats)
+            return try await store.fetchChats(searchQuery: searchQuery)
+        } catch {
+            let cached = try await store.fetchChats(searchQuery: searchQuery)
+            guard !cached.isEmpty else { throw error }
+            analytics.track(error: error, context: "chat_list_remote_fallback")
+            return cached
         }
-
-        return try await store.fetchChats(searchQuery: searchQuery)
     }
 
-    public func getChat(_ chatID: UUID) async throws -> Chat {
-        if let networking = chatNetworking {
-            do {
-                let dto = try await networking.getChat(chatID: chatID)
-                let chat = makeChat(from: dto)
-                try await store.upsert(chats: [chat])
-                return chat
-            } catch {
-                analytics.track(error: error, context: "getChat")
-            }
-        }
-
-        if let chat = try await store.fetchChat(id: chatID) {
-            return chat
-        }
-
-        throw AppError.network(description: AppLanguagePreference.localized(ru: "Чат не найден", en: "Chat not found"))
+    public func observeChats() -> AsyncStream<[Chat]> {
+        store.observeChats()
     }
 
-    public func createChat(title: String, participantIDs: [UUID]) async throws -> Chat {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            throw AppError.network(description: AppLanguagePreference.localized(ru: "Название чата не может быть пустым", en: "Chat title cannot be empty"))
-        }
-
-        if let networking = chatNetworking {
-            let dto = try await networking.createChat(title: trimmedTitle, participantIDs: participantIDs)
-            let chat = makeChat(from: dto)
-            try await store.upsert(chats: [chat])
-            return chat
-        }
-
-        let localChat = Chat(
-            id: UUID(),
-            title: trimmedTitle,
-            lastMessagePreview: nil,
-            lastActivity: Date(),
-            unreadCount: 0
-        )
-        try await store.upsert(chats: [localChat])
-        return localChat
+    public func cachedHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async -> [Message] {
+        (try? await store.loadMessages(for: chatID, limit: limit, before: messageID)) ?? []
     }
 
     public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
-        let storeStream = store.observeMessages(for: chatID)
-        let realtimeStream = realtime.observeEvents(for: chatID)
-        realtime.connect(to: chatID)
-
-        return AsyncStream { continuation in
-            let realtimeTask = Task {
-                for await event in realtimeStream {
-                    switch event {
-                    case .message(let message):
-                        try? await store.append(message: message, for: chatID)
-                    case .chatUpdated(let chat):
-                        try? await store.upsert(chats: [chat])
-                    case .connected:
-                        break
-                    case .disconnected:
-                        break
-                    case .typing(let isTyping):
-                        if !isTyping { continue }
-                    }
-                }
-            }
-
-            let pollingTask = Task { [weak self] in
-                guard let self, self.chatNetworking != nil else { return }
-                await self.syncRemoteStateSilently(for: chatID)
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: RepositoryConstants.remoteSyncInterval)
-                    guard !Task.isCancelled else { return }
-                    await self.syncRemoteStateSilently(for: chatID)
-                }
-            }
-
-            let storeTask = Task {
-                for await message in storeStream {
-                    continuation.yield(message)
-                }
-                continuation.finish()
-            }
-
-            continuation.onTermination = { _ in
-                realtimeTask.cancel()
-                pollingTask.cancel()
-                storeTask.cancel()
-                self.realtime.disconnect(from: chatID)
-            }
-        }
+        store.observeMessages(for: chatID)
     }
 
     public func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
-        if let networking = chatNetworking {
-            do {
-                let (_, messages) = try await syncRemoteState(for: chatID, networking: networking)
-                return messages
-            } catch {
-                analytics.track(error: error, context: "loadHistory")
-                return try await store.loadMessages(for: chatID, limit: limit, before: messageID)
-            }
+        do {
+            let messages = try await remote.loadMessages(chatID: chatID, limit: limit, before: messageID).map { $0.asDomainMessage() }
+            try await store.ensureChatExists(id: chatID, title: "Диалог")
+            try await store.upsert(messages: messages, for: chatID)
+            return try await store.loadMessages(for: chatID, limit: limit, before: messageID)
+        } catch {
+            let cached = try await store.loadMessages(for: chatID, limit: limit, before: messageID)
+            guard !cached.isEmpty else { throw error }
+            analytics.track(error: error, context: "chat_history_remote_fallback")
+            return cached
         }
-
-        return try await store.loadMessages(for: chatID, limit: limit, before: messageID)
     }
 
     public func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message {
-        guard let currentSession = userSessionProvider() else {
-            throw AppError.unauthorized
-        }
-
         let local = localID ?? UUID()
-        let existingChat = try await store.fetchChat(id: chatID)
-        let existingTitle = existingChat?.title
-            ?? AppLanguagePreference.localized(ru: "Диалог", en: "Chat")
-        try await store.ensureChatExists(id: chatID, title: existingTitle)
-
-        let message = Message(
-            id: Message.Identifier(chatID: chatID, messageID: UUID()),
+        let optimistic = Message(
+            id: Message.Identifier(chatID: chatID, messageID: local),
             localID: local,
-            authorID: currentSession.userID,
-            authorName: currentSession.displayName,
+            authorID: SessionStore.Constants.currentUserID,
+            authorName: SessionStore.Constants.currentUserDisplayName,
+            kind: .text,
             text: text,
             createdAt: Date(),
-            isOutgoing: true,
             status: .sending
         )
-
-        try await store.append(message: message, for: chatID)
-
-        if let networking = chatNetworking {
-            Task.detached { [weak self, currentSession] in
-                guard let self else { return }
-                do {
-                    let dto = try await networking.sendMessage(
-                        chatID: chatID,
-                        text: text,
-                        messageID: message.id.messageID
-                    )
-                    let serverMessage = self.makeMessage(
-                        from: dto,
-                        chatID: chatID,
-                        currentUserID: currentSession.userID,
-                        fallbackLocalID: local
-                    )
-                    try await self.store.upsert(messages: [serverMessage], for: chatID)
-                    _ = try? await self.syncRemoteState(for: chatID, networking: networking)
-                } catch {
-                    try? await self.store.updateStatus(for: message.id.messageID, in: chatID, status: .failed)
-                    self.analytics.track(error: error, context: "sendMessage")
-                }
-            }
-        } else {
-            Task.detached { [weak self] in
-                guard let self else { return }
-                do {
-                    try await self.realtime.sendMessage(chatID: chatID, text: text, localID: local)
-                    try await self.store.updateStatus(for: message.id.messageID, in: chatID, status: .sent)
-                    try await Task.sleep(nanoseconds: 400_000_000)
-                    try await self.store.updateStatus(for: message.id.messageID, in: chatID, status: .delivered)
-                } catch {
-                    try? await self.store.updateStatus(for: message.id.messageID, in: chatID, status: .failed)
-                    self.analytics.track(error: error, context: "sendMessageRealtimeFallback")
-                }
-            }
+        try await store.ensureChatExists(id: chatID, title: "Диалог")
+        try await store.append(message: optimistic, for: chatID)
+        Task { [weak self] in
+            await self?.attemptDelivery(of: optimistic)
         }
+        return optimistic
+    }
 
-        analytics.track(event: AnalyticsEvent(kind: .messageSent, metadata: ["chatID": chatID.uuidString]))
-        return message
+    public func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message {
+        let local = localID ?? UUID()
+        let localFileURL = try savePendingImage(data: imageData, localID: local)
+        let optimistic = Message(
+            id: Message.Identifier(chatID: chatID, messageID: local),
+            localID: local,
+            authorID: SessionStore.Constants.currentUserID,
+            authorName: SessionStore.Constants.currentUserDisplayName,
+            kind: .image,
+            text: caption ?? "",
+            createdAt: Date(),
+            status: .sending,
+            attachments: [
+                MessageAttachment(
+                    id: local,
+                    kind: .image,
+                    url: nil,
+                    localPath: localFileURL,
+                    thumbnailURL: nil,
+                    fileSize: Int64(imageData.count)
+                )
+            ]
+        )
+        try await store.ensureChatExists(id: chatID, title: "Диалог")
+        try await store.append(message: optimistic, for: chatID)
+        Task { [weak self] in
+            await self?.attemptDelivery(of: optimistic)
+        }
+        return optimistic
+    }
+
+    public func setTyping(chatID: UUID, isTyping: Bool) async {
+        do {
+            try await remote.setTyping(chatID: chatID, isTyping: isTyping)
+        } catch {
+            analytics.track(error: error, context: "setTyping")
+        }
     }
 
     public func retryPendingMessages(for chatID: UUID) async {
         do {
             let pending = try await store.pendingMessages(in: chatID)
-            let currentUserID = userSessionProvider()?.userID
-
-            for message in pending {
-                if let networking = chatNetworking {
-                    Task.detached { [weak self] in
-                        guard let self else { return }
-                        do {
-                            let dto = try await networking.sendMessage(
-                                chatID: chatID,
-                                text: message.text,
-                                messageID: message.id.messageID
-                            )
-                            let updatedMessage = self.makeMessage(
-                                from: dto,
-                                chatID: chatID,
-                                currentUserID: currentUserID,
-                                fallbackLocalID: message.localID
-                            )
-                            try await self.store.upsert(messages: [updatedMessage], for: chatID)
-                            _ = try? await self.syncRemoteState(for: chatID, networking: networking)
-                        } catch {
-                            self.analytics.track(error: error, context: "retryPendingMessages")
-                        }
-                    }
-                } else {
-                    Task.detached { [weak self] in
-                        guard let self else { return }
-                        do {
-                            try await self.realtime.sendMessage(chatID: chatID, text: message.text, localID: message.localID)
-                            try await self.store.updateStatus(for: message.id.messageID, in: chatID, status: .sent)
-                        } catch {
-                            self.analytics.track(error: error, context: "retryPendingMessagesRealtime")
-                        }
-                    }
-                }
+            for message in pending.sorted(by: { $0.createdAt < $1.createdAt }) {
+                try? await store.updateStatus(forLocalID: message.localID, in: chatID, status: .sending)
+                await attemptDelivery(of: message)
             }
+            let refreshed = try await remote.loadMessages(chatID: chatID, limit: 100, before: nil).map { $0.asDomainMessage() }
+            try await store.upsert(messages: refreshed, for: chatID)
         } catch {
             analytics.track(error: error, context: "retryPendingMessages")
         }
     }
 
+    public func refreshForForeground() async {
+        await retryAllPendingMessages()
+        do {
+            let chats = try await remote.listChats(searchQuery: nil).map { try $0.asDomainChat() }
+            try await store.upsert(chats: chats)
+        } catch {
+            analytics.track(error: error, context: "foreground_refresh_chats")
+        }
+    }
+
     public func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws {
+        if status == .read {
+            try await remote.markRead(chatID: chatID, messageID: messageID)
+        }
         try await store.updateStatus(for: messageID, in: chatID, status: status)
-        guard status == .read, let networking = chatNetworking else {
+    }
+
+    private func attemptDelivery(of message: Message) async {
+        guard await pendingSendCoordinator.begin(localID: message.localID) else { return }
+
+        guard reachability.isReachable else {
+            await pendingSendCoordinator.finish(localID: message.localID)
             return
         }
 
-        let chat = try await networking.markRead(chatID: chatID, messageID: messageID)
-        try await store.upsert(chats: [makeChat(from: chat)])
-        _ = try? await syncRemoteState(for: chatID, networking: networking)
-    }
-
-    public func setTyping(in chatID: UUID, isTyping: Bool) async {
-        guard let networking = chatNetworking else { return }
-
         do {
-            let chat = try await networking.setTyping(chatID: chatID, isTyping: isTyping)
-            try await store.upsert(chats: [makeChat(from: chat)])
+            let deliveredMessage: Message
+            switch message.kind {
+            case .text:
+                let response = try await remote.sendMessage(
+                    chatID: message.id.chatID,
+                    kind: .text,
+                    text: message.text,
+                    mediaID: nil,
+                    localID: message.localID
+                )
+                deliveredMessage = response.asDomainMessage(localID: message.localID)
+            case .image:
+                let localFileURL = message.attachments.first(where: { $0.kind == .image })?.localPath
+                guard let localFileURL else {
+                    try await store.updateStatus(forLocalID: message.localID, in: message.id.chatID, status: .failed)
+                    await pendingSendCoordinator.finish(localID: message.localID)
+                    return
+                }
+                let data = try Data(contentsOf: localFileURL)
+                let upload = try await remote.requestUploadURL(
+                    mimeType: "image/jpeg",
+                    sizeBytes: data.count,
+                    width: nil,
+                    height: nil
+                )
+                let etag = try await remote.uploadImage(to: upload.uploadURL, data: data, mimeType: "image/jpeg")
+                try await remote.confirmUpload(mediaID: upload.mediaID, etag: etag)
+                let response = try await remote.sendMessage(
+                    chatID: message.id.chatID,
+                    kind: .image,
+                    text: message.text.isEmpty ? nil : message.text,
+                    mediaID: upload.mediaID,
+                    localID: message.localID
+                )
+                deliveredMessage = response.asDomainMessage(localID: message.localID)
+                try? fileManager.removeItem(at: localFileURL)
+            }
+
+            try await store.replaceMessage(localID: message.localID, in: message.id.chatID, with: deliveredMessage)
+            analytics.track(event: AppAnalyticsEvent(kind: .messageSent, metadata: [
+                "chatID": message.id.chatID.uuidString,
+                "kind": message.kind.rawValue
+            ]))
         } catch {
-            // Typing is best-effort; avoid noisy failures while the user is composing.
+            if reachability.isReachable {
+                try? await store.updateStatus(forLocalID: message.localID, in: message.id.chatID, status: .failed)
+            }
+            analytics.track(error: error, context: "send_message_delivery")
+        }
+
+        await pendingSendCoordinator.finish(localID: message.localID)
+    }
+
+    private func observeReachability() async {
+        for await isReachable in reachability.observe() {
+            guard isReachable else { continue }
+            await retryAllPendingMessages()
         }
     }
 
-    private func makeMessage(
-        from dto: MessageDTO,
-        chatID: UUID,
-        currentUserID: String?,
-        fallbackLocalID: UUID = UUID()
-    ) -> Message {
-        Message(
-            id: Message.Identifier(chatID: chatID, messageID: dto.messageID),
-            localID: fallbackLocalID,
-            authorID: dto.authorID,
-            authorName: dto.authorName,
-            text: dto.text,
-            createdAt: dto.createdAt,
-            isOutgoing: dto.authorID == currentUserID,
-            status: MessageStatus(rawValue: dto.status) ?? .delivered
-        )
+    private func observeRealtime() async {
+        for await envelope in realtime.observeAllEvents() {
+            switch envelope.event {
+            case .message(let message):
+                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
+                try? await store.append(message: message, for: envelope.chatID)
+            case .messageRead(let messageID):
+                try? await store.updateStatus(for: messageID, in: envelope.chatID, status: .read)
+            case .typing(let participants):
+                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
+                try? await store.updateTypingParticipants(participants, in: envelope.chatID)
+            case .connected, .disconnected:
+                break
+            }
+        }
     }
 
-    private func makeChat(from dto: ChatDTO) -> Chat {
+    private func retryAllPendingMessages() async {
+        do {
+            let pending = try await store.allPendingMessages()
+            let chatIDs = Set(pending.map(\.id.chatID))
+            for chatID in chatIDs {
+                await retryPendingMessages(for: chatID)
+            }
+        } catch {
+            analytics.track(error: error, context: "retry_all_pending_messages")
+        }
+    }
+
+    private func savePendingImage(data: Data, localID: UUID) throws -> URL {
+        let directory = pendingImagesDirectory()
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        let url = directory.appendingPathComponent("\(localID.uuidString).jpg")
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    private func pendingImagesDirectory() -> URL {
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ??
+        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return appSupport.appendingPathComponent("MobileMessengerIOS/pending-images", isDirectory: true)
+    }
+}
+
+private extension ServerChat {
+    func asDomainChat() throws -> Chat {
         Chat(
-            id: dto.id,
-            title: dto.title,
-            lastMessagePreview: dto.lastMessagePreview,
-            lastActivity: dto.lastActivity,
-            unreadCount: dto.unreadCount,
-            typingParticipants: dto.typingParticipants
+            id: id,
+            title: title,
+            lastMessagePreview: lastMessagePreview,
+            lastActivity: lastActivity,
+            unreadCount: unreadCount,
+            typingParticipants: typingParticipants,
+            participantNames: participantNames,
+            participantCount: participantCount
         )
     }
+}
 
-    private func syncRemoteState(
-        for chatID: UUID,
-        networking: ChatNetworking
-    ) async throws -> (chat: Chat, messages: [Message]) {
-        let currentUserID = userSessionProvider()?.userID
-        async let chatRequest = networking.getChat(chatID: chatID)
-        async let messagesRequest = networking.getMessages(chatID: chatID)
-        let (chatDTO, messageDTOs) = try await (chatRequest, messagesRequest)
+private actor PendingSendCoordinator {
+    private var inFlight: Set<UUID> = []
 
-        let chat = makeChat(from: chatDTO)
-        let messages = messageDTOs.map { dto in
-            makeMessage(from: dto, chatID: chatID, currentUserID: currentUserID)
-        }
-
-        try await store.upsert(chats: [chat])
-        try await store.upsert(messages: messages, for: chatID)
-        return (chat, messages)
+    func begin(localID: UUID) -> Bool {
+        inFlight.insert(localID).inserted
     }
 
-    private func syncRemoteStateSilently(for chatID: UUID) async {
-        guard let networking = chatNetworking else { return }
-        _ = try? await syncRemoteState(for: chatID, networking: networking)
-    }
-
-    private func filterChats(_ chats: [Chat], searchQuery: String?) -> [Chat] {
-        guard let query = searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty else {
-            return chats
-        }
-
-        let normalizedQuery = query.lowercased()
-        return chats.filter { chat in
-            chat.title.lowercased().contains(normalizedQuery) ||
-            (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false)
-        }
+    func finish(localID: UUID) {
+        inFlight.remove(localID)
     }
 }

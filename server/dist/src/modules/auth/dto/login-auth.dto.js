@@ -9,29 +9,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateChatDto = void 0;
+exports.LoginAuthDto = void 0;
 const class_validator_1 = require("class-validator");
-class CreateChatDto {
+const request_code_dto_1 = require("./request-code.dto");
+class LoginAuthDto extends request_code_dto_1.RequestCodeDto {
 }
-exports.CreateChatDto = CreateChatDto;
+exports.LoginAuthDto = LoginAuthDto;
 __decorate([
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MinLength)(1),
-    (0, class_validator_1.MaxLength)(120),
+    (0, class_validator_1.Length)(4, 64),
     __metadata("design:type", String)
-], CreateChatDto.prototype, "title", void 0);
-__decorate([
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayUnique)(),
-    (0, class_validator_1.IsUUID)("4", { each: true }),
-    (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", Array)
-], CreateChatDto.prototype, "participantIds", void 0);
-__decorate([
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayUnique)(),
-    (0, class_validator_1.Matches)(/^\+?[1-9]\d{9,14}$/, { each: true }),
-    (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", Array)
-], CreateChatDto.prototype, "participantContacts", void 0);
-//# sourceMappingURL=create-chat.dto.js.map
+], LoginAuthDto.prototype, "password", void 0);
+//# sourceMappingURL=login-auth.dto.js.map

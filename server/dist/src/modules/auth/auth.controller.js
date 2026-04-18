@@ -16,6 +16,7 @@ exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_auth_guard_1 = require("../../jwt-auth.guard");
 const auth_service_1 = require("./auth.service");
+const login_auth_dto_1 = require("./dto/login-auth.dto");
 const request_code_dto_1 = require("./dto/request-code.dto");
 const update_profile_dto_1 = require("./dto/update-profile.dto");
 const verify_code_dto_1 = require("./dto/verify-code.dto");
@@ -29,8 +30,14 @@ let AuthController = class AuthController {
     async verifyCode(body) {
         return this.authService.verifyCode(body);
     }
+    async login(body) {
+        return this.authService.login(body);
+    }
     async getCurrentUser(request) {
         return this.authService.getCurrentUser(request.user.sub);
+    }
+    async listContacts(request) {
+        return this.authService.listContacts(request.user.sub);
     }
     async updateProfile(body, request) {
         return this.authService.updateProfile(request.user.sub, body);
@@ -52,6 +59,13 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "verifyCode", null);
 __decorate([
+    (0, common_1.Post)("login"),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [login_auth_dto_1.LoginAuthDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "login", null);
+__decorate([
     (0, common_1.Get)("me"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Req)()),
@@ -59,6 +73,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "getCurrentUser", null);
+__decorate([
+    (0, common_1.Get)("contacts"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "listContacts", null);
 __decorate([
     (0, common_1.Patch)("me"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

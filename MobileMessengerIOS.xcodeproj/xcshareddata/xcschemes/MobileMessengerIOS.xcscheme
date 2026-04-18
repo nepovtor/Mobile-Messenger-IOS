@@ -28,7 +28,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "24659F4A9FBB3E39D71E45ED"
+               BlueprintIdentifier = "85E6BC1082C21C0208E75EE5"
                BuildableName = "MobileMessengerIOSTests.xctest"
                BlueprintName = "MobileMessengerIOSTests"
                ReferencedContainer = "container:MobileMessengerIOS.xcodeproj">
@@ -41,21 +41,12 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
-      <MacroExpansion>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1C1C5E892B0B598A00A6A7E5"
-            BuildableName = "MobileMessengerIOS.app"
-            BlueprintName = "MobileMessengerIOS"
-            ReferencedContainer = "container:MobileMessengerIOS.xcodeproj">
-         </BuildableReference>
-      </MacroExpansion>
       <Testables>
          <TestableReference
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "24659F4A9FBB3E39D71E45ED"
+               BlueprintIdentifier = "85E6BC1082C21C0208E75EE5"
                BuildableName = "MobileMessengerIOSTests.xctest"
                BlueprintName = "MobileMessengerIOSTests"
                ReferencedContainer = "container:MobileMessengerIOS.xcodeproj">
@@ -73,16 +64,6 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1C1C5E892B0B598A00A6A7E5"
-            BuildableName = "MobileMessengerIOS.app"
-            BlueprintName = "MobileMessengerIOS"
-            ReferencedContainer = "container:MobileMessengerIOS.xcodeproj">
-         </BuildableReference>
-      </BuildableProductRunnable>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -90,16 +71,6 @@
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
       debugDocumentVersioning = "YES">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1C1C5E892B0B598A00A6A7E5"
-            BuildableName = "MobileMessengerIOS.app"
-            BlueprintName = "MobileMessengerIOS"
-            ReferencedContainer = "container:MobileMessengerIOS.xcodeproj">
-         </BuildableReference>
-      </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">

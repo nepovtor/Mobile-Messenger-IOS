@@ -19,6 +19,33 @@ const jwt_1 = require("@nestjs/jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../../entities/user.entity");
+const DEMO_ACCOUNTS = [
+    {
+        contact: "+15551230011",
+        displayName: "Анна Demo",
+        password: "demo1111",
+    },
+    {
+        contact: "+15551230012",
+        displayName: "Борис Demo",
+        password: "demo2222",
+    },
+    {
+        contact: "+15551230013",
+        displayName: "Вера Demo",
+        password: "demo3333",
+    },
+    {
+        contact: "+15551230014",
+        displayName: "Глеб Demo",
+        password: "demo4444",
+    },
+    {
+        contact: "+15551230015",
+        displayName: "Даша Demo",
+        password: "demo5555",
+    },
+];
 let AuthService = AuthService_1 = class AuthService {
     constructor(userRepository, jwtService) {
         this.userRepository = userRepository;
@@ -63,6 +90,18 @@ let AuthService = AuthService_1 = class AuthService {
         }
         return this.createSessionResponse(user);
     }
+    async login({ method, contact, password }) {
+        if (method !== "phone") {
+            throw new common_1.BadRequestException("Only phone method supported");
+        }
+        const demoAccount = DEMO_ACCOUNTS.find((account) => account.contact === contact &&
+            account.password === password.trim());
+        if (!demoAccount) {
+            throw new common_1.UnauthorizedException("Invalid demo credentials");
+        }
+        const user = await this.findOrCreateUser(demoAccount.contact, demoAccount.displayName);
+        return this.createSessionResponse(user);
+    }
     async getCurrentUser(userID) {
         const user = await this.requireUser(userID);
         return {
@@ -70,6 +109,41 @@ let AuthService = AuthService_1 = class AuthService {
             displayName: user.displayName,
             phone: user.phone,
         };
+    }
+    async listContacts(userID) {
+        await this.ensureDemoAccounts();
+        const currentUser = await this.requireUser(userID);
+        const users = await this.userRepository.find({
+            order: { displayName: "ASC" },
+        });
+        const demoOrder = new Map(DEMO_ACCOUNTS.map((account, index) => [account.contact, index]));
+        return users
+            .sort((left, right) => {
+            if (left.id === currentUser.id) {
+                return -1;
+            }
+            if (right.id === currentUser.id) {
+                return 1;
+            }
+            const leftOrder = demoOrder.get(left.phone);
+            const rightOrder = demoOrder.get(right.phone);
+            if (leftOrder !== undefined && rightOrder !== undefined) {
+                return leftOrder - rightOrder;
+            }
+            if (leftOrder !== undefined) {
+                return -1;
+            }
+            if (rightOrder !== undefined) {
+                return 1;
+            }
+            return left.displayName.localeCompare(right.displayName);
+        })
+            .map((user) => ({
+            userID: String(user.id),
+            displayName: user.displayName,
+            contact: user.phone,
+            isCurrentUser: user.id === currentUser.id,
+        }));
     }
     async updateProfile(userID, { displayName }) {
         const user = await this.requireUser(userID);
@@ -98,9 +172,8 @@ let AuthService = AuthService_1 = class AuthService {
         return normalized.slice(0, 50);
     }
     async requireUser(userID) {
-        const numericID = Number(userID);
         const user = await this.userRepository.findOne({
-            where: { id: numericID },
+            where: { id: userID },
         });
         if (!user) {
             throw new common_1.NotFoundException("User not found");
@@ -120,6 +193,29 @@ let AuthService = AuthService_1 = class AuthService {
             displayName: user.displayName,
             phone: user.phone,
         };
+    }
+    async ensureDemoAccounts() {
+        for (const account of DEMO_ACCOUNTS) {
+            await this.findOrCreateUser(account.contact, account.displayName);
+        }
+    }
+    async findOrCreateUser(contact, displayName) {
+        let user = await this.userRepository.findOne({
+            where: { phone: contact },
+        });
+        if (!user) {
+            user = this.userRepository.create({
+                phone: contact,
+                displayName,
+            });
+            await this.userRepository.save(user);
+            return user;
+        }
+        if (user.displayName !== displayName) {
+            user.displayName = displayName;
+            await this.userRepository.save(user);
+        }
+        return user;
     }
 };
 exports.AuthService = AuthService;

@@ -9,8 +9,7 @@ public protocol ReachabilityService: Sendable {
 public final class DefaultReachabilityService: ReachabilityService, @unchecked Sendable {
     private let monitor: NWPathMonitor
     private let queue = DispatchQueue(label: "reachability.queue")
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<Bool>.Continuation] = [:]
+    private var observers: [UUID: AsyncStream<Bool>.Continuation] = [:]
 
     public init() {
         monitor = NWPathMonitor()
@@ -31,26 +30,24 @@ public final class DefaultReachabilityService: ReachabilityService, @unchecked S
     public func observe() -> AsyncStream<Bool> {
         AsyncStream { continuation in
             let id = UUID()
-            lock.lock()
-            continuations[id] = continuation
-            lock.unlock()
-
-            continuation.yield(isReachable)
+            queue.async { [weak self] in
+                guard let self else { return }
+                observers[id] = continuation
+                continuation.yield(monitor.currentPath.status == .satisfied)
+            }
             continuation.onTermination = { [weak self] _ in
-                self?.lock.lock()
-                self?.continuations[id] = nil
-                self?.lock.unlock()
+                self?.queue.async {
+                    self?.observers[id] = nil
+                }
             }
         }
     }
 
     private func broadcast(_ isReachable: Bool) {
-        lock.lock()
-        let activeContinuations = continuations.values
-        lock.unlock()
-
-        for continuation in activeContinuations {
-            continuation.yield(isReachable)
+        queue.async { [weak self] in
+            self?.observers.values.forEach { continuation in
+                continuation.yield(isReachable)
+            }
         }
     }
 }

@@ -13,9 +13,9 @@ public enum AppError: LocalizedError, Sendable {
         case .storage(let description):
             return description
         case .unauthorized:
-            return AppLanguagePreference.localized(ru: "Сессия истекла. Пожалуйста, войдите снова.", en: "Your session has expired. Please sign in again.")
+            return "Сессия истекла. Пожалуйста, войдите снова."
         case .unknown:
-            return AppLanguagePreference.localized(ru: "Что-то пошло не так. Попробуйте позже.", en: "Something went wrong. Please try again later.")
+            return "Что-то пошло не так. Попробуйте позже."
         }
     }
 }

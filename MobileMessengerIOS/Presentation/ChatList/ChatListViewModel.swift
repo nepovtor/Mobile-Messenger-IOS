@@ -1,12 +1,14 @@
 import Foundation
 
-struct ChatListItem: Identifiable, Hashable {
-    let id: UUID
-    let title: String
-    let lastMessagePreview: String?
-    let updatedAt: Date
-    let unreadCount: Int
-    let typingParticipants: [String]
+public struct ChatListItem: Identifiable, Hashable {
+    public let id: UUID
+    public let title: String
+    public let lastMessagePreview: String?
+    public let updatedAt: Date
+    public let unreadCount: Int
+    public let typingParticipants: [String]
+    public let participantNames: [String]
+    public let participantCount: Int
 
     private static let formatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -14,7 +16,7 @@ struct ChatListItem: Identifiable, Hashable {
         return formatter
     }()
 
-    var initials: String {
+    public var initials: String {
         let words = title.split(separator: " ")
         if let first = words.first, let last = words.dropFirst().first {
             return String(first.prefix(1)) + String(last.prefix(1))
@@ -22,116 +24,158 @@ struct ChatListItem: Identifiable, Hashable {
         return title.isEmpty ? "" : String(title.prefix(2))
     }
 
-    var relativeDateString: String {
-        Self.formatter.locale = AppLanguagePreference.current.locale
-        return Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
+    public var relativeDateString: String {
+        Self.formatter.localizedString(for: updatedAt, relativeTo: Date())
+    }
+
+    public var isGroup: Bool {
+        participantCount > 2
+    }
+
+    public var participantsSummary: String? {
+        guard isGroup else { return nil }
+        let visibleNames = participantNames.prefix(3)
+        guard !visibleNames.isEmpty else {
+            return "\(participantCount) участников"
+        }
+
+        let extraCount = max(0, participantNames.count - visibleNames.count)
+        let suffix = extraCount > 0 ? " +\(extraCount)" : ""
+        return visibleNames.joined(separator: ", ") + suffix
+    }
+
+    public init(
+        id: UUID,
+        title: String,
+        lastMessagePreview: String?,
+        updatedAt: Date,
+        unreadCount: Int,
+        typingParticipants: [String],
+        participantNames: [String],
+        participantCount: Int
+    ) {
+        self.id = id
+        self.title = title
+        self.lastMessagePreview = lastMessagePreview
+        self.updatedAt = updatedAt
+        self.unreadCount = unreadCount
+        self.typingParticipants = typingParticipants
+        self.participantNames = participantNames
+        self.participantCount = participantCount
     }
 }
 
 @MainActor
 public final class ChatListViewModel: ObservableObject {
-    @Published private(set) var chats: [ChatListItem] = []
-    @Published var searchQuery: String = "" {
+    @Published public private(set) var chats: [ChatListItem] = []
+    @Published public private(set) var availableContacts: [ContactDTO] = []
+    @Published public var searchQuery: String = "" {
         didSet { scheduleSearch() }
     }
-    @Published var isLoading = false
-    @Published var isShowingError = false
-    @Published var isCreatingChat = false
-    @Published var createChatErrorMessage: String?
+    @Published public var isLoading = false
+    @Published public var isShowingError = false
+    @Published public private(set) var isCreatingChat = false
+    @Published public private(set) var isLoadingCreateContacts = false
+    @Published public private(set) var createContactsError: String?
 
     private let loadChats: LoadChatListUseCase
+    private let observeChats: ObserveChatListUseCase
     private let createChatUseCase: CreateChatUseCase
+    private let contactsService: ContactsNetworking
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
-    private var refreshLoopTask: Task<Void, Never>?
+    private var observeTask: Task<Void, Never>?
+    private var hasLoadedCreateContacts = false
+    private var allChats: [Chat] = []
 
-    init(loadChats: LoadChatListUseCase, createChat: CreateChatUseCase, analytics: AnalyticsService) {
+    public init(
+        loadChats: LoadChatListUseCase,
+        observeChats: ObserveChatListUseCase,
+        createChat: CreateChatUseCase,
+        contactsService: ContactsNetworking,
+        analytics: AnalyticsService
+    ) {
         self.loadChats = loadChats
+        self.observeChats = observeChats
         self.createChatUseCase = createChat
+        self.contactsService = contactsService
         self.analytics = analytics
     }
 
-    func onAppear() {
-        guard refreshLoopTask == nil else { return }
-        Task { await refresh() }
-        refreshLoopTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard !Task.isCancelled else { return }
-                await self?.refresh()
-            }
+    public func onAppear() {
+        guard observeTask == nil else { return }
+        observeTask = Task { [weak self] in
+            await self?.bindChats()
         }
+        Task { await loadLocalFirstContent() }
     }
 
-    func onDisappear() {
-        refreshLoopTask?.cancel()
-        refreshLoopTask = nil
-    }
-
-    func refresh() async {
-        guard !isLoading else { return }
-        let shouldShowLoader = chats.isEmpty
-        if shouldShowLoader {
-            isLoading = true
-        }
+    public func refresh() async {
+        isLoading = chats.isEmpty
         do {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
-            var chatItems = chats.map(makeChatItem(from:))
-
-            // Добавляем ИИ чат в начало списка
-            let aiChat = ChatListItem(
-                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-                title: AppLanguagePreference.localized(ru: "🤖 ИИ Ассистент", en: "🤖 AI Assistant"),
-                lastMessagePreview: AppLanguagePreference.localized(ru: "Чем могу помочь?", en: "How can I help?"),
-                updatedAt: Date(),
-                unreadCount: 0,
-                typingParticipants: []
-            )
-            chatItems.insert(aiChat, at: 0)
-
-            self.chats = chatItems
+            applyChats(chats)
             isShowingError = false
         } catch {
             isShowingError = true
             analytics.track(error: error, context: "chat_list_load")
         }
-        if shouldShowLoader {
-            isLoading = false
-        }
+        isLoading = false
     }
 
-    func createChat(title: String) async -> ChatListItem? {
+    private func loadLocalFirstContent() async {
+        let query = searchQuery.isEmpty ? nil : searchQuery
+        let cachedChats = await loadChats.cached(searchQuery: query)
+        if !cachedChats.isEmpty {
+            applyChats(cachedChats)
+            isShowingError = false
+        }
+        await refresh()
+    }
+
+    @discardableResult
+    public func createChat(title: String, participantContacts: [String]) async -> ChatListItem? {
         guard !isCreatingChat else { return nil }
         isCreatingChat = true
-        createChatErrorMessage = nil
         defer { isCreatingChat = false }
 
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            createChatErrorMessage = AppLanguagePreference.localized(ru: "Название чата не может быть пустым", en: "Chat title cannot be empty")
-            return nil
-        }
-
         do {
-            let chat = try await createChatUseCase(title: trimmedTitle, participantIDs: [])
-            if !searchQuery.isEmpty {
-                searchTask?.cancel()
-                searchQuery = ""
-            }
-            await refresh()
-            return makeChatItem(from: chat)
+            let chat = try await createChatUseCase(title: title, participantContacts: participantContacts)
+            let item = Self.mapChat(chat)
+            chats.removeAll { $0.id == item.id }
+            chats.insert(item, at: 0)
+            allChats.removeAll { $0.id == chat.id }
+            allChats.insert(chat, at: 0)
+            return item
         } catch {
-            createChatErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            isShowingError = true
             analytics.track(error: error, context: "chat_create")
             return nil
         }
     }
 
-    func clearCreateChatState() {
-        createChatErrorMessage = nil
+    public func loadCreateContactsIfNeeded(force: Bool = false) async {
+        guard force || !hasLoadedCreateContacts else { return }
+        guard !isLoadingCreateContacts else { return }
+
+        isLoadingCreateContacts = true
+        defer { isLoadingCreateContacts = false }
+
+        do {
+            let contacts = try await contactsService.listContacts()
+                .filter { !$0.isCurrentUser }
+                .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            availableContacts = contacts
+            createContactsError = nil
+            hasLoadedCreateContacts = true
+        } catch {
+            createContactsError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            analytics.track(error: error, context: "group_contacts_load")
+        }
     }
 
     private func scheduleSearch() {
+        applyCurrentFilter()
         searchTask?.cancel()
         searchTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
@@ -140,14 +184,40 @@ public final class ChatListViewModel: ObservableObject {
         }
     }
 
-    private func makeChatItem(from chat: Chat) -> ChatListItem {
+    private func bindChats() async {
+        for await chats in observeChats() {
+            await MainActor.run {
+                applyChats(chats)
+            }
+        }
+    }
+
+    private func applyChats(_ chats: [Chat]) {
+        allChats = chats
+        applyCurrentFilter()
+    }
+
+    private func applyCurrentFilter() {
+        let normalizedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let visibleChats = allChats.filter { chat in
+            guard !normalizedQuery.isEmpty else { return true }
+            return chat.title.lowercased().contains(normalizedQuery) ||
+            (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false) ||
+            chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
+        }
+        chats = visibleChats.map(Self.mapChat)
+    }
+
+    private static func mapChat(_ chat: Chat) -> ChatListItem {
         ChatListItem(
             id: chat.id,
             title: chat.title,
             lastMessagePreview: chat.lastMessagePreview,
             updatedAt: chat.lastActivity,
             unreadCount: chat.unreadCount,
-            typingParticipants: chat.typingParticipants
+            typingParticipants: chat.typingParticipants,
+            participantNames: chat.participantNames,
+            participantCount: chat.participantCount
         )
     }
 }

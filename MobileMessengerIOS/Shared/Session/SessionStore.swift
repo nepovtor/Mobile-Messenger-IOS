@@ -3,83 +3,75 @@ import Combine
 
 @MainActor
 public final class SessionStore: ObservableObject {
-    public struct AuthenticatedSession: Codable, Equatable, Sendable {
-        public let token: String
-        public let userID: String
-        public let displayName: String
-
-        public init(token: String, userID: String, displayName: String) {
-            self.token = token
-            self.userID = userID
-            self.displayName = displayName
-        }
-    }
-
     public enum State: Equatable {
         case unauthenticated
-        case authenticated(AuthenticatedSession)
+        case authenticated(token: String, userID: UUID, displayName: String)
+    }
+
+    public enum Constants {
+        public static let defaultUserID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        public static let defaultUserDisplayName = "Вы"
+        public static var currentUserID = defaultUserID
+        public static var currentUserDisplayName = defaultUserDisplayName
+        static let tokenKey = "auth.token"
+        static let userIDKey = "auth.user_id"
+        static let displayNameKey = "auth.display_name"
     }
 
     @Published public private(set) var state: State
     private let tokenStore: TokenStore
+    private let defaults: UserDefaults
 
-    public init(tokenStore: TokenStore) {
+    public init(tokenStore: TokenStore, defaults: UserDefaults = .standard) {
         self.tokenStore = tokenStore
-        if let session = tokenStore.retrieveSession() {
-            state = .authenticated(session)
+        self.defaults = defaults
+
+        if let token = tokenStore.retrieveToken(),
+           let storedUserID = defaults.string(forKey: Constants.userIDKey),
+           let userID = UUID(uuidString: storedUserID),
+           let displayName = defaults.string(forKey: Constants.displayNameKey) {
+            state = .authenticated(token: token, userID: userID, displayName: displayName)
+            updateCurrentUser(userID: userID, displayName: displayName)
         } else {
             state = .unauthenticated
+            resetCurrentUser()
         }
     }
 
-    public func authenticate(token: String, userID: String, displayName: String) {
-        let session = AuthenticatedSession(token: token, userID: userID, displayName: displayName)
-        tokenStore.store(session: session)
-        state = .authenticated(session)
-    }
-
-    public func updateDisplayName(_ displayName: String) {
-        guard case .authenticated(let session) = state else { return }
-        let updatedSession = AuthenticatedSession(
-            token: session.token,
-            userID: session.userID,
-            displayName: displayName
-        )
-        tokenStore.store(session: updatedSession)
-        state = .authenticated(updatedSession)
+    public func authenticate(with token: String, userID: UUID, displayName: String) {
+        tokenStore.store(token: token)
+        defaults.set(userID.uuidString, forKey: Constants.userIDKey)
+        defaults.set(displayName, forKey: Constants.displayNameKey)
+        updateCurrentUser(userID: userID, displayName: displayName)
+        state = .authenticated(token: token, userID: userID, displayName: displayName)
     }
 
     public func logout() {
         tokenStore.clear()
+        defaults.removeObject(forKey: Constants.userIDKey)
+        defaults.removeObject(forKey: Constants.displayNameKey)
+        resetCurrentUser()
         state = .unauthenticated
     }
 
     public var authToken: String? {
-        currentSession?.token
-    }
-
-    public var currentSession: AuthenticatedSession? {
-        if case .authenticated(let session) = state {
-            return session
-        }
+        if case .authenticated(let token, _, _) = state { return token }
         return nil
     }
 
-    public var currentUserID: String? {
-        currentSession?.userID
+    private func updateCurrentUser(userID: UUID, displayName: String) {
+        Constants.currentUserID = userID
+        Constants.currentUserDisplayName = displayName
     }
 
-    public var currentUserDisplayName: String? {
-        currentSession?.displayName
-    }
-
-    public var isAuthenticated: Bool {
-        currentSession != nil
+    private func resetCurrentUser() {
+        Constants.currentUserID = Constants.defaultUserID
+        Constants.currentUserDisplayName = Constants.defaultUserDisplayName
     }
 }
 
-public protocol TokenStore: Sendable {
-    func store(session: SessionStore.AuthenticatedSession)
-    func retrieveSession() -> SessionStore.AuthenticatedSession?
+public protocol TokenStore {
+    func store(token: String)
+    func retrieveToken() -> String?
     func clear()
 }

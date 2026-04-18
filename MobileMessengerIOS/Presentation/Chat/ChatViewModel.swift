@@ -1,12 +1,13 @@
 import Foundation
+import UIKit
 
 @MainActor
 public final class ChatViewModel: ObservableObject {
-    enum Banner: Identifiable {
+    public enum Banner: Identifiable {
         case error(String)
         case offline
 
-        var id: String {
+        public var id: String {
             switch self {
             case .error(let message):
                 return "error_\(message)"
@@ -16,42 +17,40 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    @Published private(set) var title: String
-    public let chatID: UUID
-    @Published private(set) var messages: [Message] = []
-    @Published var inputText: String = "" {
-        didSet { scheduleTypingUpdate() }
-    }
-    @Published var isTyping = false
-    @Published private(set) var typingParticipants: [String] = []
-    @Published var banner: Banner?
-    @Published var isLoadingHistory = true
+    @Published public private(set) var title: String
+    @Published public private(set) var messages: [Message] = []
+    @Published public var inputText: String = ""
+    @Published public var isTyping = false
+    @Published public private(set) var isSendingMedia = false
+    @Published public var banner: Banner?
+    @Published public var isLoadingHistory = true
 
+    private let chatID: UUID
     private let observeMessages: ObserveChatMessagesUseCase
     private let loadHistory: LoadChatHistoryUseCase
-    private let loadChatState: (UUID) async throws -> Chat
     private let sendMessageUseCase: SendMessageUseCase
+    private let sendImageMessageUseCase: SendImageMessageUseCase
+    private let setTypingUseCase: SetTypingUseCase
     private let retryPending: RetryPendingMessagesUseCase
     private let markStatus: MarkMessageStatusUseCase
-    private let setTypingState: (UUID, Bool) async -> Void
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
 
     private var observeTask: Task<Void, Never>?
-    private var stateTask: Task<Void, Never>?
-    private var reachabilityTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
+    private var reachabilityTask: Task<Void, Never>?
+    private var isReachable = true
     init(
         chatID: UUID,
         title: String,
         observeMessages: ObserveChatMessagesUseCase,
         loadHistory: LoadChatHistoryUseCase,
-        loadChatState: @escaping (UUID) async throws -> Chat,
         sendMessage: SendMessageUseCase,
+        sendImageMessage: SendImageMessageUseCase,
+        setTyping: SetTypingUseCase,
         retryPending: RetryPendingMessagesUseCase,
         markStatus: MarkMessageStatusUseCase,
-        setTypingState: @escaping (UUID, Bool) async -> Void,
         analytics: AnalyticsService,
         notificationManager: PushNotificationManager,
         reachability: ReachabilityService
@@ -60,11 +59,11 @@ public final class ChatViewModel: ObservableObject {
         self.title = title
         self.observeMessages = observeMessages
         self.loadHistory = loadHistory
-        self.loadChatState = loadChatState
         self.sendMessageUseCase = sendMessage
+        self.sendImageMessageUseCase = sendImageMessage
+        self.setTypingUseCase = setTyping
         self.retryPending = retryPending
         self.markStatus = markStatus
-        self.setTypingState = setTypingState
         self.analytics = analytics
         self.notificationManager = notificationManager
         self.reachability = reachability
@@ -72,102 +71,108 @@ public final class ChatViewModel: ObservableObject {
 
     deinit {
         observeTask?.cancel()
-        stateTask?.cancel()
-        reachabilityTask?.cancel()
         typingTask?.cancel()
+        reachabilityTask?.cancel()
     }
 
-    func onAppear() {
+    public func onAppear() {
         guard observeTask == nil else { return }
         observeTask = Task { [weak self] in
             await self?.bindMessages()
         }
-        stateTask = Task { [weak self] in
-            await self?.pollChatState()
-        }
         reachabilityTask = Task { [weak self] in
-            await self?.bindReachability()
+            await self?.observeReachability()
         }
         Task { await loadInitialHistory() }
     }
 
-    func onDisappear() {
+    public func onDisappear() {
         observeTask?.cancel()
         observeTask = nil
-        stateTask?.cancel()
-        stateTask = nil
+        typingTask?.cancel()
         reachabilityTask?.cancel()
         reachabilityTask = nil
-        typingTask?.cancel()
-        typingTask = nil
-        Task { await setTypingState(chatID, false) }
+        Task { await setTypingUseCase(chatID: chatID, isTyping: false) }
     }
 
-    func sendMessage() {
+    public func sendMessage() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         inputText = ""
-        Task { await setTypingState(chatID, false) }
+        scheduleTypingUpdate(isTyping: false)
 
         Task {
             do {
                 let message = try await sendMessageUseCase(chatID: chatID, text: trimmed, localID: UUID())
                 upsert(message: message)
+                updateBannerState()
             } catch {
-                banner = .error(AppLanguagePreference.localized(ru: "Не удалось отправить сообщение. Попробуйте снова.", en: "Failed to send the message. Please try again."))
+                banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
                 analytics.track(error: error, context: "send_message")
             }
         }
     }
 
-    func retryFailedMessages() {
+    public func retryFailedMessages() {
+        banner = isReachable ? nil : .offline
         Task { await retryPending(chatID: chatID) }
     }
 
-    func markAsRead(messageID: UUID) {
+    public func handleInputChanged(_ text: String) {
+        let shouldReportTyping = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard shouldReportTyping != isTyping else { return }
+        isTyping = shouldReportTyping
+        scheduleTypingUpdate(isTyping: shouldReportTyping)
+    }
+
+    public func sendImage(_ image: UIImage) {
+        guard let prepared = image.preparedForUpload() else {
+            banner = .error("Не удалось обработать изображение")
+            return
+        }
+
+        let caption = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        inputText = ""
+        scheduleTypingUpdate(isTyping: false)
+        isSendingMedia = true
+
+        Task {
+            defer { isSendingMedia = false }
+            do {
+                let message = try await sendImageMessageUseCase(
+                    chatID: chatID,
+                    imageData: prepared.data,
+                    caption: caption.isEmpty ? nil : caption,
+                    localID: UUID()
+                )
+                upsert(message: message)
+                updateBannerState()
+            } catch {
+                banner = .error("Не удалось отправить фото")
+                analytics.track(error: error, context: "send_image")
+            }
+        }
+    }
+
+    public func markAsRead(messageID: UUID) {
         Task { try? await markStatus(chatID: chatID, messageID: messageID, status: .read) }
-    }
-
-    var typingTitle: String {
-        guard let firstParticipant = typingParticipants.first else {
-            return AppLanguagePreference.localized(ru: "Собеседник", en: "Contact")
-        }
-        if typingParticipants.count == 1 {
-            return firstParticipant
-        }
-        return AppLanguagePreference.localized(
-            ru: "\(firstParticipant) и еще \(typingParticipants.count - 1)",
-            en: "\(firstParticipant) and \(typingParticipants.count - 1) more"
-        )
-    }
-
-    var presenceLabel: String {
-        if !reachability.isReachable {
-            return AppLanguagePreference.localized(ru: "Офлайн", en: "Offline")
-        }
-        if isTyping {
-            return AppLanguagePreference.localized(ru: "Печатает", en: "Typing")
-        }
-        return AppLanguagePreference.localized(ru: "Онлайн", en: "Online")
-    }
-
-    var heroStatusValue: String {
-        if isLoadingHistory {
-            return AppLanguagePreference.localized(ru: "Загрузка", en: "Loading")
-        }
-        return presenceLabel
     }
 
     private func loadInitialHistory() async {
         isLoadingHistory = true
+        let cachedHistory = await loadHistory.cached(chatID: chatID, limit: 100, before: nil)
+        if !cachedHistory.isEmpty {
+            messages = cachedHistory
+            isLoadingHistory = false
+        }
+
         do {
             let history = try await loadHistory(chatID: chatID, limit: 100, before: nil)
             messages = history
-            await refreshChatState()
             isLoadingHistory = false
         } catch {
             isLoadingHistory = false
-            banner = .error(AppLanguagePreference.localized(ru: "Не удалось загрузить чат", en: "Failed to load the chat"))
+            banner = .error("Не удалось загрузить чат")
             analytics.track(error: error, context: "load_history")
         }
     }
@@ -176,70 +181,27 @@ public final class ChatViewModel: ObservableObject {
         let stream = observeMessages(chatID: chatID)
         for await message in stream {
             await MainActor.run {
-                let alreadyVisible = messages.contains(where: { $0.id == message.id })
                 upsert(message: message)
-                if !message.isOutgoing && !alreadyVisible && !isLoadingHistory {
+                updateBannerState()
+                if !message.isOutgoing {
                     notificationManager.scheduleLocalNotification(for: message)
                 }
             }
         }
     }
 
-    private func bindReachability() async {
-        applyReachability(reachability.isReachable)
-        for await isReachable in reachability.observe() {
-            await MainActor.run {
-                applyReachability(isReachable)
-            }
-        }
-    }
-
-    private func pollChatState() async {
-        await refreshChatState()
-
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard !Task.isCancelled else { return }
-            await refreshChatState()
-        }
-    }
-
-    private func refreshChatState() async {
-        do {
-            let chat = try await loadChatState(chatID)
-            title = chat.title
-            typingParticipants = chat.typingParticipants
-            isTyping = !chat.typingParticipants.isEmpty
-        } catch {
-            // Background chat refresh is best-effort; the message stream remains usable offline.
-        }
-    }
-
-    private func scheduleTypingUpdate() {
-        let isTyping = !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private func scheduleTypingUpdate(isTyping: Bool) {
         typingTask?.cancel()
-        typingTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            guard !Task.isCancelled, let self else { return }
-            await self.setTypingState(self.chatID, isTyping)
-        }
-    }
-
-    private func applyReachability(_ isReachable: Bool) {
-        if isReachable {
-            if case .offline? = banner {
-                banner = nil
+        typingTask = Task { [chatID, setTypingUseCase] in
+            if isTyping {
+                try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            return
-        }
-
-        if banner == nil {
-            banner = .offline
+            await setTypingUseCase(chatID: chatID, isTyping: isTyping)
         }
     }
 
     private func upsert(message: Message) {
-        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+        if let index = messages.firstIndex(where: { $0.id == message.id || $0.localID == message.localID }) {
             messages[index] = message
         } else {
             messages.append(message)
@@ -250,5 +212,57 @@ public final class ChatViewModel: ObservableObject {
             }
             return lhs.createdAt < rhs.createdAt
         }
+    }
+
+    private func observeReachability() async {
+        isReachable = reachability.isReachable
+        await MainActor.run {
+            updateBannerState()
+        }
+        for await reachable in reachability.observe() {
+            await MainActor.run {
+                isReachable = reachable
+                updateBannerState()
+            }
+        }
+    }
+
+    private func updateBannerState() {
+        if messages.contains(where: { $0.isOutgoing && $0.status == .failed }) {
+            banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
+            return
+        }
+        if !isReachable {
+            banner = .offline
+            return
+        }
+        if case .offline = banner {
+            banner = nil
+            return
+        }
+        if case .error = banner,
+           !messages.contains(where: { $0.isOutgoing && $0.status == .failed }) {
+            banner = nil
+        }
+    }
+}
+
+private struct PreparedUpload {
+    let data: Data
+}
+
+private extension UIImage {
+    func preparedForUpload() -> PreparedUpload? {
+        let target = CGSize(width: 1600, height: 1600)
+        let scale = min(target.width / size.width, target.height / size.height, 1)
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let image = renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: newSize))
+        }
+
+        guard let data = image.jpegData(compressionQuality: 0.78) else { return nil }
+        return PreparedUpload(data: data)
     }
 }

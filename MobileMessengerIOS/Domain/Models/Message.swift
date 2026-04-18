@@ -1,6 +1,11 @@
 import Foundation
 
-public struct Message: Identifiable, Hashable, Sendable {
+public struct Message: Identifiable, Hashable, Sendable, Codable {
+    public enum Kind: String, Codable, Sendable {
+        case text
+        case image
+    }
+
     public struct Identifier: Hashable, Codable, Sendable {
         public let chatID: UUID
         public let messageID: UUID
@@ -13,11 +18,12 @@ public struct Message: Identifiable, Hashable, Sendable {
 
     public let id: Identifier
     public let localID: UUID
-    public let authorID: String
+    public let authorID: UUID
     public let authorName: String
+    public let kind: Kind
     public let text: String
+    public let mediaID: UUID?
     public let createdAt: Date
-    public let isOutgoing: Bool
     public let status: MessageStatus
     public let attachments: [MessageAttachment]
     public let repliedTo: Identifier?
@@ -26,11 +32,12 @@ public struct Message: Identifiable, Hashable, Sendable {
     public init(
         id: Identifier,
         localID: UUID,
-        authorID: String,
+        authorID: UUID,
         authorName: String,
+        kind: Kind = .text,
         text: String,
+        mediaID: UUID? = nil,
         createdAt: Date,
-        isOutgoing: Bool,
         status: MessageStatus,
         attachments: [MessageAttachment] = [],
         repliedTo: Identifier? = nil,
@@ -40,13 +47,18 @@ public struct Message: Identifiable, Hashable, Sendable {
         self.localID = localID
         self.authorID = authorID
         self.authorName = authorName
+        self.kind = kind
         self.text = text
+        self.mediaID = mediaID
         self.createdAt = createdAt
-        self.isOutgoing = isOutgoing
         self.status = status
         self.attachments = attachments
         self.repliedTo = repliedTo
         self.editedAt = editedAt
+    }
+
+    public var isOutgoing: Bool {
+        authorID == SessionStore.Constants.currentUserID
     }
 
     public func updatingStatus(_ status: MessageStatus) -> Message {
@@ -55,13 +67,18 @@ public struct Message: Identifiable, Hashable, Sendable {
             localID: localID,
             authorID: authorID,
             authorName: authorName,
+            kind: kind,
             text: text,
+            mediaID: mediaID,
             createdAt: createdAt,
-            isOutgoing: isOutgoing,
             status: status,
             attachments: attachments,
             repliedTo: repliedTo,
             editedAt: editedAt
         )
+    }
+
+    public var primaryImageURL: URL? {
+        attachments.first(where: { $0.kind == .image })?.url
     }
 }

@@ -10,8 +10,43 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { User } from "../../entities/user.entity";
 import { RequestCodeDto } from "./dto/request-code.dto";
+import { LoginAuthDto } from "./dto/login-auth.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { VerifyCodeDto } from "./dto/verify-code.dto";
+
+type DemoAccount = {
+  contact: string;
+  displayName: string;
+  password: string;
+};
+
+const DEMO_ACCOUNTS: DemoAccount[] = [
+  {
+    contact: "+15551230011",
+    displayName: "Анна Demo",
+    password: "demo1111",
+  },
+  {
+    contact: "+15551230012",
+    displayName: "Борис Demo",
+    password: "demo2222",
+  },
+  {
+    contact: "+15551230013",
+    displayName: "Вера Demo",
+    password: "demo3333",
+  },
+  {
+    contact: "+15551230014",
+    displayName: "Глеб Demo",
+    password: "demo4444",
+  },
+  {
+    contact: "+15551230015",
+    displayName: "Даша Demo",
+    password: "demo5555",
+  },
+];
 
 @Injectable()
 export class AuthService {
@@ -72,6 +107,29 @@ export class AuthService {
     return this.createSessionResponse(user);
   }
 
+  async login({ method, contact, password }: LoginAuthDto) {
+    if (method !== "phone") {
+      throw new BadRequestException("Only phone method supported");
+    }
+
+    const demoAccount = DEMO_ACCOUNTS.find(
+      (account) =>
+        account.contact === contact &&
+        account.password === password.trim(),
+    );
+
+    if (!demoAccount) {
+      throw new UnauthorizedException("Invalid demo credentials");
+    }
+
+    const user = await this.findOrCreateUser(
+      demoAccount.contact,
+      demoAccount.displayName,
+    );
+
+    return this.createSessionResponse(user);
+  }
+
   async getCurrentUser(userID: string) {
     const user = await this.requireUser(userID);
 
@@ -80,6 +138,48 @@ export class AuthService {
       displayName: user.displayName,
       phone: user.phone,
     };
+  }
+
+  async listContacts(userID: string) {
+    await this.ensureDemoAccounts();
+    const currentUser = await this.requireUser(userID);
+    const users = await this.userRepository.find({
+      order: { displayName: "ASC" },
+    });
+    const demoOrder = new Map(
+      DEMO_ACCOUNTS.map((account, index) => [account.contact, index]),
+    );
+
+    return users
+      .sort((left, right) => {
+        if (left.id === currentUser.id) {
+          return -1;
+        }
+        if (right.id === currentUser.id) {
+          return 1;
+        }
+
+        const leftOrder = demoOrder.get(left.phone);
+        const rightOrder = demoOrder.get(right.phone);
+
+        if (leftOrder !== undefined && rightOrder !== undefined) {
+          return leftOrder - rightOrder;
+        }
+        if (leftOrder !== undefined) {
+          return -1;
+        }
+        if (rightOrder !== undefined) {
+          return 1;
+        }
+
+        return left.displayName.localeCompare(right.displayName);
+      })
+      .map((user) => ({
+        userID: String((user as any).id),
+        displayName: user.displayName,
+        contact: user.phone,
+        isCurrentUser: user.id === currentUser.id,
+      }));
   }
 
   async updateProfile(userID: string, { displayName }: UpdateProfileDto) {
@@ -117,10 +217,8 @@ export class AuthService {
   }
 
   private async requireUser(userID: string): Promise<User> {
-    const numericID = Number(userID);
-
     const user = await this.userRepository.findOne({
-      where: { id: numericID as never },
+      where: { id: userID as never },
     });
 
     if (!user) {
@@ -145,5 +243,33 @@ export class AuthService {
       displayName: user.displayName,
       phone: user.phone,
     };
+  }
+
+  private async ensureDemoAccounts() {
+    for (const account of DEMO_ACCOUNTS) {
+      await this.findOrCreateUser(account.contact, account.displayName);
+    }
+  }
+
+  private async findOrCreateUser(contact: string, displayName: string) {
+    let user = await this.userRepository.findOne({
+      where: { phone: contact },
+    });
+
+    if (!user) {
+      user = this.userRepository.create({
+        phone: contact,
+        displayName,
+      });
+      await this.userRepository.save(user);
+      return user;
+    }
+
+    if (user.displayName !== displayName) {
+      user.displayName = displayName;
+      await this.userRepository.save(user);
+    }
+
+    return user;
   }
 }

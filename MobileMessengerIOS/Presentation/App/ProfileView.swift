@@ -1,552 +1,430 @@
 import SwiftUI
 
 @MainActor
-public final class ProfileViewModel: ObservableObject {
-    @Published var displayName: String = ""
-    @Published var contact: String = ""
-    @Published var isLoading = false
-    @Published var isSaving = false
-    @Published var errorMessage: String?
-    @Published var successMessage: String?
+final class ProfileViewModel: ObservableObject {
+    @Published private(set) var contact: String?
+    @Published private(set) var isLoading = false
 
-    private let profileService: ProfileNetworking
-    private let sessionStore: SessionStore
-    private var hasLoaded = false
+    private let contactsService: ContactsNetworking
+    private var loadedUserID: UUID?
 
-    init(profileService: ProfileNetworking, sessionStore: SessionStore) {
-        self.profileService = profileService
-        self.sessionStore = sessionStore
-        self.displayName = sessionStore.currentUserDisplayName ?? ""
+    init(contactsService: ContactsNetworking) {
+        self.contactsService = contactsService
     }
 
-    func onAppear() {
-        guard !hasLoaded else { return }
-        hasLoaded = true
-        Task { await refreshProfile() }
+    func loadIfNeeded(for userID: UUID) async {
+        guard loadedUserID != userID else { return }
+        contact = nil
+        await refresh(for: userID)
     }
 
-    func refreshProfile() async {
+    func refresh(for userID: UUID) async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let profile = try await profileService.getCurrentProfile()
-            displayName = profile.displayName
-            contact = profile.phone
-            if sessionStore.currentUserDisplayName != profile.displayName {
-                sessionStore.updateDisplayName(profile.displayName)
-            }
-            errorMessage = nil
+            let contacts = try await contactsService.listContacts()
+            contact = contacts.first(where: { $0.isCurrentUser || $0.userID == userID })?.contact
+            loadedUserID = userID
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    func saveProfile(displayName: String) async -> Bool {
-        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
-            errorMessage = AppLanguagePreference.localized(ru: "Имя не может быть пустым", en: "Display name cannot be empty")
-            successMessage = nil
-            return false
-        }
-
-        guard !isSaving else { return false }
-        isSaving = true
-        defer { isSaving = false }
-
-        do {
-            let response = try await profileService.updateProfile(displayName: trimmedName)
-            self.displayName = response.displayName
-            self.contact = response.phone
-            sessionStore.authenticate(
-                token: response.token,
-                userID: response.userID,
-                displayName: response.displayName
-            )
-            errorMessage = nil
-            successMessage = AppLanguagePreference.localized(ru: "Профиль обновлен", en: "Profile updated")
-            return true
-        } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            successMessage = nil
-            return false
+            contact = nil
         }
     }
 }
 
 struct ProfileView: View {
-    @StateObject private var viewModel: ProfileViewModel
     @EnvironmentObject private var sessionStore: SessionStore
-    @State private var isShowingLogoutAlert = false
-    @State private var isShowingEditProfile = false
-    @State private var draftDisplayName = ""
-    @AppStorage(AppPreferenceKeys.theme) private var themePreference = AppThemePreference.system.rawValue
-    @AppStorage(AppPreferenceKeys.language) private var languagePreference = AppLanguagePreference.system.rawValue
-    @AppStorage(AppPreferenceKeys.notificationsEnabled) private var notificationsEnabled = true
-    @AppStorage(AppPreferenceKeys.quietHoursEnabled) private var quietHoursEnabled = false
+    @StateObject private var viewModel: ProfileViewModel
 
     @MainActor
-    init(container: AppContainer? = nil) {
-        let container = container ?? .shared
+    init(container: AppContainer) {
         _viewModel = StateObject(wrappedValue: container.makeProfileViewModel())
     }
 
     var body: some View {
+        let profile = currentProfile
+
         NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(uiColor: .systemGroupedBackground),
-                        Color.blue.opacity(0.06),
-                        Color(uiColor: .systemBackground)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        if let bannerMessage = bannerMessage {
-                            bannerView(message: bannerMessage, isError: viewModel.errorMessage != nil)
-                        }
-                        profileHeader
-                        settingsCard
-                        appCard
-                        logoutCard
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+            ScrollView {
+                VStack(spacing: 24) {
+                    heroCard(for: profile)
+                    infoSection(for: profile)
+                    sessionSection
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 32)
             }
-            .navigationBarHidden(true)
-            .sheet(isPresented: $isShowingEditProfile) {
-                editProfileSheet
+            .scrollIndicators(.hidden)
+            .refreshable {
+                await viewModel.refresh(for: profile.userID)
             }
-            .alert(t("Выйти из аккаунта?", "Sign out?"), isPresented: $isShowingLogoutAlert) {
-                Button(t("Отмена", "Cancel"), role: .cancel) {}
-                Button(t("Выйти", "Sign Out"), role: .destructive) {
-                    sessionStore.logout()
-                }
-            } message: {
-                Text(t("Текущая сессия будет завершена на этом устройстве.", "The current session will be ended on this device."))
+            .background(backgroundView)
+            .navigationTitle("Профиль")
+            .navigationBarTitleDisplayMode(.inline)
+            .task(id: profile.userID) {
+                await viewModel.loadIfNeeded(for: profile.userID)
             }
-        }
-        .onAppear {
-            viewModel.onAppear()
-            PushNotificationManager.shared.syncNotificationPreferences()
-        }
-        .onChange(of: notificationsEnabled) { _, _ in
-            PushNotificationManager.shared.syncNotificationPreferences()
-            if !notificationsEnabled {
-                quietHoursEnabled = false
-            }
-        }
-        .onChange(of: quietHoursEnabled) { _, _ in
-            PushNotificationManager.shared.syncNotificationPreferences()
         }
     }
 
-    private var profileHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                gradient: Gradient(colors: [Color.blue.opacity(0.92), Color.purple.opacity(0.74)]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(height: 250)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .overlay(alignment: .topTrailing) {
+    private func heroCard(for profile: (userID: UUID, displayName: String)) -> some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.caption.weight(.bold))
+                Text("Личный профиль")
+                    .font(.footnote.weight(.semibold))
+            }
+            .foregroundStyle(.white.opacity(0.95))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.white.opacity(0.14), in: Capsule())
+
+            ZStack(alignment: .bottomTrailing) {
                 Circle()
-                    .fill(Color.white.opacity(0.14))
-                    .frame(width: 190, height: 190)
-                    .offset(x: 40, y: -40)
+                    .fill(.white.opacity(0.16))
+                    .frame(width: 108, height: 108)
+                    .overlay {
+                        Text(initials(from: profile.displayName))
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+
+                Circle()
+                    .fill(Color(red: 0.24, green: 0.86, blue: 0.46))
+                    .frame(width: 20, height: 20)
+                    .overlay(
+                        Circle()
+                            .stroke(.white, lineWidth: 4)
+                    )
             }
 
-            HStack(alignment: .bottom, spacing: 18) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.22))
-                        .frame(width: 104, height: 104)
+            VStack(spacing: 8) {
+                Text(profile.displayName)
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
 
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 74))
-                        .foregroundColor(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(viewModel.displayName.isEmpty ? (sessionStore.currentUserDisplayName ?? t("Пользователь", "User")) : viewModel.displayName)
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
-
-                    Text(primaryIdentityLabel)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white.opacity(0.82))
-
-                    Label(t("Профиль синхронизирован", "Profile synced"), systemImage: "checkmark.seal.fill")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.white.opacity(0.16), in: Capsule())
-                }
-
-                Spacer(minLength: 12)
-
-                Button {
-                    draftDisplayName = viewModel.displayName.isEmpty ? (sessionStore.currentUserDisplayName ?? "") : viewModel.displayName
-                    isShowingEditProfile = true
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(14)
-                        .background(Color.white.opacity(0.16), in: Circle())
-                }
-            }
-            .padding(24)
-        }
-    }
-
-    private var settingsCard: some View {
-        card(title: t("Настройки", "Settings")) {
-            Button {
-                draftDisplayName = viewModel.displayName.isEmpty ? (sessionStore.currentUserDisplayName ?? "") : viewModel.displayName
-                isShowingEditProfile = true
-            } label: {
-                SettingsMenuRow(
-                    icon: "person.crop.circle.badge.checkmark",
-                    color: .pink,
-                    title: t("Имя профиля", "Profile name"),
-                    subtitle: viewModel.displayName.isEmpty ? t("Не указано", "Not set") : viewModel.displayName,
-                    showsDivider: true
-                )
-            }
-            .buttonStyle(.plain)
-
-            SettingsToggleRow(
-                icon: "bell.badge.fill",
-                color: .blue,
-                title: t("Уведомления", "Notifications"),
-                subtitle: notificationsEnabled ? t("Входящие оповещения включены", "Incoming alerts are enabled") : t("Все локальные уведомления выключены", "All local notifications are disabled"),
-                isOn: $notificationsEnabled,
-                showsDivider: true
-            )
-
-            SettingsToggleRow(
-                icon: "moon.stars.fill",
-                color: .indigo,
-                title: t("Тихие часы", "Quiet Hours"),
-                subtitle: quietHoursEnabled ? t("Сообщения приходят без локальных алертов", "Messages arrive without local alerts") : t("Оповещения приходят сразу", "Alerts arrive immediately"),
-                isOn: $quietHoursEnabled,
-                showsDivider: true
-            )
-            .disabled(!notificationsEnabled)
-            .opacity(notificationsEnabled ? 1 : 0.45)
-
-            Menu {
-                ForEach(AppThemePreference.allCases) { theme in
-                    Button {
-                        themePreference = theme.rawValue
-                    } label: {
-                        if selectedTheme == theme {
-                            Label(theme.title, systemImage: "checkmark")
-                        } else {
-                            Label(theme.title, systemImage: theme.icon)
-                        }
+                Group {
+                    if let contact = viewModel.contact {
+                        Text(contact)
+                    } else if viewModel.isLoading {
+                        Text("Загружаем контакт...")
+                    } else {
+                        Text("Аккаунт готов к работе")
                     }
                 }
-            } label: {
-                SettingsMenuRow(
-                    icon: "paintbrush.fill",
-                    color: .purple,
-                    title: t("Тема", "Theme"),
-                    subtitle: selectedTheme.title,
-                    showsDivider: true
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.82))
+                .multilineTextAlignment(.center)
+            }
+
+            HStack(spacing: 10) {
+                heroChip(title: "ID \(shortID(from: profile.userID))", systemImage: "number")
+                heroChip(title: "Сессия активна", systemImage: "checkmark.circle.fill")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 28)
+        .background(
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.16, green: 0.50, blue: 0.98),
+                            Color(red: 0.24, green: 0.68, blue: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 )
-            }
-            .buttonStyle(.plain)
-
-            Menu {
-                ForEach(AppLanguagePreference.allCases) { appLanguage in
-                    Button {
-                        languagePreference = appLanguage.rawValue
-                    } label: {
-                        if selectedLanguage == appLanguage {
-                            Label(appLanguage.optionTitle, systemImage: "checkmark")
-                        } else {
-                            Label(appLanguage.optionTitle, systemImage: appLanguage == .system ? "iphone.gen3" : "globe")
-                        }
-                    }
-                }
-            } label: {
-                SettingsMenuRow(
-                    icon: "globe",
-                    color: .teal,
-                    title: t("Язык", "Language"),
-                    subtitle: selectedLanguage.optionTitle,
-                    showsDivider: false
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .fill(.white.opacity(0.08))
+                        .blur(radius: 30)
+                        .offset(x: 40, y: -60)
+                        .mask(
+                            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        )
                 )
-            }
-            .buttonStyle(.plain)
+        )
+        .shadow(color: Color.black.opacity(0.14), radius: 26, y: 16)
+    }
+
+    private func infoSection(for profile: (userID: UUID, displayName: String)) -> some View {
+        ProfileSection(title: "Информация") {
+            ProfileInfoRow(
+                systemImage: contactIconName,
+                tint: Color(red: 0.15, green: 0.54, blue: 0.98),
+                value: contactValue,
+                title: contactTitle,
+                isMonospaced: false
+            )
+
+            Divider()
+                .padding(.leading, 58)
+
+            ProfileInfoRow(
+                systemImage: "person.text.rectangle.fill",
+                tint: Color(red: 0.22, green: 0.70, blue: 0.50),
+                value: profile.displayName,
+                title: "Имя профиля",
+                isMonospaced: false
+            )
+
+            Divider()
+                .padding(.leading, 58)
+
+            ProfileInfoRow(
+                systemImage: "number.square.fill",
+                tint: Color(red: 0.50, green: 0.46, blue: 0.96),
+                value: profile.userID.uuidString,
+                title: "ID аккаунта",
+                isMonospaced: true
+            )
         }
     }
 
-    private var appCard: some View {
-        card(title: t("Приложение", "App")) {
-            SettingsInfoRow(icon: "info.circle.fill", color: .blue, title: t("О приложении", "About"), subtitle: appVersionLabel, showsDivider: true)
-            SettingsInfoRow(icon: "network", color: .teal, title: "Backend", subtitle: backendLabel, showsDivider: true)
-            SettingsInfoRow(icon: "person.text.rectangle", color: .indigo, title: t("Аккаунт", "Account"), subtitle: shortUserID, showsDivider: true)
-            SettingsInfoRow(icon: "star.fill", color: .orange, title: t("Визуальный режим", "Visual style"), subtitle: t("Градиенты, карточки и адаптивная тема", "Gradients, cards and adaptive theme"), showsDivider: false)
-        }
-    }
-
-    private var logoutCard: some View {
-        Button {
-            isShowingLogoutAlert = true
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "arrow.right.square.fill")
-                    .foregroundColor(.red)
-                    .frame(width: 28)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t("Выйти", "Sign Out"))
-                        .font(.headline)
-                        .foregroundColor(.red)
-                    Text(t("Потребуется повторный вход по коду", "You will need to sign in with a code again"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-            .padding(18)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func card<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.headline)
+    private var sessionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Сессия")
 
             VStack(spacing: 0) {
-                content()
-            }
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        }
-    }
+                ProfileInfoRow(
+                    systemImage: "iphone.gen3",
+                    tint: Color(red: 0.96, green: 0.63, blue: 0.22),
+                    value: "Это устройство",
+                    title: "Текущая активная сессия",
+                    isMonospaced: false
+                )
 
-    private var appVersionLabel: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-        return t("Версия \(version)", "Version \(version)")
-    }
+                Divider()
+                    .padding(.leading, 58)
 
-    private var primaryIdentityLabel: String {
-        if !viewModel.contact.isEmpty {
-            return viewModel.contact
-        }
-        return shortUserID
-    }
+                ProfileInfoRow(
+                    systemImage: "message.badge.waveform.fill",
+                    tint: Color(red: 0.22, green: 0.74, blue: 0.86),
+                    value: "Messenger готов к диалогам",
+                    title: "Уведомления и чат доступны",
+                    isMonospaced: false
+                )
 
-    private var shortUserID: String {
-        guard let userID = sessionStore.currentUserID else {
-            return t("ID: не определён", "ID: unavailable")
-        }
-        return "ID: \(userID.prefix(8))..."
-    }
+                Divider()
+                    .padding(.leading, 58)
 
-    private var selectedTheme: AppThemePreference {
-        AppThemePreference(rawValue: themePreference) ?? .system
-    }
+                Button(role: .destructive) {
+                    sessionStore.logout()
+                } label: {
+                    HStack(spacing: 14) {
+                        iconBadge(
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            tint: .red
+                        )
 
-    private var selectedLanguage: AppLanguagePreference {
-        AppLanguagePreference(rawValue: languagePreference) ?? .system
-    }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Выйти")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.red)
 
-    private var backendLabel: String {
-        let host = DefaultConfigService().restBaseURL.host() ?? "localhost"
-        return "\(host):\(DefaultConfigService().restBaseURL.port ?? 8080)"
-    }
-
-    private var bannerMessage: String? {
-        viewModel.errorMessage ?? viewModel.successMessage
-    }
-
-    @ViewBuilder
-    private func bannerView(message: String, isError: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(.white)
-            Text(message)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.white)
-            Spacer()
-        }
-        .padding(14)
-        .background((isError ? Color.red : Color.green), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var editProfileSheet: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(t("Обновите имя, под которым вас видят в приложении.", "Update the name other people see in the app."))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                TextField(t("Имя профиля", "Profile name"), text: $draftDisplayName)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .padding(.horizontal, 16)
-                    .frame(height: 52)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-                if viewModel.isSaving {
-                    ProgressView(t("Сохраняем профиль...", "Saving profile..."))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Spacer()
-            }
-            .padding(20)
-            .navigationTitle(t("Редактировать профиль", "Edit profile"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(t("Отмена", "Cancel")) {
-                        isShowingEditProfile = false
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(t("Сохранить", "Save")) {
-                        Task {
-                            if await viewModel.saveProfile(displayName: draftDisplayName) {
-                                isShowingEditProfile = false
-                            }
+                            Text("Завершить текущую сессию")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
+
+                        Spacer()
                     }
-                    .disabled(draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || viewModel.isSaving)
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 18)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(Color.white.opacity(0.55), lineWidth: 1)
+            )
         }
     }
 
-    private func t(_ ru: String, _ en: String) -> String {
-        selectedLanguage.text(ru: ru, en: en)
+    private func heroChip(title: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+            Text(title)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.white.opacity(0.14), in: Capsule())
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+    }
+
+    private func iconBadge(systemImage: String, tint: Color) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(tint.opacity(0.14))
+            .frame(width: 40, height: 40)
+            .overlay {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+    }
+
+    private var backgroundView: some View {
+        ZStack(alignment: .top) {
+            Color(uiColor: .systemGroupedBackground)
+                .ignoresSafeArea()
+
+            LinearGradient(
+                colors: [
+                    Color(red: 0.80, green: 0.90, blue: 1.0),
+                    Color(red: 0.94, green: 0.97, blue: 1.0),
+                    Color(uiColor: .systemGroupedBackground)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 320)
+            .ignoresSafeArea(edges: .top)
+
+            Circle()
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 220, height: 220)
+                .blur(radius: 18)
+                .offset(x: -120, y: -70)
+
+            Circle()
+                .fill(Color(red: 0.45, green: 0.78, blue: 1.0).opacity(0.18))
+                .frame(width: 260, height: 260)
+                .blur(radius: 24)
+                .offset(x: 120, y: -90)
+        }
+    }
+
+    private var contactValue: String {
+        if let contact = viewModel.contact {
+            return contact
+        }
+        return viewModel.isLoading ? "Загружаем контакт..." : "Контакт недоступен"
+    }
+
+    private var contactTitle: String {
+        guard let contact = viewModel.contact else {
+            return "Контакт аккаунта"
+        }
+        return contact.contains("@") ? "Email" : "Телефон"
+    }
+
+    private var contactIconName: String {
+        guard let contact = viewModel.contact else {
+            return "person.crop.circle.badge.questionmark"
+        }
+        return contact.contains("@") ? "envelope.fill" : "phone.fill"
+    }
+
+    private var currentProfile: (userID: UUID, displayName: String) {
+        switch sessionStore.state {
+        case .authenticated(_, let userID, let displayName):
+            return (userID, displayName)
+        case .unauthenticated:
+            return (SessionStore.Constants.currentUserID, SessionStore.Constants.currentUserDisplayName)
+        }
+    }
+
+    private func initials(from displayName: String) -> String {
+        let words = displayName.split(separator: " ")
+        if let first = words.first, let second = words.dropFirst().first {
+            return String(first.prefix(1)) + String(second.prefix(1))
+        }
+        return String(displayName.prefix(2)).uppercased()
+    }
+
+    private func shortID(from userID: UUID) -> String {
+        String(userID.uuidString.prefix(8)).uppercased()
     }
 }
 
-private struct SettingsToggleRow: View {
-    let icon: String
-    let color: Color
+private struct ProfileSection<Content: View>: View {
     let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
-    let showsDivider: Bool
+    let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                    .frame(width: 28)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title.uppercased())
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Toggle("", isOn: $isOn)
-                    .labelsHidden()
-                    .tint(color)
+            VStack(spacing: 0) {
+                content
             }
-            .padding(18)
-
-            if showsDivider {
-                Divider()
-                    .padding(.leading, 60)
-            }
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(Color.white.opacity(0.55), lineWidth: 1)
+            )
         }
     }
 }
 
-private struct SettingsMenuRow: View {
-    let icon: String
-    let color: Color
+private struct ProfileInfoRow: View {
+    let systemImage: String
+    let tint: Color
+    let value: String
     let title: String
-    let subtitle: String
-    let showsDivider: Bool
+    let isMonospaced: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                    .frame(width: 28)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(tint.opacity(0.14))
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(tint)
                 }
 
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .padding(18)
-
-            if showsDivider {
-                Divider()
-                    .padding(.leading, 60)
-            }
-        }
-    }
-}
-
-private struct SettingsInfoRow: View {
-    let icon: String
-    let color: Color
-    let title: String
-    let subtitle: String
-    let showsDivider: Bool
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                    .frame(width: 28)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Group {
+                    if isMonospaced {
+                        Text(value)
+                            .font(.system(.footnote, design: .monospaced))
+                    } else {
+                        Text(value)
+                            .font(.body.weight(.semibold))
+                    }
                 }
+                .foregroundStyle(.primary)
+                .lineLimit(isMonospaced ? 3 : 2)
+                .multilineTextAlignment(.leading)
 
-                Spacer()
+                Text(title)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .padding(18)
 
-            if showsDivider {
-                Divider()
-                    .padding(.leading, 60)
-            }
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
     }
 }

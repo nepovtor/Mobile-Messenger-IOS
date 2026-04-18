@@ -100,7 +100,16 @@ let ChatService = ChatService_1 = class ChatService {
         return messageDto;
     }
     async createChat(body, ownerID) {
-        const participantIDs = Array.from(new Set([...body.participantIds, ownerID]));
+        const participantIDsFromContacts = body.participantContacts?.length
+            ? (await this.userRepository.findBy({
+                phone: (0, typeorm_2.In)(body.participantContacts),
+            })).map((user) => user.id)
+            : [];
+        const participantIDs = Array.from(new Set([
+            ...(body.participantIds ?? []),
+            ...participantIDsFromContacts,
+            ownerID,
+        ]));
         const participants = await this.userRepository.findBy({
             id: (0, typeorm_2.In)(participantIDs),
         });
