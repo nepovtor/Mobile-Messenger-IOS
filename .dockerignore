@@ -1,0 +1,14 @@
+.git
+.gitignore
+.DS_Store
+.cloudflared.log
+.cloudflared.pid
+.server.log
+.server.pid
+.tunnel_url
+build-ios
+MobileMessengerIOS
+MobileMessengerIOS.xcodeproj
+server/dist
+server/node_modules
+server/src/modules/auth/auth.service.ts.bak
