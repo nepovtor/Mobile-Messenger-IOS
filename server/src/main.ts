@@ -29,7 +29,7 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT ? Number(process.env.PORT) : 8080;
-  await app.listen(port, '0.0.0.0');
+  await app.listen(port, "0.0.0.0");
   // eslint-disable-next-line no-console
   console.log(
     `API is ready on http://localhost:${port}/api with ${corsOrigins.length} CORS origin(s)`,

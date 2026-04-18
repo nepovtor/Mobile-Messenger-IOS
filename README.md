@@ -65,9 +65,11 @@ npm run start:dev
 
 ## iOS-приложение
 
-Debug-конфигурация уже настроена на локальный backend:
+Debug-конфигурация по умолчанию смотрит в публичный backend, а не в `localhost`.
 
-- `REST_BASE_URL = http://127.0.0.1:8080/api`
+- Базовый debug endpoint задается в `MobileMessengerIOS/Configurations/Debug.xcconfig`.
+- Локальная разработка через публичный tunnel генерирует файл `MobileMessengerIOS/Configurations/Debug.public.xcconfig`, который переопределяет debug endpoint.
+- После `make up` приложение будет использовать публичный Cloudflare tunnel URL вида `https://...trycloudflare.com/api`.
 
 Запуск из Xcode:
 
@@ -86,6 +88,18 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   build
 ```
+
+Полный локальный flow с публичным endpoint:
+
+```bash
+make up
+```
+
+Команда:
+
+- поднимет backend и инфраструктуру;
+- откроет публичный Cloudflare tunnel;
+- сгенерирует `Debug.public.xcconfig` для iOS, чтобы debug-сборка использовала публичный URL вместо локального.
 
 ## Демо-авторизация
 
@@ -128,4 +142,5 @@ npm test
 
 - В git должны храниться только исходники и нужные проектные файлы.
 - Пользовательские Xcode-артефакты, `.DS_Store`, локальные `.env`, `build/`, `server/dist/` и `server/node_modules/` игнорируются.
+- Сгенерированный `MobileMessengerIOS/Configurations/Debug.public.xcconfig` не хранится в git и пересоздается через `make configure-ios` / `make up`.
 - GitHub Actions теперь запускает iOS unit-тесты и backend pipeline: `lint` + `e2e` + `build`.

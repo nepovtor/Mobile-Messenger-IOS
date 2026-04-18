@@ -26,6 +26,7 @@
 
 ## Notes
 
-- `NSAllowsArbitraryLoads` was removed; only `localhost` and `127.0.0.1` remain as ATS exceptions for development.
+- `NSAllowsArbitraryLoads` was removed; only `localhost` and `127.0.0.1` remain as ATS exceptions for local development fallback.
+- Debug builds are now expected to use a public endpoint by default or a generated tunnel override in `MobileMessengerIOS/Configurations/Debug.public.xcconfig`.
 - The project currently has no checked-in `.entitlements` file, so APNs and any other capabilities must be configured explicitly before shipping if they are required.
 - App Store upload still requires a real production backend and your Apple account credentials.

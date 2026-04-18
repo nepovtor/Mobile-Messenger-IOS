@@ -3,6 +3,8 @@ SHELL := /bin/bash
 PROJECT_DIR := $(CURDIR)
 SERVER_DIR := $(PROJECT_DIR)/server
 BUILD_DIR := $(PROJECT_DIR)/build-ios
+IOS_CONFIG_DIR := $(PROJECT_DIR)/MobileMessengerIOS/Configurations
+PUBLIC_DEBUG_XCCONFIG := $(IOS_CONFIG_DIR)/Debug.public.xcconfig
 
 DEVICE_NAME := iPhone S
 DEVICE_ID := 00008101-000210163441001E
@@ -15,13 +17,15 @@ TUNNEL_PID_FILE := $(PROJECT_DIR)/.cloudflared.pid
 TUNNEL_LOG := $(PROJECT_DIR)/.cloudflared.log
 TUNNEL_URL_FILE := $(PROJECT_DIR)/.tunnel_url
 
-.PHONY: help server server-stop tunnel tunnel-stop tunnel-url configure-ios build-ios install-ios launch-ios reinstall-ios up all down status clean
+.PHONY: help infra infra-stop server server-stop tunnel tunnel-stop tunnel-url configure-ios build-ios install-ios launch-ios reinstall-ios up all down status clean
 
 help:
+	@echo "make infra          - start PostgreSQL and MinIO via Docker Compose"
+	@echo "make infra-stop     - stop PostgreSQL and MinIO containers"
 	@echo "make server         - start backend on port $(PORT)"
 	@echo "make tunnel         - start Cloudflare tunnel and save URL"
 	@echo "make tunnel-url     - print current tunnel URL"
-	@echo "make configure-ios  - patch iOS app config with tunnel URL"
+	@echo "make configure-ios  - generate Debug.public.xcconfig from tunnel URL"
 	@echo "make build-ios      - build app for $(DEVICE_NAME)"
 	@echo "make install-ios    - install app on $(DEVICE_NAME)"
 	@echo "make launch-ios     - launch app on $(DEVICE_NAME)"
@@ -32,14 +36,53 @@ help:
 	@echo "make status         - show backend/tunnel status"
 	@echo "make clean          - remove build artifacts"
 
-server:
+infra:
+	@docker compose -f "$(SERVER_DIR)/docker-compose.dev.yml" up -d
+	@echo "Waiting for PostgreSQL..."
+	@for i in {1..30}; do \
+		if docker compose -f "$(SERVER_DIR)/docker-compose.dev.yml" exec -T postgres pg_isready -U postgres -d messenger >/dev/null 2>&1; then \
+			echo "PostgreSQL is ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "PostgreSQL did not become ready"; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo "Waiting for MinIO..."
+	@for i in {1..30}; do \
+		if curl -sf "http://127.0.0.1:9000/minio/health/live" >/dev/null; then \
+			echo "MinIO is ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "MinIO did not become ready"; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+
+infra-stop:
+	@docker compose -f "$(SERVER_DIR)/docker-compose.dev.yml" down
+	@echo "Infrastructure stopped"
+
+server: infra
 	@mkdir -p "$(SERVER_DIR)"
 	@if [ ! -f "$(SERVER_DIR)/.env" ] && [ -f "$(SERVER_DIR)/.env.example" ]; then cp "$(SERVER_DIR)/.env.example" "$(SERVER_DIR)/.env"; fi
+	@if [ ! -d "$(SERVER_DIR)/node_modules" ]; then cd "$(SERVER_DIR)" && npm install; fi
 	@kill -9 $$(lsof -ti tcp:$(PORT)) 2>/dev/null || true
 	@cd "$(SERVER_DIR)" && nohup npm run start:dev > "$(PROJECT_DIR)/.server.log" 2>&1 & echo $$! > "$(SERVER_PID_FILE)"
 	@echo "Starting backend..."
-	@sleep 4
-	@curl -sf "http://127.0.0.1:$(PORT)/api" >/dev/null && echo "Backend is up on http://127.0.0.1:$(PORT)/api" || (echo "Backend did not start. Check .server.log"; exit 1)
+	@for i in {1..30}; do \
+		if curl -sf "http://127.0.0.1:$(PORT)/api/health" >/dev/null; then \
+			echo "Backend is up on http://127.0.0.1:$(PORT)/api"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "Backend did not start. Check .server.log"; \
+	exit 1
 
 server-stop:
 	@if [ -f "$(SERVER_PID_FILE)" ]; then kill -9 $$(cat "$(SERVER_PID_FILE)") 2>/dev/null || true; rm -f "$(SERVER_PID_FILE)"; fi
@@ -69,23 +112,20 @@ tunnel-url:
 configure-ios:
 	@if [ ! -f "$(TUNNEL_URL_FILE)" ]; then echo "Tunnel URL not found. Run: make tunnel"; exit 1; fi
 	@export NEW_URL="$$(cat "$(TUNNEL_URL_FILE)")"; \
-	python3 -c 'import os,re,plistlib; from pathlib import Path; \
-config_path=Path("MobileMessengerIOS/Shared/Config/AppConfig.swift"); \
-plist_path=Path("MobileMessengerIOS/Info.plist"); \
-new=os.environ["NEW_URL"].rstrip("/"); \
-text=config_path.read_text(); \
-text=re.sub(r"https://[A-Za-z0-9\\-]+\\.trycloudflare\\.com/api", new + "/api", text); \
-text=re.sub(r"http://127\\.0\\.0\\.1:8080/api", new + "/api", text); \
-text=re.sub(r"http://172\\.20\\.\\d+\\.\\d+:8080/api", new + "/api", text); \
-text=re.sub(r"wss://[A-Za-z0-9\\-]+\\.trycloudflare\\.com", new.replace("https://", "wss://"), text); \
-text=re.sub(r"ws://127\\.0\\.0\\.1:8080", new.replace("https://", "wss://"), text); \
-text=re.sub(r"ws://172\\.20\\.\\d+\\.\\d+:8080", new.replace("https://", "wss://"), text); \
-config_path.write_text(text); \
-data=plistlib.loads(plist_path.read_bytes()); \
-ats=data.setdefault("NSAppTransportSecurity", {}); \
-ats["NSAllowsArbitraryLoads"]=True; \
-plist_path.write_bytes(plistlib.dumps(data)); \
-print("Configured iOS app with:", new)'
+	python3 -c 'import os; from pathlib import Path; from urllib.parse import urlparse; \
+	url = os.environ["NEW_URL"].rstrip("/"); \
+	parsed = urlparse(url); \
+	if parsed.scheme != "https" or not parsed.netloc: \
+		raise SystemExit("Expected https tunnel URL"); \
+	config_path = Path("$(PUBLIC_DEBUG_XCCONFIG)"); \
+	config_path.parent.mkdir(parents=True, exist_ok=True); \
+	config_path.write_text( \
+		"PUBLIC_API_SCHEME = https\\n" \
+		f"PUBLIC_API_HOST = {parsed.netloc}\\n" \
+		"PUBLIC_API_PREFIX = api\\n" \
+		f"PUBLIC_WS_HOST = {parsed.netloc}\\n" \
+	); \
+	print(f"Configured iOS debug public endpoint: {url}/api")'
 
 build-ios:
 	@rm -rf "$(BUILD_DIR)"
@@ -122,6 +162,7 @@ up: server tunnel configure-ios
 all: up build-ios reinstall-ios
 
 down: tunnel-stop server-stop
+	@$(MAKE) infra-stop
 
 status:
 	@echo "=== Backend ==="
@@ -130,8 +171,11 @@ status:
 	@echo "=== Tunnel ==="
 	@if [ -f "$(TUNNEL_URL_FILE)" ]; then cat "$(TUNNEL_URL_FILE)"; else echo "No tunnel URL"; fi
 	@echo
+	@echo "=== iOS Debug Endpoint Override ==="
+	@if [ -f "$(PUBLIC_DEBUG_XCCONFIG)" ]; then cat "$(PUBLIC_DEBUG_XCCONFIG)"; else echo "No generated xcconfig"; fi
+	@echo
 	@echo "=== Device ==="
 	@xcrun xctrace list devices | grep "iPhone S" || true
 
 clean:
-	@rm -rf "$(BUILD_DIR)" "$(TUNNEL_LOG)" "$(TUNNEL_URL_FILE)" "$(SERVER_PID_FILE)" "$(TUNNEL_PID_FILE)" "$(PROJECT_DIR)/.server.log"
+	@rm -rf "$(BUILD_DIR)" "$(TUNNEL_LOG)" "$(TUNNEL_URL_FILE)" "$(SERVER_PID_FILE)" "$(TUNNEL_PID_FILE)" "$(PROJECT_DIR)/.server.log" "$(PUBLIC_DEBUG_XCCONFIG)"

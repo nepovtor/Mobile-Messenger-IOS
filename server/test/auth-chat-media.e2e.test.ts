@@ -293,3 +293,127 @@ test("password login is disabled when the feature flag is off", async (t) => {
     })
     .expect(403);
 });
+
+test("verification codes are single-use and contacts keep current user first", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const requestCodeResponse = await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ method: "phone", contact: "+15551230011" })
+    .expect(201);
+
+  const debugCode = requestCodeResponse.body.debugCode as string;
+  assert.equal(typeof debugCode, "string");
+
+  const firstVerifyResponse = await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      code: debugCode,
+    })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      code: debugCode,
+    })
+    .expect(401);
+
+  const contactsResponse = await request(app.getHttpServer())
+    .get("/api/auth/contacts")
+    .set("Authorization", `Bearer ${firstVerifyResponse.body.token}`)
+    .expect(200);
+
+  assert.equal(contactsResponse.body[0].isCurrentUser, true);
+  assert.equal(contactsResponse.body[0].contact, "+15551230011");
+});
+
+test("chat unread counters drop after mark-read and paginated history stays ordered", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const firstClientMessageID = randomUUID();
+  const secondClientMessageID = randomUUID();
+
+  const firstMessageResponse = await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: firstClientMessageID,
+      kind: "text",
+      text: "Первое сообщение",
+    })
+    .expect(201);
+
+  const secondMessageResponse = await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: secondClientMessageID,
+      kind: "text",
+      text: "Второе сообщение",
+    })
+    .expect(201);
+
+  const unreadBeforeRead = await request(app.getHttpServer())
+    .get("/api/chats")
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(unreadBeforeRead.body.length, 1);
+  assert.equal(unreadBeforeRead.body[0].unreadCount, 2);
+
+  const pagedHistory = await request(app.getHttpServer())
+    .get(`/api/chats/${chatID}/messages`)
+    .query({ limit: 2, before: secondMessageResponse.body.id })
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(pagedHistory.body.length, 1);
+  assert.equal(pagedHistory.body[0].id, firstMessageResponse.body.id);
+  assert.equal(pagedHistory.body[0].text, "Первое сообщение");
+
+  await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages/${secondMessageResponse.body.id}/read`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(201);
+
+  const unreadAfterRead = await request(app.getHttpServer())
+    .get("/api/chats")
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(unreadAfterRead.body.length, 1);
+  assert.equal(unreadAfterRead.body[0].unreadCount, 0);
+
+  const updatedMessages = await request(app.getHttpServer())
+    .get(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(updatedMessages.body.length, 2);
+  assert.equal(updatedMessages.body[0].status, "read");
+  assert.equal(updatedMessages.body[1].status, "read");
+});
