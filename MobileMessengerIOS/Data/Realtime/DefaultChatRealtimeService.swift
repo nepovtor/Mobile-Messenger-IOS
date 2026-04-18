@@ -10,6 +10,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private let decoder: JSONDecoder
     private var state: ChatRealtimeConnectionState = .disconnected
     private var shouldMaintainConnection = false
+    private var isRealtimeTemporarilyDisabled = false
     private var subscribedChats: Set<UUID> = []
     private var eventContinuations: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation] = [:]
     private var globalEventContinuations: [UUID: AsyncStream<ChatRealtimeEnvelope>.Continuation] = [:]
@@ -41,6 +42,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         guard featureFlags.isRealtimeEnabled else { return }
         stateQueue.async { [weak self] in
             guard let self else { return }
+            isRealtimeTemporarilyDisabled = false
             shouldMaintainConnection = true
             guard connectionTask == nil else { return }
             updateState(.connecting(retry: 0))
@@ -145,7 +147,15 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
             let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AppError.network(description: "Некорректный ответ realtime")
+            }
+            if [404, 405, 501].contains(httpResponse.statusCode) {
+                analytics.track(error: AppError.network(description: "Realtime temporarily unavailable"), context: "sse_unsupported")
+                disableRealtimeLoop()
+                return
+            }
+            guard 200..<300 ~= httpResponse.statusCode else {
                 throw AppError.network(description: "Не удалось подключиться к SSE")
             }
 
@@ -238,9 +248,20 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         }
     }
 
+    private func disableRealtimeLoop() {
+        stateQueue.async { [weak self] in
+            guard let self else { return }
+            isRealtimeTemporarilyDisabled = true
+            shouldMaintainConnection = false
+            connectionTask?.cancel()
+            connectionTask = nil
+            updateState(.connected)
+        }
+    }
+
     private var shouldReconnect: Bool {
         stateQueue.sync {
-            shouldMaintainConnection
+            shouldMaintainConnection && !isRealtimeTemporarilyDisabled
         }
     }
 
