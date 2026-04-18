@@ -112,7 +112,20 @@ tunnel-url:
 configure-ios:
 	@if [ ! -f "$(TUNNEL_URL_FILE)" ]; then echo "Tunnel URL not found. Run: make tunnel"; exit 1; fi
 	@export NEW_URL="$$(cat "$(TUNNEL_URL_FILE)")"; \
-	python3 scripts/configure_ios.py "$(PUBLIC_DEBUG_XCCONFIG)"
+	python3 -c 'import os; from pathlib import Path; from urllib.parse import urlparse; \
+	url = os.environ["NEW_URL"].rstrip("/"); \
+	parsed = urlparse(url); \
+	if parsed.scheme != "https" or not parsed.netloc: \
+		raise SystemExit("Expected https tunnel URL"); \
+	config_path = Path("$(PUBLIC_DEBUG_XCCONFIG)"); \
+	config_path.parent.mkdir(parents=True, exist_ok=True); \
+	config_path.write_text( \
+		"PUBLIC_API_SCHEME = https\\n" \
+		f"PUBLIC_API_HOST = {parsed.netloc}\\n" \
+		"PUBLIC_API_PREFIX = api\\n" \
+		f"PUBLIC_WS_HOST = {parsed.netloc}\\n" \
+	); \
+	print(f"Configured iOS debug public endpoint: {url}/api")'
 
 build-ios:
 	@rm -rf "$(BUILD_DIR)"
