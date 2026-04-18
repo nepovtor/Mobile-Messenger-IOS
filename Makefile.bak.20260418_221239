@@ -12,9 +12,6 @@ BUNDLE_ID := com.mobilemessenger.app
 
 PORT ?= 8080
 
-CONFIGURATION ?= Release
-APP_PATH := $(BUILD_DIR)/Build/Products/$(CONFIGURATION)-iphoneos/MobileMessengerIOS.app
-
 SERVER_PID_FILE := $(PROJECT_DIR)/.server.pid
 TUNNEL_PID_FILE := $(PROJECT_DIR)/.cloudflared.pid
 TUNNEL_LOG := $(PROJECT_DIR)/.cloudflared.log
@@ -122,7 +119,6 @@ build-ios:
 	@xcodebuild \
 		-project MobileMessengerIOS.xcodeproj \
 		-scheme MobileMessengerIOS \
-		-configuration $(CONFIGURATION) \
 		-destination 'id=$(DEVICE_ID)' \
 		-derivedDataPath "$(BUILD_DIR)" \
 		build
@@ -130,7 +126,7 @@ build-ios:
 install-ios:
 	@xcrun devicectl device install app \
 		--device $(DEVICE_ID) \
-		"$(APP_PATH)"
+		"$(BUILD_DIR)/Build/Products/Debug-iphoneos/MobileMessengerIOS.app"
 
 launch-ios:
 	@xcrun devicectl device process launch \
@@ -143,7 +139,7 @@ reinstall-ios:
 		$(BUNDLE_ID)
 	@xcrun devicectl device install app \
 		--device $(DEVICE_ID) \
-		"$(APP_PATH)"
+		"$(BUILD_DIR)/Build/Products/Debug-iphoneos/MobileMessengerIOS.app"
 	@xcrun devicectl device process launch \
 		--device $(DEVICE_ID) \
 		$(BUNDLE_ID)
