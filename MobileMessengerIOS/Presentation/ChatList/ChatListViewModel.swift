@@ -13,15 +13,16 @@ public struct ChatListItem: Identifiable, Hashable {
     private static let formatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
+        formatter.locale = .autoupdatingCurrent
         return formatter
     }()
 
     public var initials: String {
         let words = title.split(separator: " ")
         if let first = words.first, let last = words.dropFirst().first {
-            return String(first.prefix(1)) + String(last.prefix(1))
+            return (String(first.prefix(1)) + String(last.prefix(1))).uppercased()
         }
-        return title.isEmpty ? "" : String(title.prefix(2))
+        return title.isEmpty ? "" : String(title.prefix(2)).uppercased()
     }
 
     public var relativeDateString: String {
