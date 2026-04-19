@@ -1,5 +1,38 @@
 import Foundation
 
+private enum RESTServerDateCoding {
+    private static let fractionalSecondsFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let internetDateTimeFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let rawValue = try container.decode(String.self)
+
+            if let date = fractionalSecondsFormatter.date(from: rawValue) ??
+                internetDateTimeFormatter.date(from: rawValue) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported server date format: \(rawValue)"
+            )
+        }
+        return decoder
+    }
+}
+
 public struct ServerChat: Codable, Sendable {
     public let id: UUID
     public let title: String
@@ -147,9 +180,7 @@ public struct RESTChatService: ChatNetworking {
         self.session = session
         self.authTokenProvider = authTokenProvider
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        self.decoder = decoder
+        self.decoder = RESTServerDateCoding.makeJSONDecoder()
     }
 
     public func listChats(searchQuery: String?) async throws -> [ServerChat] {

@@ -1,5 +1,38 @@
 import Foundation
 
+private enum RealtimeServerDateCoding {
+    private static let fractionalSecondsFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let internetDateTimeFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let rawValue = try container.decode(String.self)
+
+            if let date = fractionalSecondsFormatter.date(from: rawValue) ??
+                internetDateTimeFormatter.date(from: rawValue) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported realtime date format: \(rawValue)"
+            )
+        }
+        return decoder
+    }
+}
+
 public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked Sendable {
     private let baseURL: URL
     private let session: URLSession
@@ -33,9 +66,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         self.reachability = reachability
         self.featureFlags = featureFlags
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        self.decoder = decoder
+        self.decoder = RealtimeServerDateCoding.makeJSONDecoder()
     }
 
     public func activate() {
