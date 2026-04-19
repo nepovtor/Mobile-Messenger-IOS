@@ -2,8 +2,22 @@ import SwiftUI
 
 struct ChatListView: View {
     @StateObject private var viewModel: ChatListViewModel
-    @State private var isShowingCreateSheet = false
+    @State private var isShowingCreateOptions = false
+    @State private var activeCreateSheet: CreateChatSheetKind?
     @State private var createdChat: ChatListItem?
+    @State private var pendingDeletionChat: ChatListItem?
+
+    private enum CreateChatSheetKind: Identifiable {
+        case direct
+        case group
+
+        var id: Int {
+            switch self {
+            case .direct: return 0
+            case .group: return 1
+            }
+        }
+    }
 
     @MainActor
     init() {
@@ -25,7 +39,7 @@ struct ChatListView: View {
                         ChatListHero(
                             chatCount: viewModel.chats.count,
                             unreadCount: unreadCount,
-                            onCreateTap: { isShowingCreateSheet = true }
+                            onCreateTap: { isShowingCreateOptions = true }
                         )
 
                         ChatSearchField(text: $viewModel.searchQuery)
@@ -39,15 +53,32 @@ struct ChatListView: View {
                         } else if viewModel.chats.isEmpty {
                             ChatListEmptyState(
                                 searchQuery: viewModel.searchQuery,
-                                onCreateTap: { isShowingCreateSheet = true }
+                                onCreateTap: { isShowingCreateOptions = true }
                             )
                         } else {
                             LazyVStack(spacing: 14) {
                                 ForEach(Array(viewModel.chats.enumerated()), id: \.element.id) { index, chat in
                                     NavigationLink(value: chat) {
-                                        ChatRowView(chat: chat, accent: accentColor(for: index))
+                                        ChatRowView(
+                                            chat: chat,
+                                            accent: accentColor(for: index),
+                                            isDeleting: viewModel.deletingChatID == chat.id
+                                        )
                                     }
                                     .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button {
+                                            createdChat = chat
+                                        } label: {
+                                            Label("Открыть", systemImage: "bubble.left.and.bubble.right")
+                                        }
+
+                                        Button(role: .destructive) {
+                                            pendingDeletionChat = chat
+                                        } label: {
+                                            Label("Удалить чат", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -65,16 +96,54 @@ struct ChatListView: View {
                     DialogueView(chat: chat)
                 }
                 .toolbar(.hidden, for: .navigationBar)
-                .sheet(isPresented: $isShowingCreateSheet) {
-                    CreateGroupChatSheet(
-                        isPresented: $isShowingCreateSheet,
-                        viewModel: viewModel
-                    ) { title, participantContacts in
-                        if let chat = await viewModel.createChat(title: title, participantContacts: participantContacts) {
-                            createdChat = chat
-                            isShowingCreateSheet = false
+                .confirmationDialog("Новый чат", isPresented: $isShowingCreateOptions, titleVisibility: .visible) {
+                    Button("Личный чат") { activeCreateSheet = .direct }
+                    Button("Групповой чат") { activeCreateSheet = .group }
+                    Button("Отмена", role: .cancel) { activeCreateSheet = nil }
+                }
+                .sheet(item: $activeCreateSheet) { kind in
+                    switch kind {
+                    case .direct:
+                        CreateDirectChatSheet(
+                            viewModel: viewModel,
+                            onClose: { activeCreateSheet = nil }
+                        ) { contact in
+                            if let chat = await viewModel.createDirectChat(with: contact) {
+                                createdChat = chat
+                                activeCreateSheet = nil
+                            }
+                        }
+                    case .group:
+                        CreateGroupChatSheet(
+                            onClose: { activeCreateSheet = nil },
+                            viewModel: viewModel
+                        ) { title, participantContacts in
+                            if let chat = await viewModel.createChat(title: title, participantContacts: participantContacts) {
+                                createdChat = chat
+                                activeCreateSheet = nil
+                            }
                         }
                     }
+                }
+                .alert(
+                    "Удалить чат?",
+                    isPresented: Binding(
+                        get: { pendingDeletionChat != nil },
+                        set: { if !$0 { pendingDeletionChat = nil } }
+                    ),
+                    presenting: pendingDeletionChat
+                ) { chat in
+                    Button("Удалить", role: .destructive) {
+                        Task {
+                            await viewModel.deleteChat(chat)
+                            pendingDeletionChat = nil
+                        }
+                    }
+                    Button("Отмена", role: .cancel) {
+                        pendingDeletionChat = nil
+                    }
+                } message: { chat in
+                    Text("Чат «\(chat.title)» будет удалён из списка.")
                 }
                 .overlay(alignment: .top) {
                     if viewModel.isShowingError, let errorMessage = viewModel.errorMessage {
@@ -302,6 +371,7 @@ private struct ChatListEmptyState: View {
 private struct ChatRowView: View {
     let chat: ChatListItem
     let accent: Color
+    let isDeleting: Bool
 
     var body: some View {
         HStack(spacing: 16) {
@@ -369,6 +439,7 @@ private struct ChatRowView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.secondary.opacity(0.65))
         }
+        .opacity(isDeleting ? 0.55 : 1)
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -474,7 +545,7 @@ private struct BannerView: View {
 }
 
 private struct CreateGroupChatSheet: View {
-    @Binding var isPresented: Bool
+    let onClose: () -> Void
     @ObservedObject var viewModel: ChatListViewModel
     let onCreate: (String, [String]) async -> Void
 
@@ -588,7 +659,7 @@ private struct CreateGroupChatSheet: View {
             .searchable(text: $searchQuery, prompt: "Поиск контактов")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { isPresented = false }
+                    Button("Отмена") { onClose() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Создать") {
@@ -610,6 +681,103 @@ private struct CreateGroupChatSheet: View {
             selectedContactIDs.remove(contact.userID)
         } else {
             selectedContactIDs.insert(contact.userID)
+        }
+    }
+}
+
+private struct CreateDirectChatSheet: View {
+    @ObservedObject var viewModel: ChatListViewModel
+    let onClose: () -> Void
+    let onCreate: (ContactDTO) async -> Void
+
+    @State private var searchQuery: String = ""
+    @State private var selectedContactID: UUID?
+
+    private var filteredContacts: [ContactDTO] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return viewModel.availableContacts }
+
+        return viewModel.availableContacts.filter { contact in
+            contact.displayName.lowercased().contains(query) ||
+            contact.contact.lowercased().contains(query)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ChatListBackdrop()
+
+                List {
+                    Section {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Новый личный чат")
+                                .font(.title3.weight(.semibold))
+                            Text("Выберите одного контакта. Если чат уже есть, откроется существующий диалог.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                        .listRowBackground(Color.clear)
+                    }
+
+                    Section("Контакты") {
+                        if viewModel.isLoadingCreateContacts {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                Text("Загружаю контакты")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 6)
+                        } else if let error = viewModel.createContactsError {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(error)
+                                    .font(.subheadline)
+                                Button("Повторить загрузку") {
+                                    Task { await viewModel.loadCreateContactsIfNeeded(force: true) }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        } else if filteredContacts.isEmpty {
+                            Text(searchQuery.isEmpty ? "Нет доступных контактов" : "Ничего не найдено")
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 6)
+                        } else {
+                            ForEach(filteredContacts) { contact in
+                                Button {
+                                    selectedContactID = contact.userID
+                                } label: {
+                                    GroupContactRow(
+                                        contact: contact,
+                                        isSelected: selectedContactID == contact.userID
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+            }
+            .navigationTitle("Личный чат")
+            .searchable(text: $searchQuery, prompt: "Поиск контактов")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { onClose() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Открыть") {
+                        guard let selectedContact = viewModel.availableContacts.first(where: { $0.userID == selectedContactID }) else { return }
+                        Task { await onCreate(selectedContact) }
+                    }
+                    .disabled(selectedContactID == nil || viewModel.isCreatingChat)
+                }
+            }
+            .task {
+                await viewModel.loadCreateContactsIfNeeded()
+            }
         }
     }
 }

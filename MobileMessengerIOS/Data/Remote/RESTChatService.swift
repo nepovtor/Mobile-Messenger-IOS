@@ -152,6 +152,7 @@ public struct MediaUploadTarget: Codable, Sendable {
 public protocol ChatNetworking: Sendable {
     func listChats(searchQuery: String?) async throws -> [ServerChat]
     func createChat(title: String, participantContacts: [String]) async throws -> ServerChat
+    func deleteChat(id: UUID) async throws
     func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage]
     func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage
     func markRead(chatID: UUID, messageID: UUID) async throws
@@ -207,6 +208,11 @@ public struct RESTChatService: ChatNetworking {
             "participantContacts": normalizedContacts.isEmpty ? nil : normalizedContacts
         ])
         return try await perform(request: request)
+    }
+
+    public func deleteChat(id: UUID) async throws {
+        let request = try await authorizedRequest(path: "chats/\(id.uuidString)", method: "DELETE")
+        _ = try await performRaw(request: request)
     }
 
     public func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage] {

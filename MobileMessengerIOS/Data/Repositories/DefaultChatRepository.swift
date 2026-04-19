@@ -48,6 +48,11 @@ public final class DefaultChatRepository: ChatRepository {
         return chat
     }
 
+    public func deleteChat(id: UUID) async throws {
+        try await remote.deleteChat(id: id)
+        try await store.deleteChat(id: id)
+    }
+
     public func cachedChats(searchQuery: String?) async -> [Chat] {
         (try? await store.fetchChats(searchQuery: searchQuery)) ?? []
     }

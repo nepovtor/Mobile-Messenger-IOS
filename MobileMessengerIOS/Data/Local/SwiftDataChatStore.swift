@@ -40,6 +40,12 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         }
     }
 
+    public func deleteChat(id: UUID) async throws {
+        chats[id] = nil
+        try persistState()
+        broadcastChats()
+    }
+
     public func upsert(chats: [Chat]) async throws {
         for chat in chats {
             var record = self.chats[chat.id] ?? ChatRecord(

@@ -77,12 +77,14 @@ public final class ChatListViewModel: ObservableObject {
     @Published public var isShowingError = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var isCreatingChat = false
+    @Published public private(set) var deletingChatID: UUID?
     @Published public private(set) var isLoadingCreateContacts = false
     @Published public private(set) var createContactsError: String?
 
     private let loadChats: LoadChatListUseCase
     private let observeChats: ObserveChatListUseCase
     private let createChatUseCase: CreateChatUseCase
+    private let deleteChatUseCase: DeleteChatUseCase
     private let contactsService: ContactsNetworking
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
@@ -94,12 +96,14 @@ public final class ChatListViewModel: ObservableObject {
         loadChats: LoadChatListUseCase,
         observeChats: ObserveChatListUseCase,
         createChat: CreateChatUseCase,
+        deleteChat: DeleteChatUseCase,
         contactsService: ContactsNetworking,
         analytics: AnalyticsService
     ) {
         self.loadChats = loadChats
         self.observeChats = observeChats
         self.createChatUseCase = createChat
+        self.deleteChatUseCase = deleteChat
         self.contactsService = contactsService
         self.analytics = analytics
     }
@@ -162,6 +166,62 @@ public final class ChatListViewModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    public func createDirectChat(with contact: ContactDTO) async -> ChatListItem? {
+        guard !contact.isCurrentUser else {
+            isShowingError = true
+            errorMessage = "Нельзя создать чат с текущим аккаунтом"
+            return nil
+        }
+        guard !isCreatingChat else { return nil }
+        isCreatingChat = true
+        defer { isCreatingChat = false }
+
+        if let existing = existingDirectChat(with: contact) {
+            isShowingError = false
+            errorMessage = nil
+            return existing
+        }
+
+        do {
+            let chat = try await createChatUseCase(
+                title: contact.displayName,
+                participantContacts: [contact.contact]
+            )
+            let item = Self.mapChat(chat)
+            chats.removeAll { $0.id == item.id }
+            chats.insert(item, at: 0)
+            allChats.removeAll { $0.id == chat.id }
+            allChats.insert(chat, at: 0)
+            isShowingError = false
+            errorMessage = nil
+            return item
+        } catch {
+            isShowingError = true
+            errorMessage = Self.describe(error)
+            analytics.track(error: error, context: "chat_create_direct")
+            return nil
+        }
+    }
+
+    public func deleteChat(_ chat: ChatListItem) async {
+        guard deletingChatID == nil else { return }
+        deletingChatID = chat.id
+        defer { deletingChatID = nil }
+
+        do {
+            try await deleteChatUseCase(chatID: chat.id)
+            allChats.removeAll { $0.id == chat.id }
+            chats.removeAll { $0.id == chat.id }
+            isShowingError = false
+            errorMessage = nil
+        } catch {
+            isShowingError = true
+            errorMessage = Self.describe(error)
+            analytics.track(error: error, context: "chat_delete")
+        }
+    }
+
     public func loadCreateContactsIfNeeded(force: Bool = false) async {
         guard force || !hasLoadedCreateContacts else { return }
         guard !isLoadingCreateContacts else { return }
@@ -214,6 +274,22 @@ public final class ChatListViewModel: ObservableObject {
             chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
         }
         chats = visibleChats.map(Self.mapChat)
+    }
+
+    private func existingDirectChat(with contact: ContactDTO) -> ChatListItem? {
+        let normalizedName = Self.normalize(contact.displayName)
+        guard !normalizedName.isEmpty else { return nil }
+
+        let match = allChats
+            .filter { !$0.isGroup }
+            .filter { chat in
+                Self.normalize(chat.title) == normalizedName ||
+                chat.participantNames.contains(where: { Self.normalize($0) == normalizedName })
+            }
+            .sorted { $0.lastActivity > $1.lastActivity }
+            .first
+
+        return match.map(Self.mapChat)
     }
 
     private static func deduplicated(_ chats: [Chat]) -> [Chat] {
