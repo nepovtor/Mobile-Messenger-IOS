@@ -129,6 +129,10 @@ public protocol ChatNetworking: Sendable {
 }
 
 public struct RESTChatService: ChatNetworking {
+    private enum RequestDiagnosticsContext: String {
+        case chatList = "chat_list"
+    }
+
     private let baseURL: URL
     private let session: URLSession
     private let authTokenProvider: @Sendable () async -> String?
@@ -156,7 +160,10 @@ public struct RESTChatService: ChatNetworking {
         guard let url = components?.url else {
             throw AppError.network(description: "Некорректный URL списка чатов")
         }
-        return try await perform(request: authenticatedRequest(url: url))
+        return try await perform(
+            request: authenticatedRequest(url: url),
+            diagnostics: .chatList
+        )
     }
 
     public func createChat(title: String, participantContacts: [String]) async throws -> ServerChat {
@@ -236,24 +243,93 @@ public struct RESTChatService: ChatNetworking {
         _ = try await performRaw(request: request)
     }
 
-    private func perform<Response: Decodable>(request: URLRequest) async throws -> Response {
-        let data = try await performRaw(request: request)
-        return try decoder.decode(Response.self, from: data)
+    private func perform<Response: Decodable>(
+        request: URLRequest,
+        diagnostics: RequestDiagnosticsContext? = nil
+    ) async throws -> Response {
+        let (data, response) = try await performData(request: request, diagnostics: diagnostics)
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            logDiagnostics(
+                context: diagnostics,
+                request: request,
+                response: response,
+                body: data,
+                error: error
+            )
+            if diagnostics == .chatList {
+                throw AppError.network(description: "Сервер вернул неподдерживаемый формат списка чатов")
+            }
+            throw error
+        }
     }
 
     private func performRaw(request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.network(description: "Некорректный ответ сервера")
-        }
-        if httpResponse.statusCode == 401 {
-            throw AppError.unauthorized
-        }
-        guard 200..<300 ~= httpResponse.statusCode else {
-            let message = String(data: data, encoding: .utf8) ?? "Ошибка \(httpResponse.statusCode)"
-            throw AppError.network(description: message)
-        }
+        let (data, _) = try await performData(request: request)
         return data
+    }
+
+    private func performData(
+        request: URLRequest,
+        diagnostics: RequestDiagnosticsContext? = nil
+    ) async throws -> (Data, HTTPURLResponse) {
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                let error = AppError.network(description: "Некорректный ответ сервера")
+                logDiagnostics(
+                    context: diagnostics,
+                    request: request,
+                    response: nil,
+                    body: data,
+                    error: error
+                )
+                throw error
+            }
+
+            if httpResponse.statusCode == 401 {
+                logDiagnostics(
+                    context: diagnostics,
+                    request: request,
+                    response: httpResponse,
+                    body: data,
+                    error: AppError.unauthorized
+                )
+                throw AppError.unauthorized
+            }
+
+            guard 200..<300 ~= httpResponse.statusCode else {
+                let message = String(data: data, encoding: .utf8) ?? "Ошибка \(httpResponse.statusCode)"
+                let error = AppError.network(description: message)
+                logDiagnostics(
+                    context: diagnostics,
+                    request: request,
+                    response: httpResponse,
+                    body: data,
+                    error: error
+                )
+                throw error
+            }
+
+            return (data, httpResponse)
+        } catch let urlError as URLError {
+            logDiagnostics(
+                context: diagnostics,
+                request: request,
+                response: nil,
+                body: nil,
+                error: urlError
+            )
+            if diagnostics == .chatList {
+                throw AppError.network(
+                    description: "Не удалось выполнить запрос списка чатов: \(urlError.localizedDescription)"
+                )
+            }
+            throw urlError
+        } catch {
+            throw error
+        }
     }
 
     private func authorizedRequest(path: String, method: String = "GET") async throws -> URLRequest {
@@ -288,5 +364,36 @@ public struct RESTChatService: ChatNetworking {
             }
         }
         return try JSONSerialization.data(withJSONObject: filtered, options: [])
+    }
+
+    private func logDiagnostics(
+        context: RequestDiagnosticsContext?,
+        request: URLRequest,
+        response: HTTPURLResponse?,
+        body: Data?,
+        error: Error
+    ) {
+        guard let context else { return }
+
+#if DEBUG
+        let method = request.httpMethod ?? "GET"
+        let url = request.url?.absoluteString ?? "n/a"
+        let status = response.map { String($0.statusCode) } ?? "n/a"
+        let hasAuthorization = request.value(forHTTPHeaderField: "Authorization") != nil
+        let bodyPreview: String
+        if let body,
+           let string = String(data: body, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !string.isEmpty {
+            bodyPreview = String(string.prefix(300))
+        } else {
+            bodyPreview = "empty"
+        }
+
+        print(
+            "[RESTChatService][\(context.rawValue)] method=\(method) url=\(url) status=\(status) " +
+            "authorized=\(hasAuthorization) error=\(error.localizedDescription) body=\(bodyPreview)"
+        )
+#endif
     }
 }

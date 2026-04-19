@@ -74,6 +74,7 @@ public final class ChatListViewModel: ObservableObject {
     }
     @Published public var isLoading = false
     @Published public var isShowingError = false
+    @Published public private(set) var errorMessage: String?
     @Published public private(set) var isCreatingChat = false
     @Published public private(set) var isLoadingCreateContacts = false
     @Published public private(set) var createContactsError: String?
@@ -116,8 +117,10 @@ public final class ChatListViewModel: ObservableObject {
             let chats = try await loadChats(searchQuery: searchQuery.isEmpty ? nil : searchQuery)
             applyChats(chats)
             isShowingError = false
+            errorMessage = nil
         } catch {
             isShowingError = true
+            errorMessage = Self.describe(error)
             analytics.track(error: error, context: "chat_list_load")
         }
         isLoading = false
@@ -129,6 +132,7 @@ public final class ChatListViewModel: ObservableObject {
         if !cachedChats.isEmpty {
             applyChats(cachedChats)
             isShowingError = false
+            errorMessage = nil
         }
         await refresh()
     }
@@ -146,9 +150,12 @@ public final class ChatListViewModel: ObservableObject {
             chats.insert(item, at: 0)
             allChats.removeAll { $0.id == chat.id }
             allChats.insert(chat, at: 0)
+            isShowingError = false
+            errorMessage = nil
             return item
         } catch {
             isShowingError = true
+            errorMessage = Self.describe(error)
             analytics.track(error: error, context: "chat_create")
             return nil
         }
@@ -219,5 +226,14 @@ public final class ChatListViewModel: ObservableObject {
             participantNames: chat.participantNames,
             participantCount: chat.participantCount
         )
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if let localizedError = error as? LocalizedError,
+           let description = localizedError.errorDescription,
+           !description.isEmpty {
+            return description
+        }
+        return error.localizedDescription
     }
 }
