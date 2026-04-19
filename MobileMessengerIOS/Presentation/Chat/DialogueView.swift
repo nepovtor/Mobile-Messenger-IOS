@@ -31,6 +31,8 @@ struct DialogueView: View {
                             ForEach(0..<5, id: \.self) { index in
                                 MessageSkeletonBubble(isOutgoing: index.isMultiple(of: 2))
                             }
+                        } else if viewModel.messages.isEmpty {
+                            ConversationEmptyState(chat: chat)
                         } else {
                             ForEach(viewModel.messages, id: \._id) { message in
                                 MessageBubbleView(message: message, isGroup: chat.isGroup)
@@ -183,27 +185,48 @@ struct DialogueView: View {
     private func bannerView(for banner: ChatViewModel.Banner) -> some View {
         switch banner {
         case .error(let message):
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.white)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.white)
+
+                    Text("Сообщение не отправлено")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.white)
+
+                    Spacer(minLength: 8)
+                }
+
                 Text(message)
                     .font(.footnote)
-                    .foregroundColor(.white)
-                Spacer()
-                Button("Повторить") {
+                    .foregroundColor(.white.opacity(0.96))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
                     viewModel.retryFailedMessages()
-                    self.viewModel.banner = nil
+                    viewModel.banner = nil
+                } label: {
+                    Label("Повторить", systemImage: "arrow.clockwise")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(Color.red.opacity(0.95))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule()
+                                .fill(Color.white.opacity(0.92))
+                        )
                 }
-                .foregroundColor(.white)
             }
             .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.red.opacity(0.94))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         case .offline:
-            HStack {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "wifi.slash")
                 Text("Нет сети. Сообщения будут отправлены при появлении связи.")
-                Spacer()
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
             }
             .padding()
             .background(Color.orange.opacity(0.94))
@@ -413,6 +436,44 @@ private struct MessageSkeletonBubble: View {
 
             if !isOutgoing { Spacer(minLength: 54) }
         }
+    }
+}
+
+private struct ConversationEmptyState: View {
+    let chat: ChatListItem
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.12))
+                    .frame(width: 76, height: 76)
+
+                Image(systemName: chat.isGroup ? "person.3.fill" : "bubble.left.and.bubble.right.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.blue.opacity(0.92))
+            }
+
+            Text("Начните разговор")
+                .font(.title3.weight(.bold))
+
+            Text(chat.isGroup ? "Отправьте первое сообщение в группу и соберите обсуждение здесь." : "Напишите первое сообщение, чтобы диалог ожил.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 36)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.white.opacity(0.55), lineWidth: 1)
+        }
+        .padding(.top, 36)
     }
 }
 

@@ -9,12 +9,19 @@ final class ContactsViewModel: ObservableObject {
     @Published var openingContactID: UUID?
 
     private let contactsService: ContactsNetworking
+    private let loadChats: LoadChatListUseCase
     private let createChatUseCase: CreateChatUseCase
     private let analytics: AnalyticsService
     private var hasLoaded = false
 
-    init(contactsService: ContactsNetworking, createChat: CreateChatUseCase, analytics: AnalyticsService) {
+    init(
+        contactsService: ContactsNetworking,
+        loadChats: LoadChatListUseCase,
+        createChat: CreateChatUseCase,
+        analytics: AnalyticsService
+    ) {
         self.contactsService = contactsService
+        self.loadChats = loadChats
         self.createChatUseCase = createChat
         self.analytics = analytics
     }
@@ -60,26 +67,72 @@ final class ContactsViewModel: ObservableObject {
         defer { openingContactID = nil }
 
         do {
+            if let existingChat = await existingDirectChat(with: contact) {
+                errorMessage = nil
+                return Self.map(chat: existingChat)
+            }
+
             let chat = try await createChatUseCase(
                 title: contact.displayName,
                 participantContacts: [contact.contact]
             )
             errorMessage = nil
-            return ChatListItem(
-                id: chat.id,
-                title: chat.title,
-                lastMessagePreview: chat.lastMessagePreview,
-                updatedAt: chat.lastActivity,
-                unreadCount: chat.unreadCount,
-                typingParticipants: chat.typingParticipants,
-                participantNames: chat.participantNames,
-                participantCount: chat.participantCount
-            )
+            return Self.map(chat: chat)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             analytics.track(error: error, context: "contacts_open_chat")
             return nil
         }
+    }
+
+    private func existingDirectChat(with contact: ContactDTO) async -> Chat? {
+        let cachedChats = await loadChats.cached(searchQuery: nil)
+        if let cachedMatch = Self.findDirectChat(for: contact, in: cachedChats) {
+            return cachedMatch
+        }
+
+        do {
+            let remoteChats = try await loadChats(searchQuery: nil)
+            return Self.findDirectChat(for: contact, in: remoteChats)
+        } catch {
+            analytics.track(error: error, context: "contacts_lookup_existing_chat")
+            return nil
+        }
+    }
+
+    private static func findDirectChat(for contact: ContactDTO, in chats: [Chat]) -> Chat? {
+        let targetName = normalized(contact.displayName)
+        guard !targetName.isEmpty else { return nil }
+
+        return chats
+            .filter { !$0.isGroup }
+            .filter { chat in
+                let titleMatch = normalized(chat.title) == targetName
+                let participantMatch = chat.participantNames.contains { normalized($0) == targetName }
+                return titleMatch || participantMatch
+            }
+            .sorted { $0.lastActivity > $1.lastActivity }
+            .first
+    }
+
+    private static func map(chat: Chat) -> ChatListItem {
+        ChatListItem(
+            id: chat.id,
+            title: chat.title,
+            lastMessagePreview: chat.lastMessagePreview,
+            updatedAt: chat.lastActivity,
+            unreadCount: chat.unreadCount,
+            typingParticipants: chat.typingParticipants,
+            participantNames: chat.participantNames,
+            participantCount: chat.participantCount
+        )
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .autoupdatingCurrent)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }
 

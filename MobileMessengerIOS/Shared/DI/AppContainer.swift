@@ -146,6 +146,7 @@ public final class AppContainer: ObservableObject {
     func makeContactsViewModel() -> ContactsViewModel {
         ContactsViewModel(
             contactsService: contactsService,
+            loadChats: LoadChatListUseCase(repository: chatRepository),
             createChat: CreateChatUseCase(repository: chatRepository),
             analytics: analytics
         )

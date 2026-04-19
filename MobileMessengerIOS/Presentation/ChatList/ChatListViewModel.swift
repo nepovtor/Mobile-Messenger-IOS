@@ -201,7 +201,7 @@ public final class ChatListViewModel: ObservableObject {
     }
 
     private func applyChats(_ chats: [Chat]) {
-        allChats = chats
+        allChats = Self.deduplicated(chats)
         applyCurrentFilter()
     }
 
@@ -214,6 +214,87 @@ public final class ChatListViewModel: ObservableObject {
             chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
         }
         chats = visibleChats.map(Self.mapChat)
+    }
+
+    private static func deduplicated(_ chats: [Chat]) -> [Chat] {
+        let uniqueByID = chats.reduce(into: [UUID: Chat]()) { partialResult, chat in
+            guard let existing = partialResult[chat.id] else {
+                partialResult[chat.id] = chat
+                return
+            }
+            partialResult[chat.id] = preferred(chat, over: existing)
+        }
+
+        let orderedChats = uniqueByID.values.sorted { lhs, rhs in
+            if lhs.lastActivity == rhs.lastActivity {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.lastActivity > rhs.lastActivity
+        }
+
+        var directChatsByKey: [String: Chat] = [:]
+        var result: [Chat] = []
+
+        for chat in orderedChats {
+            guard !chat.isGroup else {
+                result.append(chat)
+                continue
+            }
+
+            let key = directChatKey(for: chat)
+            if let existing = directChatsByKey[key] {
+                let preferredChat = preferred(chat, over: existing)
+                directChatsByKey[key] = preferredChat
+                if let index = result.firstIndex(where: { $0.id == existing.id }) {
+                    result[index] = preferredChat
+                }
+            } else {
+                directChatsByKey[key] = chat
+                result.append(chat)
+            }
+        }
+
+        return result.sorted { lhs, rhs in
+            if lhs.lastActivity == rhs.lastActivity {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.lastActivity > rhs.lastActivity
+        }
+    }
+
+    private static func preferred(_ lhs: Chat, over rhs: Chat) -> Chat {
+        if lhs.lastActivity != rhs.lastActivity {
+            return lhs.lastActivity > rhs.lastActivity ? lhs : rhs
+        }
+        if lhs.unreadCount != rhs.unreadCount {
+            return lhs.unreadCount > rhs.unreadCount ? lhs : rhs
+        }
+        let lhsHasPreview = !(lhs.lastMessagePreview?.isEmpty ?? true)
+        let rhsHasPreview = !(rhs.lastMessagePreview?.isEmpty ?? true)
+        if lhsHasPreview != rhsHasPreview {
+            return lhsHasPreview ? lhs : rhs
+        }
+        return lhs.id.uuidString < rhs.id.uuidString ? lhs : rhs
+    }
+
+    private static func directChatKey(for chat: Chat) -> String {
+        let normalizedParticipants = chat.participantNames
+            .map(normalize)
+            .filter { !$0.isEmpty }
+            .sorted()
+
+        if !normalizedParticipants.isEmpty {
+            return "participants:\(normalizedParticipants.joined(separator: "|"))"
+        }
+
+        return "title:\(normalize(chat.title))"
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .autoupdatingCurrent)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private static func mapChat(_ chat: Chat) -> ChatListItem {
