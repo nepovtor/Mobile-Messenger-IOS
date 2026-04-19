@@ -224,12 +224,19 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage {
+        guard kind == .text, mediaID == nil else {
+            throw AppError.network(description: "Сервер пока не поддерживает отправку медиа")
+        }
+
+        let trimmedText = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedText.isEmpty else {
+            throw AppError.network(description: "Нельзя отправить пустое сообщение")
+        }
+
         var request = try await authorizedRequest(path: "chats/\(chatID.uuidString)/messages", method: "POST")
         request.httpBody = try encode([
             "messageID": localID.uuidString,
-            "kind": kind.rawValue,
-            "text": text,
-            "mediaID": mediaID?.uuidString
+            "text": trimmedText
         ])
         return try await perform(request: request)
     }
