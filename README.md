@@ -270,3 +270,18 @@ cp Config/Config.example.xcconfig Config/Config.xcconfig
 ---
 
 Создаём мессенджер, которым хочется пользоваться каждый день. Врывайтесь! 💜
+Да. Для вашего iPhone `00008101-000210163441001E` и приложения `com.mobilemessenger.app`:
+
+```bash
+xcrun devicectl device uninstall app --device 00008101-000210163441001E com.mobilemessenger.app
+```
+
+```bash
+xcodebuild -scheme MobileMessengerIOS -configuration Debug -destination 'id=00008101-000210163441001E' -derivedDataPath .build/ios-device build
+```
+
+```bash
+xcrun devicectl device install app --device 00008101-000210163441001E .build/ios-device/Build/Products/Debug-iphoneos/MobileMessengerIOS.app
+```
+
+```
