@@ -1,14 +1,23 @@
 import Foundation
+import Combine
 
 public struct ChatListItem: Identifiable, Hashable {
     public let id: UUID
     public let title: String
     public let lastMessagePreview: String?
+    public let lastMessageAuthorName: String?
+    public let lastMessageIsOutgoing: Bool
+    public let lastMessageStatus: MessageStatus?
+    public let lastMessageKind: Message.Kind?
     public let updatedAt: Date
     public let unreadCount: Int
     public let typingParticipants: [String]
     public let participantNames: [String]
     public let participantCount: Int
+    public let isPinned: Bool
+    public let isMuted: Bool
+    public let isArchived: Bool
+    public let draftText: String
 
     private static let formatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -48,26 +57,43 @@ public struct ChatListItem: Identifiable, Hashable {
         id: UUID,
         title: String,
         lastMessagePreview: String?,
+        lastMessageAuthorName: String? = nil,
+        lastMessageIsOutgoing: Bool = false,
+        lastMessageStatus: MessageStatus? = nil,
+        lastMessageKind: Message.Kind? = nil,
         updatedAt: Date,
         unreadCount: Int,
         typingParticipants: [String],
         participantNames: [String],
-        participantCount: Int
+        participantCount: Int,
+        isPinned: Bool = false,
+        isMuted: Bool = false,
+        isArchived: Bool = false,
+        draftText: String = ""
     ) {
         self.id = id
         self.title = title
         self.lastMessagePreview = lastMessagePreview
+        self.lastMessageAuthorName = lastMessageAuthorName
+        self.lastMessageIsOutgoing = lastMessageIsOutgoing
+        self.lastMessageStatus = lastMessageStatus
+        self.lastMessageKind = lastMessageKind
         self.updatedAt = updatedAt
         self.unreadCount = unreadCount
         self.typingParticipants = typingParticipants
         self.participantNames = participantNames
         self.participantCount = participantCount
+        self.isPinned = isPinned
+        self.isMuted = isMuted
+        self.isArchived = isArchived
+        self.draftText = draftText
     }
 }
 
 @MainActor
 public final class ChatListViewModel: ObservableObject {
     @Published public private(set) var chats: [ChatListItem] = []
+    @Published public private(set) var archivedChats: [ChatListItem] = []
     @Published public private(set) var availableContacts: [ContactDTO] = []
     @Published public var searchQuery: String = "" {
         didSet { scheduleSearch() }
@@ -83,8 +109,10 @@ public final class ChatListViewModel: ObservableObject {
     private let createChatUseCase: CreateChatUseCase
     private let contactsService: ContactsNetworking
     private let analytics: AnalyticsService
+    private let presentationStore: ChatPresentationStore
     private var searchTask: Task<Void, Never>?
     private var observeTask: Task<Void, Never>?
+    private var presentationStateCancellable: AnyCancellable?
     private var hasLoadedCreateContacts = false
     private var allChats: [Chat] = []
 
@@ -93,13 +121,19 @@ public final class ChatListViewModel: ObservableObject {
         observeChats: ObserveChatListUseCase,
         createChat: CreateChatUseCase,
         contactsService: ContactsNetworking,
-        analytics: AnalyticsService
+        analytics: AnalyticsService,
+        presentationStore: ChatPresentationStore
     ) {
         self.loadChats = loadChats
         self.observeChats = observeChats
         self.createChatUseCase = createChat
         self.contactsService = contactsService
         self.analytics = analytics
+        self.presentationStore = presentationStore
+        self.presentationStateCancellable = presentationStore.$revision
+            .sink { [weak self] _ in
+                self?.applyCurrentFilter()
+            }
     }
 
     public func onAppear() {
@@ -141,7 +175,7 @@ public final class ChatListViewModel: ObservableObject {
 
         do {
             let chat = try await createChatUseCase(title: title, participantContacts: participantContacts)
-            let item = Self.mapChat(chat)
+            let item = mapChat(chat)
             chats.removeAll { $0.id == item.id }
             chats.insert(item, at: 0)
             allChats.removeAll { $0.id == chat.id }
@@ -205,19 +239,56 @@ public final class ChatListViewModel: ObservableObject {
             (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false) ||
             chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
         }
-        chats = visibleChats.map(Self.mapChat)
+        let mappedChats = visibleChats.map(mapChat)
+            .sorted(by: sortChatItems)
+        chats = mappedChats.filter { !$0.isArchived }
+        archivedChats = mappedChats.filter(\.isArchived)
     }
 
-    private static func mapChat(_ chat: Chat) -> ChatListItem {
-        ChatListItem(
+    public func togglePinned(for chatID: UUID) {
+        let currentState = presentationStore.state(for: chatID)
+        presentationStore.setPinned(!currentState.isPinned, for: chatID)
+    }
+
+    public func toggleMuted(for chatID: UUID) {
+        let currentState = presentationStore.state(for: chatID)
+        presentationStore.setMuted(!currentState.isMuted, for: chatID)
+    }
+
+    public func toggleArchived(for chatID: UUID) {
+        let currentState = presentationStore.state(for: chatID)
+        presentationStore.setArchived(!currentState.isArchived, for: chatID)
+    }
+
+    private func mapChat(_ chat: Chat) -> ChatListItem {
+        let state = presentationStore.state(for: chat.id)
+        return ChatListItem(
             id: chat.id,
             title: chat.title,
             lastMessagePreview: chat.lastMessagePreview,
+            lastMessageAuthorName: chat.lastMessageAuthorName,
+            lastMessageIsOutgoing: chat.lastMessageIsOutgoing,
+            lastMessageStatus: chat.lastMessageStatus,
+            lastMessageKind: chat.lastMessageKind,
             updatedAt: chat.lastActivity,
             unreadCount: chat.unreadCount,
             typingParticipants: chat.typingParticipants,
             participantNames: chat.participantNames,
-            participantCount: chat.participantCount
+            participantCount: chat.participantCount,
+            isPinned: state.isPinned,
+            isMuted: state.isMuted,
+            isArchived: state.isArchived,
+            draftText: state.draft
         )
+    }
+
+    private func sortChatItems(lhs: ChatListItem, rhs: ChatListItem) -> Bool {
+        if lhs.isPinned != rhs.isPinned {
+            return lhs.isPinned && !rhs.isPinned
+        }
+        if lhs.updatedAt == rhs.updatedAt {
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+        return lhs.updatedAt > rhs.updatedAt
     }
 }

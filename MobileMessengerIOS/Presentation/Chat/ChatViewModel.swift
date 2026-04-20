@@ -37,6 +37,7 @@ public final class ChatViewModel: ObservableObject {
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
+    private let presentationStore: ChatPresentationStore
 
     private var observeTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
@@ -54,7 +55,8 @@ public final class ChatViewModel: ObservableObject {
         markStatus: MarkMessageStatusUseCase,
         analytics: AnalyticsService,
         notificationManager: PushNotificationManager,
-        reachability: ReachabilityService
+        reachability: ReachabilityService,
+        presentationStore: ChatPresentationStore
     ) {
         self.chatID = chatID
         self.title = title
@@ -68,6 +70,7 @@ public final class ChatViewModel: ObservableObject {
         self.analytics = analytics
         self.notificationManager = notificationManager
         self.reachability = reachability
+        self.presentationStore = presentationStore
     }
 
     deinit {
@@ -78,6 +81,10 @@ public final class ChatViewModel: ObservableObject {
 
     public func onAppear() {
         guard observeTask == nil else { return }
+        if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            inputText = presentationStore.state(for: chatID).draft
+            isTyping = !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         observeTask = Task { [weak self] in
             await self?.bindMessages()
         }
@@ -102,6 +109,7 @@ public final class ChatViewModel: ObservableObject {
         let replyTarget = replyTarget
         inputText = ""
         self.replyTarget = nil
+        presentationStore.updateDraft("", for: chatID)
         scheduleTypingUpdate(isTyping: false)
 
         Task {
@@ -144,6 +152,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     public func handleInputChanged(_ text: String) {
+        presentationStore.updateDraft(text, for: chatID)
         let shouldReportTyping = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         guard shouldReportTyping != isTyping else { return }
         isTyping = shouldReportTyping
@@ -160,6 +169,7 @@ public final class ChatViewModel: ObservableObject {
         let replyTarget = replyTarget
         inputText = ""
         self.replyTarget = nil
+        presentationStore.updateDraft("", for: chatID)
         scheduleTypingUpdate(isTyping: false)
         isSendingMedia = true
 
@@ -184,6 +194,10 @@ public final class ChatViewModel: ObservableObject {
 
     public func markAsRead(messageID: UUID) {
         Task { try? await markStatus(chatID: chatID, messageID: messageID, status: .read) }
+    }
+
+    public func firstUnreadIncomingMessageID() -> UUID? {
+        messages.first(where: { !$0.isOutgoing && $0.status != .read })?.id.messageID
     }
 
     private func loadInitialHistory() async {

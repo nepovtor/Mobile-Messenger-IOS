@@ -57,6 +57,7 @@ public final class AppContainer: ObservableObject {
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
+    private let chatPresentationStore: ChatPresentationStore
     private let authTokenProvider: @Sendable () async -> String?
     private let chatStore: ChatLocalStore
     private var chatRepository: ChatRepository!
@@ -77,6 +78,7 @@ public final class AppContainer: ObservableObject {
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
         reachability = DefaultReachabilityService()
+        chatPresentationStore = ChatPresentationStore()
 
         // Initialize main-actor isolated components safely
         sessionStore = SessionStore(tokenStore: tokenStore)
@@ -127,7 +129,8 @@ public final class AppContainer: ObservableObject {
             markStatus: MarkMessageStatusUseCase(repository: chatRepository),
             analytics: analytics,
             notificationManager: notificationManager,
-            reachability: reachability
+            reachability: reachability,
+            presentationStore: chatPresentationStore
         )
     }
 
@@ -138,7 +141,8 @@ public final class AppContainer: ObservableObject {
             observeChats: ObserveChatListUseCase(repository: chatRepository),
             createChat: CreateChatUseCase(repository: chatRepository),
             contactsService: contactsService,
-            analytics: analytics
+            analytics: analytics,
+            presentationStore: chatPresentationStore
         )
     }
 
@@ -270,5 +274,86 @@ public final class AppContainer: ObservableObject {
         case .reconnecting, .disconnected:
             connectionStatus = .reconnecting
         }
+    }
+}
+
+@MainActor
+public final class ChatPresentationStore: ObservableObject {
+    public struct ChatState: Equatable, Sendable {
+        public let isPinned: Bool
+        public let isMuted: Bool
+        public let isArchived: Bool
+        public let draft: String
+    }
+
+    private struct PersistedState: Codable {
+        var pinnedChatIDs: [UUID] = []
+        var mutedChatIDs: [UUID] = []
+        var archivedChatIDs: [UUID] = []
+        var drafts: [String: String] = [:]
+    }
+
+    @Published public private(set) var revision: Int = 0
+
+    private let defaults: UserDefaults
+    private let storageKey = "chat_presentation_state"
+    private var state: PersistedState
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: storageKey),
+           let decoded = try? JSONDecoder().decode(PersistedState.self, from: data) {
+            self.state = decoded
+        } else {
+            self.state = PersistedState()
+        }
+    }
+
+    public func state(for chatID: UUID) -> ChatState {
+        ChatState(
+            isPinned: state.pinnedChatIDs.contains(chatID),
+            isMuted: state.mutedChatIDs.contains(chatID),
+            isArchived: state.archivedChatIDs.contains(chatID),
+            draft: state.drafts[chatID.uuidString] ?? ""
+        )
+    }
+
+    public func setPinned(_ isPinned: Bool, for chatID: UUID) {
+        update(&state.pinnedChatIDs, contains: isPinned, chatID: chatID)
+        persist()
+    }
+
+    public func setMuted(_ isMuted: Bool, for chatID: UUID) {
+        update(&state.mutedChatIDs, contains: isMuted, chatID: chatID)
+        persist()
+    }
+
+    public func setArchived(_ isArchived: Bool, for chatID: UUID) {
+        update(&state.archivedChatIDs, contains: isArchived, chatID: chatID)
+        persist()
+    }
+
+    public func updateDraft(_ draft: String, for chatID: UUID) {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            state.drafts.removeValue(forKey: chatID.uuidString)
+        } else {
+            state.drafts[chatID.uuidString] = draft
+        }
+        persist()
+    }
+
+    private func update(_ ids: inout [UUID], contains shouldContain: Bool, chatID: UUID) {
+        ids.removeAll { $0 == chatID }
+        if shouldContain {
+            ids.append(chatID)
+        }
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(state) {
+            defaults.set(data, forKey: storageKey)
+        }
+        revision += 1
     }
 }

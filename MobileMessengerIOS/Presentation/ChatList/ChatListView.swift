@@ -4,6 +4,7 @@ struct ChatListView: View {
     @StateObject private var viewModel: ChatListViewModel
     @State private var isShowingCreateSheet = false
     @State private var createdChat: ChatListItem?
+    @State private var isShowingArchived = false
 
     @MainActor
     init() {
@@ -37,9 +38,86 @@ struct ChatListView: View {
                                     ChatRowView(chat: chat)
                                 }
                                 .buttonStyle(.plain)
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button {
+                                        viewModel.togglePinned(for: chat.id)
+                                    } label: {
+                                        Label(chat.isPinned ? "Открепить" : "Закрепить", systemImage: chat.isPinned ? "pin.slash.fill" : "pin.fill")
+                                    }
+                                    .tint(.yellow)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button {
+                                        viewModel.toggleMuted(for: chat.id)
+                                    } label: {
+                                        Label(chat.isMuted ? "Включить звук" : "Без звука", systemImage: chat.isMuted ? "bell.fill" : "bell.slash.fill")
+                                    }
+                                    .tint(.indigo)
+
+                                    Button {
+                                        viewModel.toggleArchived(for: chat.id)
+                                    } label: {
+                                        Label(chat.isArchived ? "Из архива" : "В архив", systemImage: chat.isArchived ? "tray.and.arrow.up.fill" : "archivebox.fill")
+                                    }
+                                    .tint(.gray)
+                                }
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
+                            }
+                        }
+
+                        if !viewModel.archivedChats.isEmpty {
+                            Section {
+                                Button {
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                                        isShowingArchived.toggle()
+                                    }
+                                } label: {
+                                    ArchivedChatsRow(
+                                        count: viewModel.archivedChats.count,
+                                        isExpanded: isShowingArchived
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+
+                                if isShowingArchived {
+                                    ForEach(viewModel.archivedChats) { chat in
+                                        NavigationLink(value: chat) {
+                                            ChatRowView(chat: chat)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                            Button {
+                                                viewModel.togglePinned(for: chat.id)
+                                            } label: {
+                                                Label(chat.isPinned ? "Открепить" : "Закрепить", systemImage: chat.isPinned ? "pin.slash.fill" : "pin.fill")
+                                            }
+                                            .tint(.yellow)
+                                        }
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button {
+                                                viewModel.toggleMuted(for: chat.id)
+                                            } label: {
+                                                Label(chat.isMuted ? "Включить звук" : "Без звука", systemImage: chat.isMuted ? "bell.fill" : "bell.slash.fill")
+                                            }
+                                            .tint(.indigo)
+
+                                            Button {
+                                                viewModel.toggleArchived(for: chat.id)
+                                            } label: {
+                                                Label("Из архива", systemImage: "tray.and.arrow.up.fill")
+                                            }
+                                            .tint(.gray)
+                                        }
+                                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                    }
+                                }
                             }
                         }
                     }
@@ -92,7 +170,7 @@ private struct ChatRowView: View {
     let chat: ChatListItem
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .top, spacing: 14) {
             avatar
 
             VStack(alignment: .leading, spacing: 6) {
@@ -113,10 +191,35 @@ private struct ChatRowView: View {
 
                     Spacer(minLength: 8)
 
-                    Text(chat.relativeDateString)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.trailing)
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text(chat.relativeDateString)
+                            .font(.caption)
+                            .foregroundStyle(chat.unreadCount > 0 && !chat.isMuted ? Color.blue.opacity(0.95) : .secondary)
+                            .multilineTextAlignment(.trailing)
+
+                        HStack(spacing: 8) {
+                            if chat.isPinned {
+                                Image(systemName: "pin.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if chat.isMuted {
+                                Image(systemName: "bell.slash.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if chat.unreadCount > 0 {
+                                Text(chat.unreadBadgeText)
+                                    .font(.footnote.bold())
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Capsule().fill(chat.isMuted ? Color.gray.opacity(0.8) : Color.blue))
+                            }
+                        }
+                    }
                 }
 
                 if let participants = chat.participantsSummary {
@@ -126,30 +229,41 @@ private struct ChatRowView: View {
                         .lineLimit(1)
                 }
 
-                if !chat.typingParticipants.isEmpty {
-                    Text("Печатает: \(chat.typingParticipants.joined(separator: ", "))")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.blue.opacity(0.9))
-                        .lineLimit(2)
-                } else if let preview = chat.lastMessagePreview, !preview.isEmpty {
-                    Text(preview)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } else {
-                    Text(chat.isGroup ? "Групповой чат готов к общению" : "Напишите первое сообщение")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if chat.lastMessageIsOutgoing, let status = chat.lastMessageStatus {
+                        MessageStatusView(status: status)
+                            .font(.caption)
+                    }
 
-            if chat.unreadCount > 0 {
-                Text("\(chat.unreadCount)")
-                    .font(.footnote.bold())
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.blue))
+                    if !chat.typingParticipants.isEmpty {
+                        Text(typingLabel)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.blue.opacity(0.9))
+                            .lineLimit(2)
+                    } else if !chat.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        (
+                            Text("Черновик: ")
+                                .foregroundStyle(Color.orange.opacity(0.92))
+                            +
+                            Text(chat.draftText)
+                                .foregroundStyle(.secondary)
+                        )
+                        .font(.subheadline)
+                        .lineLimit(2)
+                    } else if let preview = chat.lastMessagePreview, !preview.isEmpty {
+                        previewText(preview)
+                            .font(.subheadline)
+                            .lineLimit(2)
+                    } else if chat.lastMessageKind == .image {
+                        Text(chat.lastMessageIsOutgoing ? "Вы отправили фото" : "Фото")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(chat.isGroup ? "Групповой чат готов к общению" : "Напишите первое сообщение")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .padding(16)
@@ -162,6 +276,29 @@ private struct ChatRowView: View {
                 .stroke(Color.white.opacity(0.45), lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 10)
+    }
+
+    @ViewBuilder
+    private func previewText(_ preview: String) -> some View {
+        if chat.isGroup, let sender = chat.lastMessageAuthorName, !chat.lastMessageIsOutgoing {
+            (
+                Text("\(sender): ")
+                    .foregroundStyle(.primary)
+                +
+                Text(preview)
+                    .foregroundStyle(.secondary)
+            )
+        } else {
+            Text(preview)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var typingLabel: String {
+        if chat.typingParticipants.count == 1 {
+            return "\(chat.typingParticipants[0]) печатает..."
+        }
+        return "Печатают: \(chat.typingParticipants.joined(separator: ", "))"
     }
 
     private var avatar: some View {
@@ -195,6 +332,64 @@ private struct ChatRowView: View {
             }
         }
         .frame(width: 54, height: 54)
+        .overlay(alignment: .bottomTrailing) {
+            if chat.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(Color.yellow.opacity(0.95), in: Circle())
+            }
+        }
+    }
+}
+
+private struct ArchivedChatsRow: View {
+    let count: Int
+    let isExpanded: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 54, height: 54)
+                .overlay {
+                    Image(systemName: "archivebox.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Архив")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text("\(count) чатов")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.42))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.45), lineWidth: 1)
+        }
+    }
+}
+
+private extension ChatListItem {
+    var unreadBadgeText: String {
+        unreadCount > 99 ? "99+" : "\(unreadCount)"
     }
 }
 

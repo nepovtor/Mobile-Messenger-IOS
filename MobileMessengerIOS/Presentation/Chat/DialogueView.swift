@@ -8,6 +8,11 @@ struct DialogueView: View {
 
     @StateObject private var viewModel: ChatViewModel
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isShowingInfo = false
+    @State private var isSearchPresented = false
+    @State private var messageSearchQuery = ""
+    @State private var selectedSearchResultIndex = 0
+    @State private var scrollTargetMessageID: UUID?
 
     @MainActor
     init(chat: ChatListItem) {
@@ -44,6 +49,7 @@ struct DialogueView: View {
                                         showsAuthor: shouldShowAuthor(for: message),
                                         groupsWithPrevious: isGroupedWithPrevious(message),
                                         repliedMessage: message.repliedTo.flatMap(viewModel.message(for:)),
+                                        isHighlighted: currentSearchMessageID == message.id.messageID,
                                         onReply: { viewModel.selectReplyTarget(message) },
                                         onCopy: { viewModel.copyText(of: message) }
                                     )
@@ -67,7 +73,19 @@ struct DialogueView: View {
                     scrollToBottom(using: proxy, animated: false)
                 }
                 .onChange(of: viewModel.messages.count) {
-                    scrollToBottom(using: proxy, animated: true)
+                    if let scrollTargetMessageID {
+                        withAnimation(.easeOut(duration: 0.24)) {
+                            proxy.scrollTo(scrollTargetMessageID, anchor: .center)
+                        }
+                    } else {
+                        scrollToBottom(using: proxy, animated: true)
+                    }
+                }
+                .onChange(of: scrollTargetMessageID) {
+                    guard let scrollTargetMessageID else { return }
+                    withAnimation(.easeOut(duration: 0.24)) {
+                        proxy.scrollTo(scrollTargetMessageID, anchor: .center)
+                    }
                 }
             }
         }
@@ -86,16 +104,74 @@ struct DialogueView: View {
             ToolbarItem(placement: .principal) {
                 ChatHeaderView(chat: chat)
             }
+
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button("Поиск", systemImage: "magnifyingglass") {
+                        isSearchPresented = true
+                    }
+
+                    if let unreadID = viewModel.firstUnreadIncomingMessageID() {
+                        Button("К непрочитанным", systemImage: "arrow.down.circle") {
+                            scrollTargetMessageID = unreadID
+                        }
+                    }
+
+                    Button("Инфо чата", systemImage: "info.circle") {
+                        isShowingInfo = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(
+            text: $messageSearchQuery,
+            isPresented: $isSearchPresented,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Поиск по сообщениям"
+        )
+        .onChange(of: messageSearchQuery) {
+            syncSearchSelection()
+        }
         .onAppear { viewModel.onAppear() }
         .onDisappear { viewModel.onDisappear() }
+        .sheet(isPresented: $isShowingInfo) {
+            ChatInfoSheet(chat: chat, messages: viewModel.messages)
+        }
         .task(id: selectedPhotoItem) {
             guard let selectedPhotoItem,
                   let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
                   let image = UIImage(data: data) else { return }
             viewModel.sendImage(image)
             self.selectedPhotoItem = nil
+        }
+        .overlay(alignment: .top) {
+            if isSearchPresented, !messageSearchQuery.isEmpty, !searchResults.isEmpty {
+                SearchResultsPill(
+                    currentIndex: selectedSearchResultIndex + 1,
+                    totalCount: searchResults.count,
+                    onPrevious: selectPreviousSearchResult,
+                    onNext: selectNextSearchResult
+                )
+                .padding(.top, 8)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if let unreadID = viewModel.firstUnreadIncomingMessageID() {
+                Button {
+                    scrollTargetMessageID = unreadID
+                } label: {
+                    Label("Непрочитанные", systemImage: "arrow.down.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 86)
+            }
         }
     }
 
@@ -322,6 +398,41 @@ struct DialogueView: View {
         }
         return message.text.isEmpty ? "Сообщение" : message.text
     }
+
+    private var searchResults: [Message] {
+        let query = messageSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return [] }
+        return viewModel.messages.filter { message in
+            message.text.lowercased().contains(query) || message.authorName.lowercased().contains(query)
+        }
+    }
+
+    private var currentSearchMessageID: UUID? {
+        guard searchResults.indices.contains(selectedSearchResultIndex) else { return nil }
+        return searchResults[selectedSearchResultIndex].id.messageID
+    }
+
+    private func syncSearchSelection() {
+        if searchResults.isEmpty {
+            selectedSearchResultIndex = 0
+            scrollTargetMessageID = nil
+            return
+        }
+        selectedSearchResultIndex = min(selectedSearchResultIndex, searchResults.count - 1)
+        scrollTargetMessageID = searchResults[selectedSearchResultIndex].id.messageID
+    }
+
+    private func selectPreviousSearchResult() {
+        guard !searchResults.isEmpty else { return }
+        selectedSearchResultIndex = (selectedSearchResultIndex - 1 + searchResults.count) % searchResults.count
+        scrollTargetMessageID = searchResults[selectedSearchResultIndex].id.messageID
+    }
+
+    private func selectNextSearchResult() {
+        guard !searchResults.isEmpty else { return }
+        selectedSearchResultIndex = (selectedSearchResultIndex + 1) % searchResults.count
+        scrollTargetMessageID = searchResults[selectedSearchResultIndex].id.messageID
+    }
 }
 
 private enum TimelineItem: Identifiable {
@@ -395,6 +506,7 @@ private struct MessageBubbleView: View {
     let showsAuthor: Bool
     let groupsWithPrevious: Bool
     let repliedMessage: Message?
+    let isHighlighted: Bool
     let onReply: () -> Void
     let onCopy: () -> Void
 
@@ -431,7 +543,7 @@ private struct MessageBubbleView: View {
             .background(bubbleBackground)
             .overlay {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(borderColor, lineWidth: 1)
+                    .stroke(isHighlighted ? Color.blue.opacity(0.9) : borderColor, lineWidth: isHighlighted ? 2 : 1)
             }
             .contextMenu {
                 Button("Ответить", systemImage: "arrowshape.turn.up.left") {
@@ -549,6 +661,109 @@ private struct ReplySnippetView: View {
             return message.text.isEmpty ? "Фотография" : "Фотография: \(message.text)"
         }
         return message.text.isEmpty ? "Сообщение" : message.text
+    }
+}
+
+private struct SearchResultsPill: View {
+    let currentIndex: Int
+    let totalCount: Int
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(currentIndex) из \(totalCount)")
+                .font(.caption.weight(.semibold))
+
+            Button(action: onPrevious) {
+                Image(systemName: "chevron.up")
+                    .font(.caption.weight(.bold))
+            }
+
+            Button(action: onNext) {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.white.opacity(0.5), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 6)
+    }
+}
+
+private struct ChatInfoSheet: View {
+    let chat: ChatListItem
+    let messages: [Message]
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10)
+    ]
+
+    private var sharedMedia: [MessageAttachment] {
+        messages
+            .flatMap(\.attachments)
+            .filter { $0.kind == .image }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(chat.title)
+                            .font(.title2.weight(.bold))
+                        Text(chat.isGroup ? "Участников: \(chat.participantCount)" : "Личный чат")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if !chat.participantNames.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Участники")
+                                .font(.headline)
+
+                            ForEach(chat.participantNames, id: \.self) { name in
+                                Text(name)
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Color.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Общие медиа")
+                            .font(.headline)
+
+                        if sharedMedia.isEmpty {
+                            Text("Медиа пока нет")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            LazyVGrid(columns: columns, spacing: 10) {
+                                ForEach(Array(sharedMedia.enumerated()), id: \.offset) { _, attachment in
+                                    MessageAttachmentImageView(attachment: attachment)
+                                        .frame(height: 110)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(ChatWallpaper())
+            .navigationTitle("Информация")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
