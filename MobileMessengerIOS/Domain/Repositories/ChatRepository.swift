@@ -8,8 +8,8 @@ public protocol ChatRepository {
     func observeMessages(for chatID: UUID) -> AsyncStream<Message>
     func cachedHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async -> [Message]
     func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message]
-    func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message
-    func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message
+    func sendMessage(chatID: UUID, text: String, localID: UUID?, repliedTo: Message.Identifier?) async throws -> Message
+    func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?, repliedTo: Message.Identifier?) async throws -> Message
     func setTyping(chatID: UUID, isTyping: Bool) async
     func retryPendingMessages(for chatID: UUID) async
     func refreshForForeground() async

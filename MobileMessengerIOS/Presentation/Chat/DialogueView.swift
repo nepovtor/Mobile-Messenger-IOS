@@ -32,14 +32,28 @@ struct DialogueView: View {
                                 MessageSkeletonBubble(isOutgoing: index.isMultiple(of: 2))
                             }
                         } else {
-                            ForEach(viewModel.messages, id: \._id) { message in
-                                MessageBubbleView(message: message, isGroup: chat.isGroup)
+                            ForEach(timelineItems) { item in
+                                switch item {
+                                case .date(let date, let id):
+                                    DateDivider(date: date)
+                                        .id(id)
+                                case .message(let message):
+                                    MessageBubbleView(
+                                        message: message,
+                                        isGroup: chat.isGroup,
+                                        showsAuthor: shouldShowAuthor(for: message),
+                                        groupsWithPrevious: isGroupedWithPrevious(message),
+                                        repliedMessage: message.repliedTo.flatMap(viewModel.message(for:)),
+                                        onReply: { viewModel.selectReplyTarget(message) },
+                                        onCopy: { viewModel.copyText(of: message) }
+                                    )
                                     .id(message.id.messageID)
                                     .onAppear {
                                         if message == viewModel.messages.last {
                                             viewModel.markAsRead(messageID: message.id.messageID)
                                         }
                                     }
+                                }
                             }
                         }
                     }
@@ -110,47 +124,88 @@ struct DialogueView: View {
             }
             .disabled(isSendingMedia)
 
-            HStack(alignment: .bottom, spacing: 10) {
-                ZStack(alignment: .topLeading) {
-                    if viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Сообщение")
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 10)
-                            .padding(.leading, 6)
+            VStack(alignment: .leading, spacing: 8) {
+                if let replyTarget = viewModel.replyTarget {
+                    HStack(alignment: .top, spacing: 10) {
+                        Rectangle()
+                            .fill(Color.blue.opacity(0.9))
+                            .frame(width: 3)
+                            .clipShape(Capsule())
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Ответ")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.blue.opacity(0.95))
+
+                            Text(replyTarget.authorName)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+
+                            Text(replyPreviewText(for: replyTarget))
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Button {
+                            viewModel.clearReplyTarget()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 24, height: 24)
+                                .background(Color.white.opacity(0.5), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                }
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    ZStack(alignment: .topLeading) {
+                        if viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(viewModel.replyTarget == nil ? "Сообщение" : "Ответ")
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 10)
+                                .padding(.leading, 6)
+                        }
+
+                        TextEditor(text: $viewModel.inputText)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 24, maxHeight: 108)
+                            .padding(.horizontal, 2)
+                            .onChange(of: viewModel.inputText) {
+                                viewModel.handleInputChanged(viewModel.inputText)
+                            }
+                            .onTapGesture {
+                                if let last = viewModel.messages.last {
+                                    viewModel.markAsRead(messageID: last.id.messageID)
+                                }
+                            }
                     }
 
-                    TextEditor(text: $viewModel.inputText)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 24, maxHeight: 108)
-                        .padding(.horizontal, 2)
-                        .onChange(of: viewModel.inputText) {
-                            viewModel.handleInputChanged(viewModel.inputText)
-                        }
-                        .onTapGesture {
-                            if let last = viewModel.messages.last {
-                                viewModel.markAsRead(messageID: last.id.messageID)
-                            }
-                        }
-                }
-
-                Button(action: viewModel.sendMessage) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.blue, Color.cyan],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
+                    Button(action: viewModel.sendMessage) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.blue, Color.cyan],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
                                     )
-                                )
-                        )
+                            )
+                    }
+                    .disabled(isSendDisabled)
+                    .opacity(isSendDisabled ? 0.55 : 1)
                 }
-                .disabled(isSendDisabled)
-                .opacity(isSendDisabled ? 0.55 : 1)
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)
@@ -223,6 +278,64 @@ struct DialogueView: View {
             proxy.scrollTo(last.id.messageID, anchor: .bottom)
         }
     }
+
+    private var timelineItems: [TimelineItem] {
+        var items: [TimelineItem] = []
+        var lastDay: Date?
+
+        for message in viewModel.messages {
+            let day = Calendar.current.startOfDay(for: message.createdAt)
+            if lastDay != day {
+                items.append(.date(day, id: "day_\(day.timeIntervalSince1970)"))
+                lastDay = day
+            }
+            items.append(.message(message))
+        }
+
+        return items
+    }
+
+    private func shouldShowAuthor(for message: Message) -> Bool {
+        guard chat.isGroup, !message.isOutgoing else { return false }
+        guard let previous = previousMessage(for: message) else { return true }
+        return !belongsToSameVisualGroup(previous, message)
+    }
+
+    private func isGroupedWithPrevious(_ message: Message) -> Bool {
+        guard let previous = previousMessage(for: message) else { return false }
+        return belongsToSameVisualGroup(previous, message)
+    }
+
+    private func previousMessage(for message: Message) -> Message? {
+        guard let index = viewModel.messages.firstIndex(of: message), index > 0 else { return nil }
+        return viewModel.messages[index - 1]
+    }
+
+    private func belongsToSameVisualGroup(_ lhs: Message, _ rhs: Message) -> Bool {
+        guard lhs.authorID == rhs.authorID, lhs.isOutgoing == rhs.isOutgoing else { return false }
+        return abs(lhs.createdAt.timeIntervalSince(rhs.createdAt)) < 5 * 60
+    }
+
+    private func replyPreviewText(for message: Message) -> String {
+        if message.attachments.contains(where: { $0.kind == .image }) {
+            return message.text.isEmpty ? "Фотография" : "Фотография: \(message.text)"
+        }
+        return message.text.isEmpty ? "Сообщение" : message.text
+    }
+}
+
+private enum TimelineItem: Identifiable {
+    case date(Date, id: String)
+    case message(Message)
+
+    var id: String {
+        switch self {
+        case .date(_, let id):
+            return id
+        case .message(let message):
+            return message.id.messageID.uuidString
+        }
+    }
 }
 
 private struct ChatHeaderView: View {
@@ -279,10 +392,15 @@ private struct ChatHeaderView: View {
 private struct MessageBubbleView: View {
     let message: Message
     let isGroup: Bool
+    let showsAuthor: Bool
+    let groupsWithPrevious: Bool
+    let repliedMessage: Message?
+    let onReply: () -> Void
+    let onCopy: () -> Void
 
     var body: some View {
         VStack(alignment: message.isOutgoing ? .trailing : .leading, spacing: 6) {
-            if isGroup && !message.isOutgoing {
+            if showsAuthor {
                 Text(message.authorName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.blue.opacity(0.9))
@@ -290,10 +408,12 @@ private struct MessageBubbleView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                if let repliedTo = message.repliedTo {
-                    Text("Ответ на сообщение \(repliedTo.messageID.uuidString.prefix(4))…")
-                        .font(.caption)
-                        .foregroundStyle(message.isOutgoing ? Color.white.opacity(0.85) : .secondary)
+                if let repliedMessage {
+                    ReplySnippetView(
+                        message: repliedMessage,
+                        tint: message.isOutgoing ? Color.white.opacity(0.9) : Color.blue.opacity(0.9),
+                        secondaryTint: message.isOutgoing ? Color.white.opacity(0.72) : .secondary
+                    )
                 }
 
                 if let imageAttachment = message.attachments.first(where: { $0.kind == .image }) {
@@ -313,6 +433,17 @@ private struct MessageBubbleView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(borderColor, lineWidth: 1)
             }
+            .contextMenu {
+                Button("Ответить", systemImage: "arrowshape.turn.up.left") {
+                    onReply()
+                }
+
+                if !message.text.isEmpty {
+                    Button("Скопировать", systemImage: "doc.on.doc") {
+                        onCopy()
+                    }
+                }
+            }
 
             HStack(spacing: 6) {
                 Text(message.createdAt, style: .time)
@@ -326,6 +457,7 @@ private struct MessageBubbleView: View {
         }
         .frame(maxWidth: .infinity, alignment: message.isOutgoing ? .trailing : .leading)
         .padding(message.isOutgoing ? .leading : .trailing, 54)
+        .padding(.top, groupsWithPrevious ? 2 : 8)
         .transition(
             .asymmetric(
                 insertion: .move(edge: message.isOutgoing ? .trailing : .leading).combined(with: .opacity),
@@ -351,6 +483,72 @@ private struct MessageBubbleView: View {
 
     private var borderColor: Color {
         message.isOutgoing ? Color.white.opacity(0.16) : Color.white.opacity(0.55)
+    }
+}
+
+private struct DateDivider: View {
+    let date: Date
+
+    var body: some View {
+        Text(dateLabel)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(0.5), lineWidth: 1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+    }
+
+    private var dateLabel: String {
+        if Calendar.current.isDateInToday(date) {
+            return "Сегодня"
+        }
+        if Calendar.current.isDateInYesterday(date) {
+            return "Вчера"
+        }
+
+        return date.formatted(.dateTime.day().month(.wide))
+    }
+}
+
+private struct ReplySnippetView: View {
+    let message: Message
+    let tint: Color
+    let secondaryTint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Rectangle()
+                .fill(tint)
+                .frame(width: 3)
+                .clipShape(Capsule())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(message.authorName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+
+                Text(snippet)
+                    .font(.caption)
+                    .foregroundStyle(secondaryTint)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(message.isOutgoing ? 0.12 : 0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var snippet: String {
+        if message.attachments.contains(where: { $0.kind == .image }) {
+            return message.text.isEmpty ? "Фотография" : "Фотография: \(message.text)"
+        }
+        return message.text.isEmpty ? "Сообщение" : message.text
     }
 }
 

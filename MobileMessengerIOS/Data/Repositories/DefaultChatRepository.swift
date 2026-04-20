@@ -91,7 +91,7 @@ public final class DefaultChatRepository: ChatRepository {
         }
     }
 
-    public func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message {
+    public func sendMessage(chatID: UUID, text: String, localID: UUID?, repliedTo: Message.Identifier?) async throws -> Message {
         let local = localID ?? UUID()
         let optimistic = Message(
             id: Message.Identifier(chatID: chatID, messageID: local),
@@ -101,7 +101,8 @@ public final class DefaultChatRepository: ChatRepository {
             kind: .text,
             text: text,
             createdAt: Date(),
-            status: .sending
+            status: .sending,
+            repliedTo: repliedTo
         )
         try await store.ensureChatExists(id: chatID, title: "Диалог")
         try await store.append(message: optimistic, for: chatID)
@@ -111,7 +112,7 @@ public final class DefaultChatRepository: ChatRepository {
         return optimistic
     }
 
-    public func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message {
+    public func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?, repliedTo: Message.Identifier?) async throws -> Message {
         let local = localID ?? UUID()
         let localFileURL = try savePendingImage(data: imageData, localID: local)
         let optimistic = Message(
@@ -132,7 +133,8 @@ public final class DefaultChatRepository: ChatRepository {
                     thumbnailURL: nil,
                     fileSize: Int64(imageData.count)
                 )
-            ]
+            ],
+            repliedTo: repliedTo
         )
         try await store.ensureChatExists(id: chatID, title: "Диалог")
         try await store.append(message: optimistic, for: chatID)
@@ -200,7 +202,7 @@ public final class DefaultChatRepository: ChatRepository {
                     mediaID: nil,
                     localID: message.localID
                 )
-                deliveredMessage = response.asDomainMessage(localID: message.localID)
+                deliveredMessage = response.asDomainMessage(localID: message.localID).copying(repliedTo: message.repliedTo)
             case .image:
                 let localFileURL = message.attachments.first(where: { $0.kind == .image })?.localPath
                 guard let localFileURL else {
@@ -224,7 +226,7 @@ public final class DefaultChatRepository: ChatRepository {
                     mediaID: upload.mediaID,
                     localID: message.localID
                 )
-                deliveredMessage = response.asDomainMessage(localID: message.localID)
+                deliveredMessage = response.asDomainMessage(localID: message.localID).copying(repliedTo: message.repliedTo)
                 try? fileManager.removeItem(at: localFileURL)
             }
 

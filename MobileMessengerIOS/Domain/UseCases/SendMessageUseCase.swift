@@ -8,7 +8,12 @@ public struct SendMessageUseCase {
     }
 
     @discardableResult
-    public func callAsFunction(chatID: UUID, text: String, localID: UUID? = nil) async throws -> Message {
-        try await repository.sendMessage(chatID: chatID, text: text, localID: localID)
+    public func callAsFunction(
+        chatID: UUID,
+        text: String,
+        localID: UUID? = nil,
+        repliedTo: Message.Identifier? = nil
+    ) async throws -> Message {
+        try await repository.sendMessage(chatID: chatID, text: text, localID: localID, repliedTo: repliedTo)
     }
 }

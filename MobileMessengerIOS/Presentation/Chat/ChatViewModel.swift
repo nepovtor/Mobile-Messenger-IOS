@@ -19,6 +19,7 @@ public final class ChatViewModel: ObservableObject {
 
     @Published public private(set) var title: String
     @Published public private(set) var messages: [Message] = []
+    @Published public var replyTarget: Message?
     @Published public var inputText: String = ""
     @Published public var isTyping = false
     @Published public private(set) var isSendingMedia = false
@@ -98,12 +99,19 @@ public final class ChatViewModel: ObservableObject {
     public func sendMessage() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let replyTarget = replyTarget
         inputText = ""
+        self.replyTarget = nil
         scheduleTypingUpdate(isTyping: false)
 
         Task {
             do {
-                let message = try await sendMessageUseCase(chatID: chatID, text: trimmed, localID: UUID())
+                let message = try await sendMessageUseCase(
+                    chatID: chatID,
+                    text: trimmed,
+                    localID: UUID(),
+                    repliedTo: replyTarget?.id
+                )
                 upsert(message: message)
                 updateBannerState()
             } catch {
@@ -116,6 +124,23 @@ public final class ChatViewModel: ObservableObject {
     public func retryFailedMessages() {
         banner = isReachable ? nil : .offline
         Task { await retryPending(chatID: chatID) }
+    }
+
+    public func selectReplyTarget(_ message: Message) {
+        replyTarget = message
+    }
+
+    public func clearReplyTarget() {
+        replyTarget = nil
+    }
+
+    public func copyText(of message: Message) {
+        guard !message.text.isEmpty else { return }
+        UIPasteboard.general.string = message.text
+    }
+
+    public func message(for identifier: Message.Identifier) -> Message? {
+        messages.first { $0.id == identifier }
     }
 
     public func handleInputChanged(_ text: String) {
@@ -132,7 +157,9 @@ public final class ChatViewModel: ObservableObject {
         }
 
         let caption = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let replyTarget = replyTarget
         inputText = ""
+        self.replyTarget = nil
         scheduleTypingUpdate(isTyping: false)
         isSendingMedia = true
 
@@ -143,7 +170,8 @@ public final class ChatViewModel: ObservableObject {
                     chatID: chatID,
                     imageData: prepared.data,
                     caption: caption.isEmpty ? nil : caption,
-                    localID: UUID()
+                    localID: UUID(),
+                    repliedTo: replyTarget?.id
                 )
                 upsert(message: message)
                 updateBannerState()

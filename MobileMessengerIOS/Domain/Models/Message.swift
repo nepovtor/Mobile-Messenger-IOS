@@ -78,6 +78,36 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
         )
     }
 
+    public func copying(
+        id: Identifier? = nil,
+        localID: UUID? = nil,
+        authorID: UUID? = nil,
+        authorName: String? = nil,
+        kind: Kind? = nil,
+        text: String? = nil,
+        mediaID: UUID?? = nil,
+        createdAt: Date? = nil,
+        status: MessageStatus? = nil,
+        attachments: [MessageAttachment]? = nil,
+        repliedTo: Identifier?? = nil,
+        editedAt: Date?? = nil
+    ) -> Message {
+        Message(
+            id: id ?? self.id,
+            localID: localID ?? self.localID,
+            authorID: authorID ?? self.authorID,
+            authorName: authorName ?? self.authorName,
+            kind: kind ?? self.kind,
+            text: text ?? self.text,
+            mediaID: mediaID ?? self.mediaID,
+            createdAt: createdAt ?? self.createdAt,
+            status: status ?? self.status,
+            attachments: attachments ?? self.attachments,
+            repliedTo: repliedTo ?? self.repliedTo,
+            editedAt: editedAt ?? self.editedAt
+        )
+    }
+
     public var primaryImageURL: URL? {
         attachments.first(where: { $0.kind == .image })?.url
     }
