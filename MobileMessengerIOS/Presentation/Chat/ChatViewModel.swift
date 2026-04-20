@@ -43,6 +43,8 @@ public final class ChatViewModel: ObservableObject {
     private var typingTask: Task<Void, Never>?
     private var reachabilityTask: Task<Void, Never>?
     private var isReachable = true
+    private var lastReadRequestMessageID: UUID?
+    private var knownMessageIDs: Set<UUID> = []
     init(
         chatID: UUID,
         title: String,
@@ -81,6 +83,7 @@ public final class ChatViewModel: ObservableObject {
 
     public func onAppear() {
         guard observeTask == nil else { return }
+        notificationManager.setChat(chatID, isActive: true)
         if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             inputText = presentationStore.state(for: chatID).draft
             isTyping = !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -95,6 +98,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     public func onDisappear() {
+        notificationManager.setChat(chatID, isActive: false)
         observeTask?.cancel()
         observeTask = nil
         typingTask?.cancel()
@@ -192,8 +196,22 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    public func markAsRead(messageID: UUID) {
-        Task { try? await markStatus(chatID: chatID, messageID: messageID, status: .read) }
+    public func markMessageAsReadIfNeeded(_ message: Message) {
+        guard !message.isOutgoing, message.status != .read else { return }
+        guard lastReadRequestMessageID != message.id.messageID else { return }
+
+        lastReadRequestMessageID = message.id.messageID
+        Task { [weak self] in
+            do {
+                try await self?.markStatus(chatID: self?.chatID ?? message.id.chatID, messageID: message.id.messageID, status: .read)
+            } catch {
+                await MainActor.run {
+                    if self?.lastReadRequestMessageID == message.id.messageID {
+                        self?.lastReadRequestMessageID = nil
+                    }
+                }
+            }
+        }
     }
 
     public func firstUnreadIncomingMessageID() -> UUID? {
@@ -204,13 +222,13 @@ public final class ChatViewModel: ObservableObject {
         isLoadingHistory = true
         let cachedHistory = await loadHistory.cached(chatID: chatID, limit: 100, before: nil)
         if !cachedHistory.isEmpty {
-            messages = cachedHistory
+            replaceMessages(with: cachedHistory)
             isLoadingHistory = false
         }
 
         do {
             let history = try await loadHistory(chatID: chatID, limit: 100, before: nil)
-            messages = history
+            replaceMessages(with: history)
             isLoadingHistory = false
         } catch {
             isLoadingHistory = false
@@ -223,9 +241,13 @@ public final class ChatViewModel: ObservableObject {
         let stream = observeMessages(chatID: chatID)
         for await message in stream {
             await MainActor.run {
+                let isNewIncomingMessage = !message.isOutgoing && !knownMessageIDs.contains(message.id.messageID)
                 upsert(message: message)
                 updateBannerState()
-                if !message.isOutgoing {
+                if message.status == .read, lastReadRequestMessageID == message.id.messageID {
+                    lastReadRequestMessageID = nil
+                }
+                if isNewIncomingMessage {
                     notificationManager.scheduleLocalNotification(for: message)
                 }
             }
@@ -248,12 +270,23 @@ public final class ChatViewModel: ObservableObject {
         } else {
             messages.append(message)
         }
+        knownMessageIDs.insert(message.id.messageID)
         messages.sort { lhs, rhs in
             if lhs.createdAt == rhs.createdAt {
                 return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
             }
             return lhs.createdAt < rhs.createdAt
         }
+    }
+
+    private func replaceMessages(with newMessages: [Message]) {
+        messages = newMessages.sorted { lhs, rhs in
+            if lhs.createdAt == rhs.createdAt {
+                return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
+            }
+            return lhs.createdAt < rhs.createdAt
+        }
+        knownMessageIDs = Set(messages.map(\.id.messageID))
     }
 
     private func observeReachability() async {

@@ -25,9 +25,25 @@ __decorate([
     __metadata("design:type", String)
 ], Message.prototype, "messageID", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({
+        type: "simple-enum",
+        enum: ["text", "image"],
+        default: "text",
+    }),
+    __metadata("design:type", String)
+], Message.prototype, "kind", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: "" }),
     __metadata("design:type", String)
 ], Message.prototype, "text", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "varchar", nullable: true }),
+    __metadata("design:type", Object)
+], Message.prototype, "mediaID", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "varchar", nullable: true }),
+    __metadata("design:type", Object)
+], Message.prototype, "mediaURL", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User),
     (0, typeorm_1.JoinColumn)(),

@@ -5,9 +5,19 @@ import UserNotifications
 @MainActor
 final class PushNotificationManager: NSObject, ObservableObject {
     static let shared = PushNotificationManager()
+    private var activeChatIDs: Set<UUID> = []
+    private var seenMessageIDs: Set<UUID> = []
 
     private override init() {
         super.init()
+    }
+
+    func setChat(_ chatID: UUID, isActive: Bool) {
+        if isActive {
+            activeChatIDs.insert(chatID)
+        } else {
+            activeChatIDs.remove(chatID)
+        }
     }
 
     func registerForNotifications() async {
@@ -35,9 +45,14 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func scheduleLocalNotification(for message: Message) {
+        guard !seenMessageIDs.contains(message.id.messageID) else { return }
+        seenMessageIDs.insert(message.id.messageID)
+
+        guard !activeChatIDs.contains(message.id.chatID) else { return }
+
         let content = UNMutableNotificationContent()
         content.title = message.authorName
-        content.body = message.text
+        content.body = message.text.isEmpty ? "Новое вложение" : message.text
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)

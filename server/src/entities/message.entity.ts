@@ -15,6 +15,8 @@ export type MessageStatus =
   | "read"
   | "failed";
 
+export type MessageKind = "text" | "image";
+
 @Entity()
 export class Message {
   @PrimaryGeneratedColumn("uuid")
@@ -23,8 +25,21 @@ export class Message {
   @Column({ unique: true })
   messageID!: string;
 
-  @Column()
+  @Column({
+    type: "simple-enum",
+    enum: ["text", "image"],
+    default: "text",
+  })
+  kind!: MessageKind;
+
+  @Column({ default: "" })
   text!: string;
+
+  @Column({ type: "varchar", nullable: true })
+  mediaID!: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  mediaURL!: string | null;
 
   @ManyToOne(() => User)
   @JoinColumn()

@@ -56,7 +56,7 @@ struct DialogueView: View {
                                     .id(message.id.messageID)
                                     .onAppear {
                                         if message == viewModel.messages.last {
-                                            viewModel.markAsRead(messageID: message.id.messageID)
+                                            viewModel.markMessageAsReadIfNeeded(message)
                                         }
                                     }
                                 }
@@ -134,6 +134,12 @@ struct DialogueView: View {
         )
         .onChange(of: messageSearchQuery) {
             syncSearchSelection()
+        }
+        .onChange(of: isSearchPresented) {
+            guard !isSearchPresented else { return }
+            messageSearchQuery = ""
+            selectedSearchResultIndex = 0
+            scrollTargetMessageID = nil
         }
         .onAppear { viewModel.onAppear() }
         .onDisappear { viewModel.onDisappear() }
@@ -258,7 +264,7 @@ struct DialogueView: View {
                             }
                             .onTapGesture {
                                 if let last = viewModel.messages.last {
-                                    viewModel.markAsRead(messageID: last.id.messageID)
+                                    viewModel.markMessageAsReadIfNeeded(last)
                                 }
                             }
                     }

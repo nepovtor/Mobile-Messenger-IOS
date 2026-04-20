@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -11,19 +12,21 @@ import { Chat as ChatEntity } from "../../entities/chat.entity";
 import { ChatReadState } from "../../entities/chat-read-state.entity";
 import {
   Message as MessageEntity,
+  MessageKind,
   MessageStatus,
 } from "../../entities/message.entity";
 import { User } from "../../entities/user.entity";
 import { ChatEventsService } from "./chat-events.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
+import { MediaStorageService } from "./media-storage.service";
 
 export interface Message {
   id: string;
   chatID: string;
   messageID: string;
-  kind: "text";
-  text: string;
+  kind: MessageKind;
+  text: string | null;
   mediaID: string | null;
   mediaURL: string | null;
   authorID: string;
@@ -62,6 +65,7 @@ export class ChatService implements OnModuleInit {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly chatEventsService: ChatEventsService,
+    private readonly mediaStorageService: MediaStorageService,
   ) {}
 
   async onModuleInit() {
@@ -109,7 +113,8 @@ export class ChatService implements OnModuleInit {
     const normalizedChatID = chatId.toLowerCase();
     const chat = await this.requireChatAccess(normalizedChatID, authorID);
     const normalizedMessageID = data.messageID.toLowerCase();
-    const trimmedText = data.text.trim();
+    const kind = data.kind ?? "text";
+    const trimmedText = data.text?.trim() ?? "";
 
     const existingMessage = await this.messageRepository.findOne({
       where: { messageID: normalizedMessageID },
@@ -134,9 +139,28 @@ export class ChatService implements OnModuleInit {
       throw new NotFoundException("Author not found");
     }
 
+    let mediaID: string | null = null;
+    let mediaURL: string | null = null;
+
+    if (kind === "image") {
+      if (!data.mediaID) {
+        throw new BadRequestException("Media ID is required for image messages");
+      }
+      const media = this.mediaStorageService.resolveConfirmedMedia(
+        data.mediaID.toLowerCase(),
+      );
+      mediaID = media.mediaID;
+      mediaURL = media.mediaURL;
+    } else if (!trimmedText) {
+      throw new BadRequestException("Text message cannot be empty");
+    }
+
     const message = this.messageRepository.create({
+      kind,
       messageID: normalizedMessageID,
       text: trimmedText,
+      mediaID,
+      mediaURL,
       author,
       chat,
       createdAt: new Date(),
@@ -145,7 +169,7 @@ export class ChatService implements OnModuleInit {
 
     await this.messageRepository.save(message);
 
-    chat.lastMessagePreview = trimmedText.slice(0, 50);
+    chat.lastMessagePreview = this.buildMessagePreview(kind, trimmedText);
     chat.lastActivity = message.createdAt;
     await this.chatRepository.save(chat);
 
@@ -384,15 +408,23 @@ export class ChatService implements OnModuleInit {
       id: message.id,
       chatID: chatId,
       messageID: message.messageID,
-      kind: "text",
-      text: message.text,
-      mediaID: null,
-      mediaURL: null,
+      kind: message.kind,
+      text: message.text || null,
+      mediaID: message.mediaID,
+      mediaURL: message.mediaURL,
       authorID: message.author.id,
       authorName: message.author.displayName,
       createdAt: message.createdAt.toISOString(),
       status: message.status,
     };
+  }
+
+  private buildMessagePreview(kind: MessageKind, text: string): string {
+    if (kind === "image") {
+      return text ? `Фото: ${text}`.slice(0, 50) : "Фото";
+    }
+
+    return text.slice(0, 50);
   }
 
   private async getUnreadCount(

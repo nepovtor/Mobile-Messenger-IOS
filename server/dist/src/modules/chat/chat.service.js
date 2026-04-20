@@ -22,13 +22,15 @@ const chat_read_state_entity_1 = require("../../entities/chat-read-state.entity"
 const message_entity_1 = require("../../entities/message.entity");
 const user_entity_1 = require("../../entities/user.entity");
 const chat_events_service_1 = require("./chat-events.service");
+const media_storage_service_1 = require("./media-storage.service");
 let ChatService = ChatService_1 = class ChatService {
-    constructor(chatRepository, chatReadStateRepository, messageRepository, userRepository, chatEventsService) {
+    constructor(chatRepository, chatReadStateRepository, messageRepository, userRepository, chatEventsService, mediaStorageService) {
         this.chatRepository = chatRepository;
         this.chatReadStateRepository = chatReadStateRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.chatEventsService = chatEventsService;
+        this.mediaStorageService = mediaStorageService;
         this.logger = new common_1.Logger(ChatService_1.name);
         this.typingTTL = 5_000;
         this.typingParticipants = new Map();
@@ -64,7 +66,8 @@ let ChatService = ChatService_1 = class ChatService {
         const normalizedChatID = chatId.toLowerCase();
         const chat = await this.requireChatAccess(normalizedChatID, authorID);
         const normalizedMessageID = data.messageID.toLowerCase();
-        const trimmedText = data.text.trim();
+        const kind = data.kind ?? "text";
+        const trimmedText = data.text?.trim() ?? "";
         const existingMessage = await this.messageRepository.findOne({
             where: { messageID: normalizedMessageID },
             relations: ["author", "chat"],
@@ -82,16 +85,32 @@ let ChatService = ChatService_1 = class ChatService {
         if (!author) {
             throw new common_1.NotFoundException("Author not found");
         }
+        let mediaID = null;
+        let mediaURL = null;
+        if (kind === "image") {
+            if (!data.mediaID) {
+                throw new common_1.BadRequestException("Media ID is required for image messages");
+            }
+            const media = this.mediaStorageService.resolveConfirmedMedia(data.mediaID.toLowerCase());
+            mediaID = media.mediaID;
+            mediaURL = media.mediaURL;
+        }
+        else if (!trimmedText) {
+            throw new common_1.BadRequestException("Text message cannot be empty");
+        }
         const message = this.messageRepository.create({
+            kind,
             messageID: normalizedMessageID,
             text: trimmedText,
+            mediaID,
+            mediaURL,
             author,
             chat,
             createdAt: new Date(),
             status: "delivered",
         });
         await this.messageRepository.save(message);
-        chat.lastMessagePreview = trimmedText.slice(0, 50);
+        chat.lastMessagePreview = this.buildMessagePreview(kind, trimmedText);
         chat.lastActivity = message.createdAt;
         await this.chatRepository.save(chat);
         const messageDto = this.toMessageDto(message, normalizedChatID);
@@ -278,15 +297,21 @@ let ChatService = ChatService_1 = class ChatService {
             id: message.id,
             chatID: chatId,
             messageID: message.messageID,
-            kind: "text",
-            text: message.text,
-            mediaID: null,
-            mediaURL: null,
+            kind: message.kind,
+            text: message.text || null,
+            mediaID: message.mediaID,
+            mediaURL: message.mediaURL,
             authorID: message.author.id,
             authorName: message.author.displayName,
             createdAt: message.createdAt.toISOString(),
             status: message.status,
         };
+    }
+    buildMessagePreview(kind, text) {
+        if (kind === "image") {
+            return text ? `Фото: ${text}`.slice(0, 50) : "Фото";
+        }
+        return text.slice(0, 50);
     }
     async getUnreadCount(chatID, userID) {
         const readState = await this.chatReadStateRepository.findOne({
@@ -357,6 +382,7 @@ exports.ChatService = ChatService = ChatService_1 = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        chat_events_service_1.ChatEventsService])
+        chat_events_service_1.ChatEventsService,
+        media_storage_service_1.MediaStorageService])
 ], ChatService);
 //# sourceMappingURL=chat.service.js.map

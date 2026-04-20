@@ -2,7 +2,7 @@ import Foundation
 
 public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     private var chats: [UUID: ChatRecord] = [:]
-    private var messageStreams: [UUID: AsyncStream<Message>.Continuation] = [:]
+    private var messageStreams: [UUID: [UUID: AsyncStream<Message>.Continuation]] = [:]
     private var chatStreams: [UUID: AsyncStream<[Chat]>.Continuation] = [:]
     private let storageURL: URL
     private let encoder: JSONEncoder
@@ -67,7 +67,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         try persistState()
         broadcastChats()
         for message in messages {
-            messageStreams[chatID]?.yield(message)
+            broadcast(message: message, in: chatID)
         }
     }
 
@@ -75,7 +75,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         try merge(message: message, into: chatID)
         try persistState()
         broadcastChats()
-        messageStreams[chatID]?.yield(message)
+        broadcast(message: message, in: chatID)
     }
 
     public func replaceMessage(localID: UUID, in chatID: UUID, with message: Message) async throws {
@@ -94,7 +94,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         chats[chatID] = record
         try persistState()
         broadcastChats()
-        messageStreams[chatID]?.yield(message)
+        broadcast(message: message, in: chatID)
     }
 
     public func loadMessages(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
@@ -124,9 +124,10 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
     public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
         AsyncStream { continuation in
-            messageStreams[chatID] = continuation
+            let id = UUID()
+            messageStreams[chatID, default: [:]][id] = continuation
             continuation.onTermination = { _ in
-                Task { await self.removeContinuation(for: chatID) }
+                Task { await self.removeContinuation(for: chatID, id: id) }
             }
         }
     }
@@ -152,7 +153,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         chats[chatID] = record
         try persistState()
         broadcastChats()
-        messageStreams[chatID]?.yield(updated)
+        broadcast(message: updated, in: chatID)
     }
 
     public func updateStatus(forLocalID localID: UUID, in chatID: UUID, status: MessageStatus) async throws {
@@ -164,7 +165,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         chats[chatID] = record
         try persistState()
         broadcastChats()
-        messageStreams[chatID]?.yield(updated)
+        broadcast(message: updated, in: chatID)
     }
 
     public func pendingMessages(in chatID: UUID) async throws -> [Message] {
@@ -191,8 +192,11 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         broadcastChats()
     }
 
-    private func removeContinuation(for chatID: UUID) {
-        messageStreams[chatID] = nil
+    private func removeContinuation(for chatID: UUID, id: UUID) {
+        messageStreams[chatID]?[id] = nil
+        if messageStreams[chatID]?.isEmpty == true {
+            messageStreams[chatID] = nil
+        }
     }
 
     private func removeChatContinuation(id: UUID) {
@@ -238,6 +242,12 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         let snapshot = currentChats()
         chatStreams.values.forEach { continuation in
             continuation.yield(snapshot)
+        }
+    }
+
+    private func broadcast(message: Message, in chatID: UUID) {
+        messageStreams[chatID]?.values.forEach { continuation in
+            continuation.yield(message)
         }
     }
 

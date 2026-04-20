@@ -15,11 +15,21 @@ class SendMessageDto {
 }
 exports.SendMessageDto = SendMessageDto;
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MinLength)(1),
     (0, class_validator_1.MaxLength)(4000),
     __metadata("design:type", String)
 ], SendMessageDto.prototype, "text", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(["text", "image"]),
+    __metadata("design:type", String)
+], SendMessageDto.prototype, "kind", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((value) => value.kind === "image"),
+    (0, class_validator_1.IsUUID)(),
+    __metadata("design:type", String)
+], SendMessageDto.prototype, "mediaID", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)

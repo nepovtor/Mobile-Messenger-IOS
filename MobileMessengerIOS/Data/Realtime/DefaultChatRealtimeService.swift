@@ -12,7 +12,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private var shouldMaintainConnection = false
     private var isRealtimeTemporarilyDisabled = false
     private var subscribedChats: Set<UUID> = []
-    private var eventContinuations: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation] = [:]
+    private var eventContinuations: [UUID: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation]] = [:]
     private var globalEventContinuations: [UUID: AsyncStream<ChatRealtimeEnvelope>.Continuation] = [:]
     private var stateContinuations: [UUID: AsyncStream<ChatRealtimeConnectionState>.Continuation] = [:]
     private let stateQueue = DispatchQueue(label: "realtime.state.queue")
@@ -75,7 +75,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         stateQueue.async { [weak self] in
             guard let self else { return }
             subscribedChats.remove(chatID)
-            eventContinuations[chatID]?.finish()
+            eventContinuations[chatID]?.values.forEach { $0.finish() }
             eventContinuations[chatID] = nil
 
             guard subscribedChats.isEmpty, !shouldMaintainConnection else { return }
@@ -87,12 +87,16 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     public func observeEvents(for chatID: UUID) -> AsyncStream<ChatRealtimeEvent> {
         AsyncStream { continuation in
+            let subscriptionID = UUID()
             stateQueue.async { [weak self] in
-                self?.eventContinuations[chatID] = continuation
+                self?.eventContinuations[chatID, default: [:]][subscriptionID] = continuation
             }
             continuation.onTermination = { [weak self] _ in
                 self?.stateQueue.async {
-                    self?.eventContinuations[chatID] = nil
+                    self?.eventContinuations[chatID]?[subscriptionID] = nil
+                    if self?.eventContinuations[chatID]?.isEmpty == true {
+                        self?.eventContinuations[chatID] = nil
+                    }
                 }
             }
         }
@@ -229,14 +233,18 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             self?.globalEventContinuations.values.forEach { continuation in
                 continuation.yield(ChatRealtimeEnvelope(chatID: chatID, event: event))
             }
-            self?.eventContinuations[chatID]?.yield(event)
+            self?.eventContinuations[chatID]?.values.forEach { continuation in
+                continuation.yield(event)
+            }
         }
     }
 
     private func broadcast(event: ChatRealtimeEvent) {
         stateQueue.async { [weak self] in
-            self?.eventContinuations.values.forEach { continuation in
-                continuation.yield(event)
+            self?.eventContinuations.values.forEach { continuations in
+                continuations.values.forEach { continuation in
+                    continuation.yield(event)
+                }
             }
         }
     }

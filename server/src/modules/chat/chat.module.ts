@@ -9,6 +9,8 @@ import { ChatController } from "./chat.controller";
 import { ChatEventsService } from "./chat-events.service";
 import { ChatGateway } from "./chat.gateway";
 import { ChatService } from "./chat.service";
+import { MediaController } from "./media.controller";
+import { MediaStorageService } from "./media-storage.service";
 import { RealtimeController } from "./realtime.controller";
 
 function resolveJwtSecret(): string {
@@ -30,8 +32,13 @@ function resolveJwtSecret(): string {
       secret: resolveJwtSecret(),
     }),
   ],
-  controllers: [ChatController, RealtimeController],
-  providers: [ChatService, ChatGateway, ChatEventsService],
-  exports: [ChatService, ChatEventsService],
+  controllers: [ChatController, RealtimeController, MediaController],
+  providers: [
+    ChatService,
+    ChatGateway,
+    ChatEventsService,
+    MediaStorageService,
+  ],
+  exports: [ChatService, ChatEventsService, MediaStorageService],
 })
 export class ChatModule {}

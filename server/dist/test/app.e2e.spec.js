@@ -114,6 +114,7 @@ describe("Mobile Messenger backend", () => {
         expect(createChatResponse.body.typingParticipants).toEqual([]);
         const chatID = createChatResponse.body.id;
         const messageID = (0, node_crypto_1.randomUUID)();
+        const imageMessageID = (0, node_crypto_1.randomUUID)();
         const sendMessageResponse = await withPrimaryAuth("post", `/api/chats/${chatID}/messages`)
             .send({
             text: "Hello from automated README smoke test",
@@ -151,6 +152,38 @@ describe("Mobile Messenger backend", () => {
         });
         expect(markReadResponse.status).toBe(201);
         expect(markReadResponse.body.unreadCount).toBe(0);
+        const uploadTargetResponse = await withPrimaryAuth("post", "/api/media/upload-url").send({
+            mimeType: "image/jpeg",
+            sizeBytes: 4,
+            width: 1,
+            height: 1,
+        });
+        expect(uploadTargetResponse.status).toBe(201);
+        const mediaID = uploadTargetResponse.body.mediaID;
+        const uploadBinaryResponse = await (0, supertest_1.default)(app.getHttpServer())
+            .put(`/api/media/upload/${mediaID}`)
+            .set("Content-Type", "image/jpeg")
+            .send(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+        expect(uploadBinaryResponse.status).toBe(200);
+        expect(typeof uploadBinaryResponse.header.etag).toBe("string");
+        const confirmUploadResponse = await withPrimaryAuth("post", `/api/media/${mediaID}/confirm`).send({
+            etag: uploadBinaryResponse.header.etag,
+        });
+        expect(confirmUploadResponse.status).toBe(201);
+        expect(confirmUploadResponse.body.mediaID).toBe(mediaID);
+        const sendImageMessageResponse = await withPrimaryAuth("post", `/api/chats/${chatID}/messages`).send({
+            messageID: imageMessageID,
+            kind: "image",
+            text: "Фото из smoke test",
+            mediaID,
+        });
+        expect(sendImageMessageResponse.status).toBe(201);
+        expect(sendImageMessageResponse.body.kind).toBe("image");
+        expect(sendImageMessageResponse.body.mediaID).toBe(mediaID);
+        expect(sendImageMessageResponse.body.mediaURL).toContain(`/api/media/${mediaID}`);
+        const downloadImageResponse = await (0, supertest_1.default)(app.getHttpServer()).get(`/api/media/${mediaID}`);
+        expect(downloadImageResponse.status).toBe(200);
+        expect(downloadImageResponse.header["content-type"]).toContain("image/jpeg");
         const messagesResponse = await withPrimaryAuth("get", `/api/chats/${chatID}/messages`);
         expect(messagesResponse.status).toBe(200);
         expect(messagesResponse.body).toEqual(expect.arrayContaining([
@@ -159,6 +192,12 @@ describe("Mobile Messenger backend", () => {
                 text: "Hello from automated README smoke test",
                 authorName: "README Smoke",
                 status: "read",
+            }),
+            expect.objectContaining({
+                messageID: imageMessageID,
+                kind: "image",
+                mediaID,
+                text: "Фото из smoke test",
             }),
         ]));
     });

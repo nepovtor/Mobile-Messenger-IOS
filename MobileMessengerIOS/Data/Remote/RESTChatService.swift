@@ -83,7 +83,7 @@ public struct ServerMessage: Codable, Sendable {
         if let mediaURL {
             attachments = [
                 MessageAttachment(
-                    id: mediaID ?? id,
+                    id: mediaID ?? messageID,
                     kind: .image,
                     url: mediaURL,
                     localPath: nil,
@@ -96,7 +96,7 @@ public struct ServerMessage: Codable, Sendable {
         }
 
         return Message(
-            id: Message.Identifier(chatID: chatID, messageID: id),
+            id: Message.Identifier(chatID: chatID, messageID: messageID),
             localID: localID ?? messageID,
             authorID: authorID,
             authorName: authorName,

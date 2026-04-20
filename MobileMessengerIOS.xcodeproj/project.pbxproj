@@ -55,6 +55,7 @@
 		CA58DA8F2F815CAE000D87A4 /* SendImageMessageUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */; };
 		CA58DA902F815CAE000D87A4 /* SetTypingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */; };
 		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */; };
+		9E2DBD7BB84A44D4B42EFA25 /* ChatRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1571DEF35A1B4C10AE2F5CFF /* ChatRepositoryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +73,7 @@
 		25ACC1AABD3AC5F12D308989 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		7B1BDB0D7A65535E6E00803C /* MobileMessengerIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MobileMessengerIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
+		1571DEF35A1B4C10AE2F5CFF /* ChatRepositoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatRepositoryTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 			isa = PBXGroup;
 			children = (
 				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */,
+				1571DEF35A1B4C10AE2F5CFF /* ChatRepositoryTests.swift */,
 			);
 			name = MobileMessengerIOSTests;
 			sourceTree = "<group>";
@@ -591,6 +594,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9E2DBD7BB84A44D4B42EFA25 /* ChatRepositoryTests.swift in Sources */,
 				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
