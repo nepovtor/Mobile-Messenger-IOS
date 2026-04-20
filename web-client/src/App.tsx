@@ -1,7 +1,9 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
-  CheckCircle2,
+  Check,
+  CheckCheck,
   Image as ImageIcon,
   KeyRound,
   Lock,
@@ -9,24 +11,23 @@ import {
   Mail,
   MessageCircle,
   Plus,
-  RefreshCw,
   Search,
-  Send,
+  SendHorizonal,
+  Settings,
+  Shield,
   Smartphone,
-  UserCircle,
+  UserCircle2,
   Users,
   Wifi,
   WifiOff,
-} from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+} from "lucide-react";
 
-type AuthMethod = 'phone' | 'email';
-type AuthScreenMode = 'signIn' | 'signUp';
-type AuthCredentialMode = 'password' | 'code';
-type TabKey = 'contacts' | 'chats' | 'profile';
-type ConnectionStatus = 'offline' | 'connecting' | 'reconnecting' | 'online';
-type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-type MessageKind = 'text' | 'image';
+type AuthMethod = "phone" | "email";
+type AuthScreenMode = "signIn" | "signUp";
+type AuthCredentialMode = "password" | "code";
+type TabKey = "chats" | "contacts" | "profile";
+type ConnectionStatus = "online" | "connecting" | "reconnecting" | "offline";
+type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed";
 
 type Session = {
   token: string;
@@ -54,239 +55,440 @@ type ChatListItem = {
 
 type MessageAttachment = {
   id: string;
-  kind: 'image';
+  kind: "image";
   url?: string | null;
-  thumbnailURL?: string | null;
 };
 
 type MessageRecord = {
   id: string;
-  messageID?: string;
   chatID: string;
-  localID?: string;
   authorID: string;
   authorName: string;
-  kind: MessageKind;
+  kind: "text" | "image";
   text: string;
-  mediaID?: string | null;
-  mediaURL?: string | null;
-  status: MessageStatus;
   createdAt: string;
+  status: MessageStatus;
   attachments?: MessageAttachment[];
 };
 
-type AuthResponse = {
-  token: string;
-  userID: string;
-  displayName: string;
-};
-
-type AuthCodeResponse = {
-  expiresIn?: number | null;
-};
+const DEFAULT_BASE_URL = "http://localhost:8080/api";
+const STORAGE_SESSION = "mobile_messenger_web_session";
+const STORAGE_BASE_URL = "mobile_messenger_web_base_url";
 
 const DEMO_ACCOUNTS = [
-  { displayName: 'Анна Demo', contact: '+15551230011', password: 'demo1111' },
-  { displayName: 'Борис Demo', contact: '+15551230012', password: 'demo2222' },
-  { displayName: 'Вера Demo', contact: '+15551230013', password: 'demo3333' },
-  { displayName: 'Глеб Demo', contact: '+15551230014', password: 'demo4444' },
-  { displayName: 'Даша Demo', contact: '+15551230015', password: 'demo5555' },
+  { displayName: "Анна Demo", contact: "+15551230011", password: "demo1111" },
+  { displayName: "Борис Demo", contact: "+15551230012", password: "demo2222" },
+  { displayName: "Вера Demo", contact: "+15551230013", password: "demo3333" },
+  { displayName: "Глеб Demo", contact: "+15551230014", password: "demo4444" },
 ] as const;
 
-const STORAGE = {
-  session: 'mobile-messenger-web.session',
-  baseUrl: 'mobile-messenger-web.base-url',
-};
-
-const DEFAULT_BASE_URL = "https://mobile-messenger-ios-production.up.railway.app/api";
-function cn(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(' ');
+function cn(...items: Array<string | false | null | undefined>) {
+  return items.filter(Boolean).join(" ");
 }
 
-function getInitials(text: string) {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length >= 2) return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase();
-  return text.slice(0, 2).toUpperCase();
-}
-
-function relativeDate(value: string) {
-  const diff = new Date(value).getTime() - Date.now();
-  const abs = Math.abs(diff);
-  const formatter = new Intl.RelativeTimeFormat('ru', { numeric: 'auto' });
-  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-    ['day', 24 * 60 * 60 * 1000],
-    ['hour', 60 * 60 * 1000],
-    ['minute', 60 * 1000],
-  ];
-
-  for (const [unit, divisor] of units) {
-    if (abs >= divisor || unit === 'minute') {
-      return formatter.format(Math.round(diff / divisor), unit);
-    }
+function safeJSON<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
   }
+}
 
-  return 'только что';
+function initials(text: string) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+  return text.slice(0, 2).toUpperCase();
 }
 
 function sanitizeContact(contact: string, method: AuthMethod) {
   const trimmed = contact.trim();
-  return method === 'phone' ? trimmed.replace(/[^+\d]/g, '') : trimmed.toLowerCase();
+  return method === "phone" ? trimmed.replace(/[^+\d]/g, "") : trimmed.toLowerCase();
 }
 
-async function api<T>(
-  baseUrl: string,
-  path: string,
-  init: RequestInit = {},
-  token?: string
-): Promise<T> {
-  const headers = new Headers(init.headers ?? {});
-  if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+function relativeDate(date: string) {
+  const target = new Date(date).getTime();
+  const diff = target - Date.now();
+  const abs = Math.abs(diff);
+  const rtf = new Intl.RelativeTimeFormat("ru", { numeric: "auto" });
+  if (abs > 1000 * 60 * 60 * 24) return rtf.format(Math.round(diff / (1000 * 60 * 60 * 24)), "day");
+  if (abs > 1000 * 60 * 60) return rtf.format(Math.round(diff / (1000 * 60 * 60)), "hour");
+  return rtf.format(Math.round(diff / (1000 * 60)), "minute");
+}
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`, {
+async function api<T>(baseUrl: string, path: string, init?: RequestInit, token?: string): Promise<T> {
+  const headers = new Headers(init?.headers ?? {});
+  if (!(init?.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`, {
     ...init,
     headers,
   });
 
   const raw = await response.text();
-  const data = raw ? tryParse(raw) : null;
+  const parsed = raw ? safeJSON(raw, raw) : null;
 
   if (!response.ok) {
-    const message = typeof data === 'object' && data && 'message' in data
-      ? String((data as Record<string, unknown>).message)
-      : raw || `Ошибка сервера ${response.status}`;
+    const message = typeof parsed === "object" && parsed && "message" in parsed ? String((parsed as any).message) : raw || `Ошибка ${response.status}`;
     throw new Error(message);
   }
 
-  return data as T;
+  return parsed as T;
 }
 
-function tryParse(raw: string) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
-
-export default function App() {
-  const [baseUrl, setBaseUrl] = useState<string>(() => localStorage.getItem(STORAGE.baseUrl) || DEFAULT_BASE_URL);
-  const [session, setSession] = useState<Session | null>(() => {
-    const raw = localStorage.getItem(STORAGE.session);
-    return raw ? (tryParse(raw) as Session) : null;
-  });
-  const [tab, setTab] = useState<TabKey>('chats');
+export default function MobileMessengerWebRedesign() {
+  const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem(STORAGE_BASE_URL) || DEFAULT_BASE_URL);
+  const [session, setSession] = useState<Session | null>(() => safeJSON(localStorage.getItem(STORAGE_SESSION), null));
+  const [activeTab, setActiveTab] = useState<TabKey>("chats");
   const [selectedChat, setSelectedChat] = useState<ChatListItem | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(navigator.onLine ? 'connecting' : 'offline');
-  const [revision, setRevision] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(navigator.onLine ? "connecting" : "offline");
 
   useEffect(() => {
-    localStorage.setItem(STORAGE.baseUrl, baseUrl);
+    localStorage.setItem(STORAGE_BASE_URL, baseUrl);
   }, [baseUrl]);
 
   useEffect(() => {
-    if (session) localStorage.setItem(STORAGE.session, JSON.stringify(session));
-    else localStorage.removeItem(STORAGE.session);
-  }, [session]);
-
-  useEffect(() => {
-    const handleOnline = () => setConnectionStatus(session ? 'reconnecting' : 'offline');
-    const handleOffline = () => setConnectionStatus('offline');
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+    if (session) localStorage.setItem(STORAGE_SESSION, JSON.stringify(session));
+    else localStorage.removeItem(STORAGE_SESSION);
   }, [session]);
 
   useEffect(() => {
     if (!session) {
-      setConnectionStatus('offline');
+      setConnectionStatus("offline");
       return;
     }
 
-    let cancelled = false;
-    setConnectionStatus(navigator.onLine ? 'connecting' : 'offline');
+    let mounted = true;
+    setConnectionStatus(navigator.onLine ? "connecting" : "offline");
 
-    api<unknown>(baseUrl, '/health', { method: 'GET' }, session.token)
-      .then(() => {
-        if (!cancelled) setConnectionStatus('online');
-      })
-      .catch(() => {
-        if (!cancelled) setConnectionStatus(navigator.onLine ? 'reconnecting' : 'offline');
-      });
+    api<any>(baseUrl, "health", { method: "GET" }, session.token)
+      .then(() => mounted && setConnectionStatus("online"))
+      .catch(() => mounted && setConnectionStatus(navigator.onLine ? "reconnecting" : "offline"));
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
-  }, [baseUrl, session, revision]);
+  }, [baseUrl, session]);
+
+  useEffect(() => {
+    const onOnline = () => setConnectionStatus(session ? "reconnecting" : "offline");
+    const onOffline = () => setConnectionStatus("offline");
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [session]);
 
   if (!session) {
-    return (
-      <AuthScreen
-        baseUrl={baseUrl}
-        setBaseUrl={setBaseUrl}
-        onAuthenticated={(value) => {
-          setSession(value);
-          setRevision((prev) => prev + 1);
-        }}
-      />
-    );
+    return <AuthScreen baseUrl={baseUrl} setBaseUrl={setBaseUrl} onAuth={setSession} />;
   }
 
   return (
-    <div className="app-shell">
-      <div className="app-grid">
-        <Sidebar
-          session={session}
-          tab={tab}
-          setTab={setTab}
-          baseUrl={baseUrl}
-          setBaseUrl={setBaseUrl}
-          connectionStatus={connectionStatus}
-          onLogout={() => {
-            setSession(null);
-            setSelectedChat(null);
-          }}
-        />
+    <div className="min-h-screen bg-slate-950 text-slate-900">
+      <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.16),transparent_26%),linear-gradient(180deg,#f7fbff_0%,#eef5ff_44%,#f9fbff_100%)]">
+        <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-8 right-0 h-80 w-80 rounded-full bg-cyan-300/20 blur-3xl" />
 
-        <div className="column-card">
-          {tab === 'contacts' ? (
-            <ContactsPanel
+        <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 gap-4 p-4 xl:grid-cols-[280px_420px_minmax(0,1fr)]">
+          <Sidebar
+            session={session}
+            baseUrl={baseUrl}
+            setBaseUrl={setBaseUrl}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            connectionStatus={connectionStatus}
+            onLogout={() => {
+              setSession(null);
+              setSelectedChat(null);
+            }}
+          />
+
+          {activeTab === "contacts" ? (
+            <ContactsPane
               baseUrl={baseUrl}
               token={session.token}
-              onOpenChat={(chat) => {
+              onChatOpen={(chat) => {
                 setSelectedChat(chat);
-                setTab('chats');
-                setRevision((prev) => prev + 1);
+                setActiveTab("chats");
               }}
             />
-          ) : tab === 'profile' ? (
-            <ProfilePanel session={session} connectionStatus={connectionStatus} />
+          ) : activeTab === "profile" ? (
+            <ProfilePane session={session} connectionStatus={connectionStatus} />
           ) : (
-            <ChatsPanel
-              key={`chats-${revision}`}
+            <ChatsPane
               baseUrl={baseUrl}
               token={session.token}
               selectedChatID={selectedChat?.id ?? null}
               onSelectChat={setSelectedChat}
-              onChatCreated={setSelectedChat}
+              onCreateChat={setSelectedChat}
             />
           )}
-        </div>
 
-        <div className="column-card dialog-column">
-          <DialogPanel
-            key={selectedChat?.id ?? 'empty'}
-            baseUrl={baseUrl}
-            token={session.token}
-            currentUserID={session.userID}
-            chat={selectedChat}
-          />
+          <DialoguePane baseUrl={baseUrl} token={session.token} currentUserID={session.userID} chat={selectedChat} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthScreen({
+  baseUrl,
+  setBaseUrl,
+  onAuth,
+}: {
+  baseUrl: string;
+  setBaseUrl: (v: string) => void;
+  onAuth: (session: Session) => void;
+}) {
+  const [screenMode, setScreenMode] = useState<AuthScreenMode>("signIn");
+  const [credentialMode, setCredentialMode] = useState<AuthCredentialMode>("password");
+  const [method, setMethod] = useState<AuthMethod>("phone");
+  const [contact, setContact] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [expiresIn, setExpiresIn] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<"idle" | "request" | "verify" | "login">("idle");
+
+  const passwordFlow = screenMode === "signIn" && credentialMode === "password";
+  const contactValid = method === "phone" ? contact.replace(/\D/g, "").length >= 10 : contact.includes("@") && contact.includes(".");
+
+  async function requestCode() {
+    setError(null);
+    setLoading("request");
+    try {
+      const result = await api<{ expiresIn?: number | null }>(baseUrl, "auth/request", {
+        method: "POST",
+        body: JSON.stringify({ method, contact: sanitizeContact(contact, method) }),
+      });
+      setCodeSent(true);
+      setExpiresIn(result?.expiresIn ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка запроса кода");
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  async function verifyCode() {
+    setError(null);
+    setLoading("verify");
+    try {
+      const result = await api<Session>(baseUrl, "auth/verify", {
+        method: "POST",
+        body: JSON.stringify({ method, contact: sanitizeContact(contact, method), code: code.trim() }),
+      });
+      onAuth(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка подтверждения");
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  async function login() {
+    setError(null);
+    setLoading("login");
+    try {
+      const result = await api<Session>(baseUrl, "auth/login", {
+        method: "POST",
+        body: JSON.stringify({ method, contact: sanitizeContact(contact, method), password: password.trim() }),
+      });
+      onAuth(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка входа");
+    } finally {
+      setLoading("idle");
+    }
+  }
+
+  return (
+    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative hidden overflow-hidden bg-slate-950 lg:block">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.35),transparent_30%),radial-gradient(circle_at_80%_20%,rgba(103,232,249,0.18),transparent_24%),radial-gradient(circle_at_50%_80%,rgba(147,51,234,0.18),transparent_28%)]" />
+        <div className="relative flex h-full flex-col justify-between p-12 text-white">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm backdrop-blur-xl">
+              <Shield className="h-4 w-4" />
+              Messenger Web Platform
+            </div>
+            <h1 className="mt-10 max-w-2xl text-6xl font-semibold leading-[1.05]">
+              Адекватный и взрослый интерфейс
+              <span className="block text-blue-300">для вашего iOS-мессенджера</span>
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
+              Чистый auth-screen, стеклянные панели, нормальная типографика, аккуратный список чатов и визуально цельный диалоговый интерфейс.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <GlassMetric title="Авторизация" text="Пароль и код подтверждения" icon={<Lock className="h-5 w-5" />} />
+            <GlassMetric title="Контакты" text="Быстрый запуск диалогов" icon={<Users className="h-5 w-5" />} />
+            <GlassMetric title="Чаты" text="Unread, typing, groups" icon={<MessageCircle className="h-5 w-5" />} />
+            <GlassMetric title="Backend ready" text="Работа через REST API" icon={<Settings className="h-5 w-5" />} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center p-4 sm:p-8 lg:p-10">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-2xl rounded-[32px] border border-white/60 bg-white/85 p-6 shadow-2xl shadow-slate-900/10 backdrop-blur-2xl sm:p-8"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-[0.22em] text-blue-600">Mobile Messenger</div>
+              <div className="mt-2 text-3xl font-semibold text-slate-900">Вход в систему</div>
+              <div className="mt-2 text-sm text-slate-500">Подключение веб-клиента к вашему backend.</div>
+            </div>
+            <div className="w-full rounded-2xl border border-slate-200 bg-white/80 p-2 sm:w-auto">
+              <input
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                className="w-full min-w-[260px] bg-transparent px-2 py-1 text-sm outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[28px] bg-slate-50/85 p-4">
+              <Segment
+                value={screenMode}
+                onChange={(next) => {
+                  setScreenMode(next as AuthScreenMode);
+                  setCredentialMode(next === "signUp" ? "code" : "password");
+                  setCodeSent(false);
+                  setCode("");
+                  setError(null);
+                }}
+                items={[
+                  { value: "signIn", label: "Sign In" },
+                  { value: "signUp", label: "Sign Up" },
+                ]}
+              />
+
+              {screenMode === "signIn" && (
+                <div className="mt-3">
+                  <Segment
+                    value={credentialMode}
+                    onChange={(next) => {
+                      setCredentialMode(next as AuthCredentialMode);
+                      setCodeSent(false);
+                      setCode("");
+                      setError(null);
+                    }}
+                    items={[
+                      { value: "password", label: "Password" },
+                      { value: "code", label: "Code" },
+                    ]}
+                  />
+                </div>
+              )}
+
+              <div className="mt-3">
+                <Segment
+                  value={method}
+                  onChange={(next) => setMethod(next as AuthMethod)}
+                  items={[
+                    { value: "phone", label: "Телефон", icon: <Smartphone className="h-4 w-4" /> },
+                    { value: "email", label: "E-mail", icon: <Mail className="h-4 w-4" /> },
+                  ]}
+                />
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <Field label={method === "phone" ? "Номер телефона" : "E-mail"}>
+                  <input
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-blue-400"
+                    placeholder={method === "phone" ? "+375 ..." : "name@example.com"}
+                  />
+                </Field>
+
+                {passwordFlow ? (
+                  <Field label="Пароль">
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-blue-400"
+                      placeholder="Введите пароль"
+                    />
+                  </Field>
+                ) : (
+                  <>
+                    <button
+                      onClick={requestCode}
+                      disabled={!contactValid || loading !== "idle"}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 disabled:opacity-50"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      {loading === "request" ? "Отправка..." : codeSent ? "Отправить код снова" : "Запросить код"}
+                    </button>
+                    <Field label="Код подтверждения">
+                      <input
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-blue-400"
+                        placeholder="Введите код"
+                      />
+                    </Field>
+                    {expiresIn !== null && (
+                      <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        Код отправлен. Время действия: {expiresIn} секунд.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {error && (
+                  <div className="flex items-start gap-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <AlertTriangle className="mt-0.5 h-4 w-4" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={passwordFlow ? login : verifyCode}
+                  disabled={!contactValid || loading !== "idle" || (passwordFlow ? password.trim().length < 4 : code.trim().length < 4)}
+                  className="w-full rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:opacity-50"
+                >
+                  {loading === "login" ? "Вход..." : loading === "verify" ? "Проверка..." : passwordFlow ? "Войти" : "Подтвердить"}
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-slate-200 bg-white/80 p-4">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Demo Accounts</div>
+              <div className="mt-3 space-y-3">
+                {DEMO_ACCOUNTS.map((account) => (
+                  <button
+                    key={account.contact}
+                    onClick={() => {
+                      setScreenMode("signIn");
+                      setCredentialMode("password");
+                      setMethod("phone");
+                      setContact(account.contact);
+                      setPassword(account.password);
+                      setError(null);
+                    }}
+                    className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50/60"
+                  >
+                    <div className="font-semibold text-slate-900">{account.displayName}</div>
+                    <div className="mt-1 text-sm text-slate-500">{account.contact}</div>
+                    <div className="mt-2 text-xs text-slate-400">Пароль: {account.password}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -294,543 +496,319 @@ export default function App() {
 
 function Sidebar({
   session,
-  tab,
-  setTab,
   baseUrl,
   setBaseUrl,
+  activeTab,
+  setActiveTab,
   connectionStatus,
   onLogout,
 }: {
   session: Session;
-  tab: TabKey;
-  setTab: (value: TabKey) => void;
   baseUrl: string;
-  setBaseUrl: (value: string) => void;
+  setBaseUrl: (v: string) => void;
+  activeTab: TabKey;
+  setActiveTab: (v: TabKey) => void;
   connectionStatus: ConnectionStatus;
   onLogout: () => void;
 }) {
+  const items = [
+    { key: "chats", label: "Чаты", icon: <MessageCircle className="h-4 w-4" /> },
+    { key: "contacts", label: "Контакты", icon: <Users className="h-4 w-4" /> },
+    { key: "profile", label: "Профиль", icon: <UserCircle2 className="h-4 w-4" /> },
+  ] as const;
+
   return (
-    <aside className="sidebar-card">
+    <GlassPanel className="flex h-full flex-col p-5">
       <div>
-        <div className="eyebrow">Mobile Messenger</div>
-        <h1 className="title-lg">Web Client</h1>
-        <p className="muted mt-8">Готовая веб-версия для работы с тем же backend, что и у iOS-клиента.</p>
+        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600">Mobile Messenger</div>
+        <div className="mt-2 text-2xl font-semibold text-slate-900">Web Client</div>
+        <div className="mt-2 text-sm leading-6 text-slate-500">Более зрелый и визуально цельный интерфейс для работы с backend.</div>
       </div>
 
-      <div className="session-card mt-20">
-        <div className="text-sm text-slate-300">Текущий пользователь</div>
-        <div className="session-name">{session.displayName}</div>
-        <div className="session-id">{session.userID}</div>
+      <div className="mt-5">
+        <StatusPill status={connectionStatus} />
       </div>
 
-      <ConnectionBadge status={connectionStatus} />
+      <div className="mt-5 rounded-[24px] bg-slate-900 p-4 text-white shadow-xl shadow-slate-900/20">
+        <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Аккаунт</div>
+        <div className="mt-2 text-lg font-semibold">{session.displayName}</div>
+        <div className="mt-1 break-all text-xs text-slate-400">{session.userID}</div>
+      </div>
 
-      <nav className="nav-list mt-20">
-        {[
-          { key: 'contacts' as const, label: 'Контакты', icon: <Users className="icon-18" /> },
-          { key: 'chats' as const, label: 'Чаты', icon: <MessageCircle className="icon-18" /> },
-          { key: 'profile' as const, label: 'Профиль', icon: <UserCircle className="icon-18" /> },
-        ].map((item) => (
+      <div className="mt-5 space-y-2">
+        {items.map((item) => (
           <button
             key={item.key}
-            onClick={() => setTab(item.key)}
-            className={cn('nav-button', tab === item.key && 'nav-button-active')}
+            onClick={() => setActiveTab(item.key)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition",
+              activeTab === item.key ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-white/70 text-slate-700 hover:bg-white"
+            )}
           >
             {item.icon}
-            <span>{item.label}</span>
+            <span className="font-medium">{item.label}</span>
           </button>
         ))}
-      </nav>
-
-      <div className="input-group mt-20">
-        <label className="label">REST base URL</label>
-        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className="input" />
-        <div className="hint">По умолчанию используется адрес backend: {DEFAULT_BASE_URL}</div>
       </div>
 
-      <button className="danger-button mt-20" onClick={onLogout}>
-        <LogOut className="icon-18" />
-        Выйти
-      </button>
-    </aside>
+      <div className="mt-5 rounded-[24px] border border-slate-200 bg-white/80 p-4">
+        <div className="text-sm font-medium text-slate-700">REST base URL</div>
+        <input
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+        />
+      </div>
+
+      <div className="mt-auto pt-5">
+        <button
+          onClick={onLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 font-medium text-rose-700 transition hover:bg-rose-100"
+        >
+          <LogOut className="h-4 w-4" />
+          Выйти
+        </button>
+      </div>
+    </GlassPanel>
   );
 }
 
-function ConnectionBadge({ status }: { status: ConnectionStatus }) {
-  const map: Record<ConnectionStatus, { text: string; className: string; icon: JSX.Element }> = {
-    online: { text: 'Онлайн', className: 'state-green', icon: <Wifi className="icon-16" /> },
-    connecting: { text: 'Подключение', className: 'state-blue', icon: <RefreshCw className="icon-16 spin" /> },
-    reconnecting: { text: 'Повторное подключение', className: 'state-amber', icon: <RefreshCw className="icon-16" /> },
-    offline: { text: 'Офлайн', className: 'state-red', icon: <WifiOff className="icon-16" /> },
-  };
-
-  const item = map[status];
-  return <div className={cn('connection-badge', item.className)}>{item.icon}<span>{item.text}</span></div>;
-}
-
-function AuthScreen({
-  baseUrl,
-  setBaseUrl,
-  onAuthenticated,
-}: {
-  baseUrl: string;
-  setBaseUrl: (value: string) => void;
-  onAuthenticated: (value: Session) => void;
-}) {
-  const [screenMode, setScreenMode] = useState<AuthScreenMode>('signIn');
-  const [credentialMode, setCredentialMode] = useState<AuthCredentialMode>('password');
-  const [method, setMethod] = useState<AuthMethod>('phone');
-  const [contact, setContact] = useState('');
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<'none' | 'request' | 'verify' | 'login'>('none');
-  const [isCodeSent, setIsCodeSent] = useState(false);
-  const [expiresIn, setExpiresIn] = useState<number | null>(null);
-
-  const isPasswordFlow = screenMode === 'signIn' && credentialMode === 'password';
-  const isContactValid = method === 'phone'
-    ? contact.replace(/\D/g, '').length >= 10
-    : contact.includes('@') && contact.includes('.');
-
-  async function requestCode() {
-    setError(null);
-    setIsLoading('request');
-    try {
-      const response = await api<AuthCodeResponse>(baseUrl, '/auth/request', {
-        method: 'POST',
-        body: JSON.stringify({ method, contact: sanitizeContact(contact, method) }),
-      });
-      setIsCodeSent(true);
-      setExpiresIn(response?.expiresIn ?? null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось запросить код');
-    } finally {
-      setIsLoading('none');
-    }
-  }
-
-  async function verifyCode() {
-    setError(null);
-    setIsLoading('verify');
-    try {
-      const response = await api<AuthResponse>(baseUrl, '/auth/verify', {
-        method: 'POST',
-        body: JSON.stringify({ method, contact: sanitizeContact(contact, method), code: code.trim() }),
-      });
-      onAuthenticated(response);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось подтвердить код');
-    } finally {
-      setIsLoading('none');
-    }
-  }
-
-  async function signIn() {
-    setError(null);
-    setIsLoading('login');
-    try {
-      const response = await api<AuthResponse>(baseUrl, '/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ method, contact: sanitizeContact(contact, method), password: password.trim() }),
-      });
-      onAuthenticated(response);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось выполнить вход');
-    } finally {
-      setIsLoading('none');
-    }
-  }
-
-  return (
-    <div className="auth-layout">
-      <section className="auth-hero">
-        <div className="eyebrow-light">iOS → Web</div>
-        <h2 className="hero-title">Готовый интерфейс для тех же сценариев, что и в мобильном клиенте.</h2>
-        <p className="hero-text">Реализованы авторизация, загрузка контактов, создание диалогов, список чатов и история сообщений через существующий backend.</p>
-
-        <div className="hero-grid">
-          <HeroCard icon={<Lock className="icon-20" />} title="Auth" text="Телефон или e-mail, пароль или код подтверждения." />
-          <HeroCard icon={<Users className="icon-20" />} title="Contacts" text="Загрузка контактов и старт личного диалога." />
-          <HeroCard icon={<MessageCircle className="icon-20" />} title="Chats" text="Чаты, unread count, typing state и история сообщений." />
-          <HeroCard icon={<ImageIcon className="icon-20" />} title="Media" text="Структура готова к отображению изображений из backend." />
-        </div>
-      </section>
-
-      <section className="auth-form-wrap">
-        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="auth-card">
-          <div className="eyebrow">Mobile Messenger Web</div>
-          <h1 className="title-lg">Авторизация</h1>
-
-          <div className="input-group mt-20">
-            <label className="label">REST base URL</label>
-            <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className="input" />
-          </div>
-
-          <div className="tabs mt-20">
-            <button className={cn('tab', screenMode === 'signIn' && 'tab-active')} onClick={() => {
-              setScreenMode('signIn');
-              setCredentialMode('password');
-              setError(null);
-              setCode('');
-              setIsCodeSent(false);
-            }}>Sign In</button>
-            <button className={cn('tab', screenMode === 'signUp' && 'tab-active')} onClick={() => {
-              setScreenMode('signUp');
-              setCredentialMode('code');
-              setError(null);
-              setCode('');
-              setIsCodeSent(false);
-            }}>Sign Up</button>
-          </div>
-
-          {screenMode === 'signIn' && (
-            <div className="tabs mt-12">
-              <button className={cn('tab secondary', credentialMode === 'password' && 'tab-active-dark')} onClick={() => {
-                setCredentialMode('password');
-                setError(null);
-                setCode('');
-              }}>Password</button>
-              <button className={cn('tab secondary', credentialMode === 'code' && 'tab-active-dark')} onClick={() => {
-                setCredentialMode('code');
-                setError(null);
-                setCode('');
-              }}>Code</button>
-            </div>
-          )}
-
-          <div className="tabs mt-12">
-            <button className={cn('tab secondary', method === 'phone' && 'tab-soft-active')} onClick={() => setMethod('phone')}>
-              <Smartphone className="icon-16" /> Телефон
-            </button>
-            <button className={cn('tab secondary', method === 'email' && 'tab-soft-active')} onClick={() => setMethod('email')}>
-              <Mail className="icon-16" /> E-mail
-            </button>
-          </div>
-
-          <div className="input-group mt-20">
-            <label className="label">{method === 'phone' ? 'Номер телефона' : 'E-mail'}</label>
-            <input
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              className="input"
-              placeholder={method === 'phone' ? '+375 ...' : 'name@example.com'}
-            />
-          </div>
-
-          {isPasswordFlow ? (
-            <div className="input-group mt-12">
-              <label className="label">Пароль</label>
-              <input value={password} onChange={(e) => setPassword(e.target.value)} className="input" type="password" placeholder="Введите пароль" />
-            </div>
-          ) : (
-            <>
-              <button className="soft-button mt-20" onClick={requestCode} disabled={!isContactValid || isLoading !== 'none'}>
-                <KeyRound className="icon-16" />
-                {isLoading === 'request' ? 'Отправка...' : isCodeSent ? 'Отправить код снова' : 'Запросить код'}
-              </button>
-
-              <div className="input-group mt-12">
-                <label className="label">Код подтверждения</label>
-                <input value={code} onChange={(e) => setCode(e.target.value)} className="input" placeholder="Введите код" />
-              </div>
-
-              {typeof expiresIn === 'number' && (
-                <div className="success-box mt-12">Код отправлен. Время действия: {expiresIn} секунд.</div>
-              )}
-            </>
-          )}
-
-          {error && <div className="error-box mt-12"><AlertTriangle className="icon-16" /> <span>{error}</span></div>}
-
-          <button
-            className="primary-button mt-20"
-            onClick={() => (isPasswordFlow ? signIn() : verifyCode())}
-            disabled={!isContactValid || isLoading !== 'none' || (isPasswordFlow ? password.trim().length < 4 : code.trim().length < 4)}
-          >
-            {isLoading === 'login' ? 'Вход...' : isLoading === 'verify' ? 'Проверка...' : isPasswordFlow ? 'Войти' : 'Подтвердить'}
-          </button>
-
-          <div className="demo-list mt-20">
-            <div className="label">Demo Accounts</div>
-            {DEMO_ACCOUNTS.map((account) => (
-              <button
-                key={account.contact}
-                className="demo-card"
-                onClick={() => {
-                  setScreenMode('signIn');
-                  setCredentialMode('password');
-                  setMethod('phone');
-                  setContact(account.contact);
-                  setPassword(account.password);
-                  setError(null);
-                }}
-              >
-                <div className="font-semibold">{account.displayName}</div>
-                <div className="muted text-sm mt-4">{account.contact}</div>
-                <div className="hint mt-8">Пароль: {account.password}</div>
-              </button>
-            ))}
-          </div>
-        </motion.div>
-      </section>
-    </div>
-  );
-}
-
-function HeroCard({ icon, title, text }: { icon: JSX.Element; title: string; text: string }) {
-  return (
-    <div className="hero-card">
-      <div className="hero-icon">{icon}</div>
-      <div className="font-semibold mt-12">{title}</div>
-      <div className="hero-card-text mt-8">{text}</div>
-    </div>
-  );
-}
-
-function ContactsPanel({
+function ContactsPane({
   baseUrl,
   token,
-  onOpenChat,
+  onChatOpen,
 }: {
   baseUrl: string;
   token: string;
-  onOpenChat: (chat: ChatListItem) => void;
+  onChatOpen: (chat: ChatListItem) => void;
 }) {
   const [contacts, setContacts] = useState<ContactDTO[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api<ContactDTO[]>(baseUrl, '/auth/contacts', { method: 'GET' }, token)
-      .then((data) => {
-        if (!cancelled) {
-          setContacts(data);
-          setError(null);
-        }
-      })
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Не удалось загрузить контакты'))
-      .finally(() => !cancelled && setLoading(false));
-
+    let mounted = true;
+    api<ContactDTO[]>(baseUrl, "auth/contacts", { method: "GET" }, token)
+      .then((data) => mounted && setContacts(data))
+      .catch((e) => mounted && setError(e instanceof Error ? e.message : "Не удалось загрузить контакты"))
+      .finally(() => mounted && setLoading(false));
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, [baseUrl, token]);
 
-  const filteredContacts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return contacts;
-    return contacts.filter((contact) =>
-      contact.displayName.toLowerCase().includes(query) || contact.contact.toLowerCase().includes(query)
-    );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter((c) => c.displayName.toLowerCase().includes(q) || c.contact.toLowerCase().includes(q));
   }, [contacts, search]);
 
   async function openChat(contact: ContactDTO) {
     if (contact.isCurrentUser) return;
-    setOpeningId(contact.userID);
-    try {
-      const chat = await api<ChatListItem>(baseUrl, '/chats', {
-        method: 'POST',
-        body: JSON.stringify({ title: contact.displayName, participantContacts: [contact.contact] }),
-      }, token);
-      onOpenChat(chat);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось открыть диалог');
-    } finally {
-      setOpeningId(null);
-    }
+    const created = await api<ChatListItem>(baseUrl, "chats", {
+      method: "POST",
+      body: JSON.stringify({ title: contact.displayName, participantContacts: [contact.contact] }),
+    }, token);
+    onChatOpen(created);
   }
 
   return (
-    <Section title="Контакты" subtitle="Быстрый запуск личного диалога на основе загруженных контактов.">
+    <GlassPanel className="p-5">
+      <PaneHeader title="Контакты" subtitle="Быстрое создание личных диалогов из списка контактов." />
       <SearchBox value={search} onChange={setSearch} placeholder="Поиск контактов" />
-      {error && <InlineError text={error} />}
-      <div className="list-block mt-16">
+      {error && <ErrorBox text={error} />}
+      <div className="mt-4 space-y-3 overflow-auto pr-1">
         {loading
-          ? Array.from({ length: 5 }).map((_, index) => <SkeletonRow key={index} />)
-          : filteredContacts.map((contact) => (
+          ? Array.from({ length: 7 }).map((_, i) => <PlaceholderCard key={i} />)
+          : filtered.map((contact) => (
               <button
                 key={contact.userID}
-                className="list-card"
                 onClick={() => openChat(contact)}
-                disabled={contact.isCurrentUser || openingId === contact.userID}
+                disabled={contact.isCurrentUser}
+                className="flex w-full items-center gap-4 rounded-[24px] border border-white/70 bg-white/85 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-70"
               >
-                <div className={cn('avatar-circle', contact.isCurrentUser ? 'avatar-green' : 'avatar-blue')}>
-                  {getInitials(contact.displayName)}
+                <div className={cn("flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold", contact.isCurrentUser ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>
+                  {initials(contact.displayName)}
                 </div>
-                <div className="list-content">
-                  <div className="list-title-row">
-                    <div className="font-semibold truncate">{contact.displayName}</div>
-                    {contact.isCurrentUser && <span className="chip-green">Вы</span>}
-                  </div>
-                  <div className="muted text-sm mt-4 truncate">{contact.contact}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold text-slate-900">{contact.displayName}</div>
+                  <div className="mt-1 truncate text-sm text-slate-500">{contact.contact}</div>
                 </div>
-                <div className="list-action">{openingId === contact.userID ? 'Открытие...' : contact.isCurrentUser ? 'Текущий' : 'Чат'}</div>
+                <div className="text-xs font-semibold text-slate-400">{contact.isCurrentUser ? "Вы" : "Открыть"}</div>
               </button>
             ))}
       </div>
-    </Section>
+    </GlassPanel>
   );
 }
 
-function ChatsPanel({
+function ChatsPane({
   baseUrl,
   token,
   selectedChatID,
   onSelectChat,
-  onChatCreated,
+  onCreateChat,
 }: {
   baseUrl: string;
   token: string;
   selectedChatID: string | null;
   onSelectChat: (chat: ChatListItem) => void;
-  onChatCreated: (chat: ChatListItem) => void;
+  onCreateChat: (chat: ChatListItem) => void;
 }) {
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [contacts, setContacts] = useState<ContactDTO[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
+    const timer = setTimeout(() => {
       setLoading(true);
-      const suffix = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
-      api<ChatListItem[]>(baseUrl, `/chats${suffix}`, { method: 'GET' }, token)
+      api<ChatListItem[]>(baseUrl, `chats${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`, { method: "GET" }, token)
         .then((data) => {
           setChats(data);
           setError(null);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : 'Не удалось загрузить список чатов'))
+        .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить чаты"))
         .finally(() => setLoading(false));
-    }, 300);
-
-    return () => window.clearTimeout(timeout);
+    }, 250);
+    return () => clearTimeout(timer);
   }, [baseUrl, token, search]);
 
   useEffect(() => {
-    api<ContactDTO[]>(baseUrl, '/auth/contacts', { method: 'GET' }, token)
-      .then((data) => setContacts(data.filter((contact) => !contact.isCurrentUser)))
+    api<ContactDTO[]>(baseUrl, "auth/contacts", { method: "GET" }, token)
+      .then((data) => setContacts(data.filter((x) => !x.isCurrentUser)))
       .catch(() => undefined);
   }, [baseUrl, token]);
 
   async function createGroup() {
-    if (title.trim().length === 0 || selectedIds.length < 2) return;
-    setCreating(true);
-    try {
-      const participantContacts = contacts.filter((contact) => selectedIds.includes(contact.userID)).map((contact) => contact.contact);
-      const chat = await api<ChatListItem>(baseUrl, '/chats', {
-        method: 'POST',
-        body: JSON.stringify({ title: title.trim(), participantContacts }),
-      }, token);
-      setChats((prev) => [chat, ...prev.filter((item) => item.id !== chat.id)]);
-      onChatCreated(chat);
-      setIsModalOpen(false);
-      setTitle('');
-      setSelectedIds([]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось создать групповой чат');
-    } finally {
-      setCreating(false);
-    }
+    const participantContacts = contacts.filter((c) => selectedContacts.includes(c.userID)).map((c) => c.contact);
+    const created = await api<ChatListItem>(baseUrl, "chats", {
+      method: "POST",
+      body: JSON.stringify({ title: groupTitle.trim(), participantContacts }),
+    }, token);
+    setShowCreate(false);
+    setGroupTitle("");
+    setSelectedContacts([]);
+    onCreateChat(created);
   }
 
   return (
-    <Section
-      title="Чаты"
-      subtitle="Список чатов, поиск, unread count и создание групповых бесед."
-      action={
-        <button className="soft-button blue" onClick={() => setIsModalOpen(true)}>
-          <Plus className="icon-16" /> Группа
-        </button>
-      }
-    >
-      <SearchBox value={search} onChange={setSearch} placeholder="Поиск чатов" />
-      {error && <InlineError text={error} />}
-
-      <div className="list-block mt-16">
-        {loading
-          ? Array.from({ length: 5 }).map((_, index) => <SkeletonRow key={index} />)
-          : chats.map((chat) => (
-              <button
-                key={chat.id}
-                className={cn('chat-card', selectedChatID === chat.id && 'chat-card-active')}
-                onClick={() => onSelectChat(chat)}
-              >
-                <div className={cn('avatar-square', chat.participantCount > 2 ? 'avatar-group' : 'avatar-blue')}>
-                  {chat.participantCount > 2 ? <Users className="icon-18" /> : getInitials(chat.title)}
-                </div>
-                <div className="list-content">
-                  <div className="list-title-row">
-                    <div className="font-semibold truncate">{chat.title}</div>
-                    <div className="muted text-xs">{relativeDate(chat.updatedAt)}</div>
-                  </div>
-                  {chat.participantCount > 2 && (
-                    <div className="muted text-xs mt-4 truncate">
-                      {chat.participantNames.slice(0, 3).join(', ')}{chat.participantNames.length > 3 ? ` +${chat.participantNames.length - 3}` : ''}
-                    </div>
+    <>
+      <GlassPanel className="p-5">
+        <PaneHeader
+          title="Чаты"
+          subtitle="Список активных диалогов, групп и состояний набора текста."
+          right={
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-200"
+            >
+              <Plus className="h-4 w-4" />
+              Группа
+            </button>
+          }
+        />
+        <SearchBox value={search} onChange={setSearch} placeholder="Поиск чатов" />
+        {error && <ErrorBox text={error} />}
+        <div className="mt-4 space-y-3 overflow-auto pr-1">
+          {loading
+            ? Array.from({ length: 7 }).map((_, i) => <PlaceholderCard key={i} />)
+            : chats.map((chat) => (
+                <button
+                  key={chat.id}
+                  onClick={() => onSelectChat(chat)}
+                  className={cn(
+                    "w-full rounded-[26px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg",
+                    selectedChatID === chat.id ? "border-blue-300 bg-blue-50/80" : "border-white/70 bg-white/85"
                   )}
-                  <div className="muted text-sm mt-6 line-clamp-2">
-                    {chat.typingParticipants.length
-                      ? `Печатает: ${chat.typingParticipants.join(', ')}`
-                      : chat.lastMessagePreview || (chat.participantCount > 2 ? 'Групповой чат готов к общению' : 'Напишите первое сообщение')}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={cn("flex h-14 w-14 items-center justify-center rounded-2xl font-bold", chat.participantCount > 2 ? "bg-gradient-to-br from-blue-600 to-cyan-400 text-white" : "bg-blue-100 text-blue-700")}>
+                      {chat.participantCount > 2 ? <Users className="h-5 w-5" /> : initials(chat.title)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-slate-900">{chat.title}</div>
+                          {chat.participantCount > 2 && (
+                            <div className="mt-1 truncate text-xs text-slate-500">
+                              {chat.participantNames.slice(0, 3).join(", ")}
+                              {chat.participantNames.length > 3 ? ` +${chat.participantNames.length - 3}` : ""}
+                            </div>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-xs text-slate-400">{relativeDate(chat.updatedAt)}</div>
+                      </div>
+                      <div className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+                        {chat.typingParticipants.length > 0 ? `Печатает: ${chat.typingParticipants.join(", ")}` : chat.lastMessagePreview || "Диалог без сообщений"}
+                      </div>
+                    </div>
+                    {chat.unreadCount > 0 && (
+                      <div className="rounded-full bg-blue-600 px-2.5 py-1 text-xs font-bold text-white">{chat.unreadCount}</div>
+                    )}
                   </div>
-                </div>
-                {chat.unreadCount > 0 && <div className="badge-unread">{chat.unreadCount}</div>}
-              </button>
-            ))}
-      </div>
+                </button>
+              ))}
+        </div>
+      </GlassPanel>
 
       <AnimatePresence>
-        {isModalOpen && (
-          <Modal title="Новая группа" onClose={() => setIsModalOpen(false)}>
-            <div className="input-group">
-              <label className="label">Название группы</label>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" placeholder="Например, Команда iOS" />
-            </div>
+        {showCreate && (
+          <Modal title="Новая группа" onClose={() => setShowCreate(false)}>
+            <div className="space-y-4">
+              <Field label="Название группы">
+                <input
+                  value={groupTitle}
+                  onChange={(e) => setGroupTitle(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-400"
+                  placeholder="Например, Команда iOS"
+                />
+              </Field>
 
-            <div className="input-group mt-16">
-              <label className="label">Участники</label>
-              <div className="picker-list">
-                {contacts.map((contact) => {
-                  const active = selectedIds.includes(contact.userID);
-                  return (
-                    <button
-                      key={contact.userID}
-                      className={cn('picker-item', active && 'picker-item-active')}
-                      onClick={() => setSelectedIds((prev) => active ? prev.filter((id) => id !== contact.userID) : [...prev, contact.userID])}
-                    >
-                      <div className="avatar-circle avatar-blue">{getInitials(contact.displayName)}</div>
-                      <div className="list-content">
-                        <div className="font-medium truncate">{contact.displayName}</div>
-                        <div className="muted text-sm mt-4 truncate">{contact.contact}</div>
-                      </div>
-                      {active && <CheckCircle2 className="icon-18 text-blue-600" />}
-                    </button>
-                  );
-                })}
+              <div>
+                <div className="mb-2 text-sm font-medium text-slate-700">Участники</div>
+                <div className="max-h-80 space-y-2 overflow-auto rounded-2xl border border-slate-200 p-3">
+                  {contacts.map((contact) => {
+                    const active = selectedContacts.includes(contact.userID);
+                    return (
+                      <button
+                        key={contact.userID}
+                        onClick={() => setSelectedContacts((prev) => active ? prev.filter((x) => x !== contact.userID) : [...prev, contact.userID])}
+                        className={cn("flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition", active ? "bg-blue-50 text-blue-700" : "hover:bg-slate-50")}
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-semibold">{initials(contact.displayName)}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">{contact.displayName}</div>
+                          <div className="truncate text-sm text-slate-500">{contact.contact}</div>
+                        </div>
+                        {active && <Check className="h-4 w-4" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            <button className="primary-button mt-16" disabled={creating || title.trim().length === 0 || selectedIds.length < 2} onClick={createGroup}>
-              {creating ? 'Создание...' : 'Создать группу'}
-            </button>
+              <button
+                onClick={createGroup}
+                disabled={groupTitle.trim().length === 0 || selectedContacts.length < 2}
+                className="w-full rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:opacity-50"
+              >
+                Создать группу
+              </button>
+            </div>
           </Modal>
         )}
       </AnimatePresence>
-    </Section>
+    </>
   );
 }
 
-function DialogPanel({
+function DialoguePane({
   baseUrl,
   token,
   currentUserID,
@@ -842,222 +820,322 @@ function DialogPanel({
   chat: ChatListItem | null;
 }) {
   const [messages, setMessages] = useState<MessageRecord[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!chat) return;
     setLoading(true);
-    setBanner(null);
-    api<MessageRecord[]>(baseUrl, `/chats/${chat.id}/messages?limit=100`, { method: 'GET' }, token)
+    setError(null);
+    api<MessageRecord[]>(baseUrl, `chats/${chat.id}/messages?limit=100`, { method: "GET" }, token)
       .then((data) => setMessages(data))
-      .catch((e) => setBanner(e instanceof Error ? e.message : 'Не удалось загрузить историю'))
+      .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить историю"))
       .finally(() => setLoading(false));
   }, [baseUrl, token, chat?.id]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
-
   async function sendMessage() {
-    if (!chat || input.trim().length === 0) return;
-
-    const localId = crypto.randomUUID();
+    if (!chat || !input.trim()) return;
+    const optimisticId = crypto.randomUUID();
+    const text = input.trim();
     const optimistic: MessageRecord = {
-      id: localId,
-      messageID: localId,
-      localID: localId,
+      id: optimisticId,
       chatID: chat.id,
       authorID: currentUserID,
-      authorName: 'Вы',
-      kind: 'text',
-      text: input.trim(),
-      status: 'sending',
+      authorName: "Вы",
+      kind: "text",
+      text,
       createdAt: new Date().toISOString(),
-      attachments: [],
+      status: "sending",
     };
 
     setMessages((prev) => [...prev, optimistic]);
-    const messageText = input.trim();
-    setInput('');
-    setSending(true);
+    setInput("");
 
     try {
-      const created = await api<MessageRecord>(baseUrl, `/chats/${chat.id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ messageID: localId, kind: 'text', text: messageText, mediaID: null }),
+      const created = await api<MessageRecord>(baseUrl, `chats/${chat.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ messageID: optimisticId, kind: "text", text }),
       }, token);
-      setMessages((prev) => prev.map((message) => (message.id === optimistic.id ? created : message)));
-      setBanner(null);
+      setMessages((prev) => prev.map((m) => (m.id === optimisticId ? created : m)));
     } catch (e) {
-      setMessages((prev) => prev.map((message) => (message.id === optimistic.id ? { ...message, status: 'failed' } : message)));
-      setBanner(e instanceof Error ? e.message : 'Не удалось отправить сообщение');
-    } finally {
-      setSending(false);
+      setMessages((prev) => prev.map((m) => (m.id === optimisticId ? { ...m, status: "failed" } : m)));
+      setError(e instanceof Error ? e.message : "Не удалось отправить сообщение");
     }
   }
 
   if (!chat) {
     return (
-      <div className="dialog-empty">
-        <div className="dialog-empty-icon"><MessageCircle className="icon-32" /></div>
-        <h3 className="dialog-empty-title">Выберите чат</h3>
-        <p className="dialog-empty-text">После выбора откроется история сообщений и поле отправки, работающее с backend по REST-маршрутам /chats/*.</p>
-      </div>
+      <GlassPanel className="flex items-center justify-center p-10">
+        <div className="max-w-md text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-blue-100 text-blue-700">
+            <MessageCircle className="h-9 w-9" />
+          </div>
+          <div className="mt-5 text-2xl font-semibold text-slate-900">Выберите чат</div>
+          <div className="mt-3 text-sm leading-7 text-slate-500">
+            Справа отображается уже более аккуратный экран диалога: большая шапка, мягкий фон, читаемые bubbles и нормальная нижняя панель отправки.
+          </div>
+        </div>
+      </GlassPanel>
     );
   }
 
   return (
-    <div className="dialog-wrap">
-      <div className="dialog-header">
-        <div className={cn('avatar-square large', chat.participantCount > 2 ? 'avatar-group' : 'avatar-blue')}>
-          {chat.participantCount > 2 ? <Users className="icon-18" /> : getInitials(chat.title)}
-        </div>
-        <div>
-          <div className="font-semibold text-lg">{chat.title}</div>
-          <div className="muted text-sm mt-4">{chat.participantCount > 2 ? `${chat.participantCount} участников` : 'Личный чат'}</div>
+    <GlassPanel className="overflow-hidden p-0">
+      <div className="border-b border-white/60 bg-white/70 px-6 py-5">
+        <div className="flex items-center gap-4">
+          <div className={cn("flex h-14 w-14 items-center justify-center rounded-2xl font-bold", chat.participantCount > 2 ? "bg-gradient-to-br from-blue-600 to-cyan-400 text-white" : "bg-blue-100 text-blue-700")}>
+            {chat.participantCount > 2 ? <Users className="h-5 w-5" /> : initials(chat.title)}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-xl font-semibold text-slate-900">{chat.title}</div>
+            <div className="mt-1 truncate text-sm text-slate-500">
+              {chat.participantCount > 2 ? `${chat.participantCount} участников` : "Личный диалог"}
+            </div>
+          </div>
         </div>
       </div>
 
-      {banner && <div className="error-box mx-16 mt-16"><AlertTriangle className="icon-16" /> <span>{banner}</span></div>}
+      <div className="relative flex h-[calc(100vh-8rem)] flex-col xl:h-[calc(100vh-2rem)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.08),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.32),rgba(239,246,255,0.52))]" />
 
-      <div className="dialog-messages">
-        {loading
-          ? Array.from({ length: 5 }).map((_, index) => <MessageSkeleton key={index} outgoing={index % 2 === 0} />)
-          : messages.map((message) => {
-              const isOutgoing = message.authorID === currentUserID;
-              const image = message.attachments?.find((attachment) => attachment.kind === 'image');
-              return (
-                <div key={message.id} className={cn('message-row', isOutgoing && 'message-row-outgoing')}>
-                  <div className={cn('message-bubble', isOutgoing ? 'message-bubble-outgoing' : 'message-bubble-incoming')}>
-                    {!isOutgoing && chat.participantCount > 2 && <div className="message-author">{message.authorName}</div>}
-                    {image?.url && <img src={image.url} alt="attachment" className="message-image" />}
-                    {message.text && <div className="message-text">{message.text}</div>}
-                    <div className={cn('message-meta', isOutgoing && 'message-meta-outgoing')}>
-                      <span>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
-                      {isOutgoing && <MessageStatusBadge status={message.status} />}
-                    </div>
+        <div className="relative flex-1 space-y-4 overflow-auto px-5 py-5">
+          {error && <ErrorBox text={error} />}
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => <MessagePlaceholder key={i} outgoing={i % 2 === 0} />)
+            : messages.map((message) => {
+                const outgoing = message.authorID === currentUserID;
+                const image = message.attachments?.find((a) => a.kind === "image");
+                return (
+                  <div key={message.id} className={cn("flex", outgoing ? "justify-end" : "justify-start")}>
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={cn(
+                        "max-w-[78%] rounded-[28px] px-4 py-3 shadow-lg",
+                        outgoing ? "bg-gradient-to-br from-blue-600 to-cyan-400 text-white shadow-blue-200/60" : "bg-white/90 text-slate-900 shadow-slate-200/60"
+                      )}
+                    >
+                      {chat.participantCount > 2 && !outgoing && <div className="mb-1 text-xs font-semibold text-blue-700">{message.authorName}</div>}
+                      {image?.url && <img src={image.url} alt="attachment" className="mb-3 max-h-72 w-full rounded-2xl object-cover" />}
+                      {message.text && <div className="whitespace-pre-wrap text-sm leading-7">{message.text}</div>}
+                      <div className={cn("mt-2 flex items-center gap-2 text-[11px]", outgoing ? "text-white/80" : "text-slate-400")}>
+                        <span>{new Date(message.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
+                        {outgoing && <MessageState status={message.status} />}
+                      </div>
+                    </motion.div>
                   </div>
-                </div>
-              );
-            })}
-        <div ref={bottomRef} />
-      </div>
+                );
+              })}
+        </div>
 
-      <div className="dialog-input-wrap">
-        <button className="media-button" type="button" title="Загрузка изображения пока не добавлена в web UI">
-          <ImageIcon className="icon-18" />
-        </button>
-        <div className="dialog-input-shell">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="dialog-input"
-            placeholder="Сообщение"
-            rows={1}
-          />
-          <button className="send-button" onClick={sendMessage} disabled={sending || input.trim().length === 0}>
-            <Send className="icon-18" />
-          </button>
+        <div className="relative border-t border-white/60 bg-white/75 px-4 py-4 backdrop-blur-xl">
+          <div className="flex items-end gap-3 rounded-[28px] border border-white/70 bg-white/85 p-3 shadow-xl shadow-slate-200/70">
+            <button className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200">
+              <ImageIcon className="h-5 w-5" />
+            </button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Сообщение"
+              className="min-h-[44px] max-h-36 flex-1 resize-none bg-transparent px-1 py-2 text-sm leading-6 outline-none"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim()}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg shadow-slate-300 disabled:opacity-50"
+            >
+              <SendHorizonal className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </GlassPanel>
   );
 }
 
-function MessageStatusBadge({ status }: { status: MessageStatus }) {
-  const labels: Record<MessageStatus, string> = {
-    sending: 'отправка',
-    sent: 'отправлено',
-    delivered: 'доставлено',
-    read: 'прочитано',
-    failed: 'ошибка',
-  };
-  return <span>{labels[status]}</span>;
-}
-
-function ProfilePanel({ session, connectionStatus }: { session: Session; connectionStatus: ConnectionStatus }) {
+function ProfilePane({ session, connectionStatus }: { session: Session; connectionStatus: ConnectionStatus }) {
   return (
-    <Section title="Профиль" subtitle="Минимальный профиль пользователя, совместимый с общей архитектурой клиента.">
-      <div className="profile-card mt-8">
-        <div className="profile-avatar">{getInitials(session.displayName)}</div>
-        <div className="profile-name">{session.displayName}</div>
-        <div className="profile-id">{session.userID}</div>
-
-        <div className="profile-grid mt-20">
-          <div className="info-card">
-            <div className="label">Статус соединения</div>
-            <div className="font-semibold mt-8">{connectionStatus}</div>
+    <GlassPanel className="p-5">
+      <PaneHeader title="Профиль" subtitle="Информация о текущей сессии и состоянии подключения." />
+      <div className="mt-4 rounded-[28px] bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-white shadow-2xl shadow-slate-900/20">
+        <div className="flex items-center gap-4">
+          <div className="flex h-20 w-20 items-center justify-center rounded-[24px] bg-white/10 text-2xl font-bold">
+            {initials(session.displayName)}
           </div>
-          <div className="info-card">
-            <div className="label">Токен</div>
-            <div className="mono mt-8">{session.token.slice(0, 24)}...</div>
+          <div>
+            <div className="text-2xl font-semibold">{session.displayName}</div>
+            <div className="mt-1 text-sm text-slate-300">Пользователь веб-клиента</div>
           </div>
         </div>
       </div>
-    </Section>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <InfoCard title="Статус соединения" value={statusTitle(connectionStatus)} />
+        <InfoCard title="Токен" value={session.token.slice(0, 24) + "..."} />
+        <InfoCard title="User ID" value={session.userID} className="md:col-span-2" />
+      </div>
+    </GlassPanel>
   );
 }
 
-function Section({
-  title,
-  subtitle,
-  action,
-  children,
+function statusTitle(status: ConnectionStatus) {
+  switch (status) {
+    case "online":
+      return "Онлайн";
+    case "connecting":
+      return "Подключение";
+    case "reconnecting":
+      return "Переподключение";
+    case "offline":
+      return "Офлайн";
+  }
+}
+
+function Segment({
+  value,
+  onChange,
+  items,
 }: {
-  title: string;
-  subtitle: string;
-  action?: JSX.Element;
-  children: JSX.Element | JSX.Element[];
+  value: string;
+  onChange: (next: string) => void;
+  items: Array<{ value: string; label: string; icon?: React.ReactNode }>;
 }) {
   return (
-    <div>
-      <div className="section-header">
-        <div>
-          <div className="title-md">{title}</div>
-          <div className="muted mt-4">{subtitle}</div>
-        </div>
-        {action}
+    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white p-1 shadow-sm">
+      {items.map((item) => (
+        <button
+          key={item.value}
+          onClick={() => onChange(item.value)}
+          className={cn(
+            "flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition",
+            value === item.value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"
+          )}
+        >
+          {item.icon}
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GlassMetric({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+      <div className="inline-flex rounded-2xl bg-white/10 p-3">{icon}</div>
+      <div className="mt-4 text-lg font-semibold">{title}</div>
+      <div className="mt-2 text-sm leading-6 text-slate-300">{text}</div>
+    </div>
+  );
+}
+
+function GlassPanel({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <div className={cn("rounded-[32px] border border-white/60 bg-white/70 shadow-2xl shadow-slate-200/70 backdrop-blur-2xl", className)}>{children}</div>;
+}
+
+function PaneHeader({ title, subtitle, right }: { title: string; subtitle: string; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <div className="text-2xl font-semibold text-slate-900">{title}</div>
+        <div className="mt-1 text-sm leading-6 text-slate-500">{subtitle}</div>
       </div>
-      {children}
+      {right}
     </div>
   );
 }
 
-function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <div className="search-box mt-16">
-      <Search className="icon-16 text-slate-400" />
-      <input value={value} onChange={(e) => onChange(e.target.value)} className="search-input" placeholder={placeholder} />
+    <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/70 bg-white/80 px-4 py-3 shadow-sm">
+      <Search className="h-4 w-4 text-slate-400" />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-transparent text-sm outline-none" />
     </div>
   );
 }
 
-function InlineError({ text }: { text: string }) {
-  return <div className="error-box mt-12"><AlertTriangle className="icon-16" /> <span>{text}</span></div>;
+function StatusPill({ status }: { status: ConnectionStatus }) {
+  const map = {
+    online: { label: "Онлайн", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: <Wifi className="h-4 w-4" /> },
+    connecting: { label: "Подключение", cls: "bg-blue-50 text-blue-700 border-blue-200", icon: <Wifi className="h-4 w-4" /> },
+    reconnecting: { label: "Переподключение", cls: "bg-amber-50 text-amber-700 border-amber-200", icon: <Wifi className="h-4 w-4" /> },
+    offline: { label: "Офлайн", cls: "bg-rose-50 text-rose-700 border-rose-200", icon: <WifiOff className="h-4 w-4" /> },
+  } as const;
+  const current = map[status];
+  return <div className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold", current.cls)}>{current.icon}{current.label}</div>;
 }
 
-function SkeletonRow() {
-  return <div className="skeleton-row" />;
-}
-
-function MessageSkeleton({ outgoing }: { outgoing: boolean }) {
-  return <div className={cn('message-skeleton-row', outgoing && 'message-skeleton-row-outgoing')}><div className="message-skeleton" /></div>;
-}
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: JSX.Element | JSX.Element[] }) {
+function ErrorBox({ text }: { text: string }) {
   return (
-    <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.div className="modal-card" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: 0.98 }}>
-        <div className="section-header">
-          <div className="title-md">{title}</div>
-          <button className="soft-button" onClick={onClose}>Закрыть</button>
+    <div className="mt-4 flex items-start gap-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <AlertTriangle className="mt-0.5 h-4 w-4" />
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function PlaceholderCard() {
+  return (
+    <div className="animate-pulse rounded-[24px] border border-white/70 bg-white/80 p-4">
+      <div className="flex items-center gap-4">
+        <div className="h-12 w-12 rounded-full bg-slate-200" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-40 rounded-full bg-slate-200" />
+          <div className="h-3 w-52 rounded-full bg-slate-100" />
         </div>
-        <div className="mt-16">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function MessagePlaceholder({ outgoing }: { outgoing: boolean }) {
+  return (
+    <div className={cn("flex", outgoing ? "justify-end" : "justify-start")}>
+      <div className="animate-pulse rounded-[28px] bg-white/80 px-4 py-4 shadow-sm">
+        <div className="h-4 w-48 rounded-full bg-slate-200" />
+        <div className="mt-2 h-4 w-64 rounded-full bg-slate-100" />
+      </div>
+    </div>
+  );
+}
+
+function MessageState({ status }: { status: MessageStatus }) {
+  if (status === "read") return <CheckCheck className="h-3.5 w-3.5" />;
+  if (status === "delivered") return <CheckCheck className="h-3.5 w-3.5 opacity-80" />;
+  if (status === "sent") return <Check className="h-3.5 w-3.5" />;
+  if (status === "failed") return <AlertTriangle className="h-3.5 w-3.5" />;
+  return <span className="text-[10px] uppercase tracking-wide">...</span>;
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} className="w-full max-w-2xl rounded-[32px] border border-white/60 bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div className="text-2xl font-semibold text-slate-900">{title}</div>
+          <button onClick={onClose} className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600">Закрыть</button>
+        </div>
+        {children}
       </motion.div>
     </motion.div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="mb-2 text-sm font-medium text-slate-700">{label}</div>
+      {children}
+    </label>
+  );
+}
+
+function InfoCard({ title, value, className }: { title: string; value: string; className?: string }) {
+  return (
+    <div className={cn("rounded-[24px] border border-slate-200 bg-white/85 p-5", className)}>
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{title}</div>
+      <div className="mt-3 break-all text-sm leading-7 text-slate-800">{value}</div>
+    </div>
   );
 }
