@@ -144,9 +144,34 @@ public struct RESTChatService: ChatNetworking {
         self.authTokenProvider = authTokenProvider
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+
+            if let date = Self.fractionalSecondDateFormatter.date(from: value)
+                ?? Self.iso8601DateFormatter.date(from: value) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO-8601 date: \(value)"
+            )
+        }
         self.decoder = decoder
     }
+
+    private static let iso8601DateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let fractionalSecondDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     public func listChats(searchQuery: String?) async throws -> [ServerChat] {
         var components = URLComponents(url: baseURL.appendingPathComponent("chats"), resolvingAgainstBaseURL: false)
