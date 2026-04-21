@@ -71,7 +71,7 @@ type MessageRecord = {
   attachments?: MessageAttachment[];
 };
 
-const DEFAULT_BASE_URL = "http://localhost:8080/api";
+const DEFAULT_BASE_URL = "https://mobile-messenger-ios-production.up.railway.app/api";
 const STORAGE_SESSION = "mobile_messenger_web_session";
 const STORAGE_BASE_URL = "mobile_messenger_web_base_url";
 
@@ -116,6 +116,66 @@ function relativeDate(date: string) {
   return rtf.format(Math.round(diff / (1000 * 60)), "minute");
 }
 
+function normalizeChat(raw: any): ChatListItem {
+  return {
+    id: String(raw?.id ?? crypto.randomUUID()),
+    title: String(raw?.title ?? "Без названия"),
+    lastMessagePreview:
+      raw?.lastMessagePreview == null ? null : String(raw.lastMessagePreview),
+    updatedAt: String(raw?.updatedAt ?? raw?.lastActivity ?? new Date().toISOString()),
+    unreadCount: Number(raw?.unreadCount ?? 0),
+    typingParticipants: Array.isArray(raw?.typingParticipants)
+      ? raw.typingParticipants.map(String)
+      : [],
+    participantNames: Array.isArray(raw?.participantNames)
+      ? raw.participantNames.map(String)
+      : [],
+    participantCount: Number(
+      raw?.participantCount ??
+        (Array.isArray(raw?.participantNames) && raw.participantNames.length > 0
+          ? raw.participantNames.length
+          : 1)
+    ),
+  };
+}
+
+function normalizeMessage(raw: any): MessageRecord {
+  return {
+    id: String(raw?.id ?? crypto.randomUUID()),
+    chatID: String(raw?.chatID ?? ""),
+    authorID: String(raw?.authorID ?? ""),
+    authorName: String(raw?.authorName ?? "Unknown"),
+    kind: raw?.kind === "image" ? "image" : "text",
+    text: String(raw?.text ?? ""),
+    createdAt: String(raw?.createdAt ?? new Date().toISOString()),
+    status:
+      raw?.status === "sending" ||
+      raw?.status === "sent" ||
+      raw?.status === "delivered" ||
+      raw?.status === "read" ||
+      raw?.status === "failed"
+        ? raw.status
+        : "sent",
+    attachments: Array.isArray(raw?.attachments)
+      ? raw.attachments
+          .filter((item: any) => item?.kind === "image")
+          .map((item: any) => ({
+            id: String(item?.id ?? crypto.randomUUID()),
+            kind: "image" as const,
+            url: item?.url ? String(item.url) : null,
+          }))
+      : raw?.mediaURL
+      ? [
+          {
+            id: String(raw?.mediaID ?? raw?.id ?? crypto.randomUUID()),
+            kind: "image" as const,
+            url: String(raw.mediaURL),
+          },
+        ]
+      : [],
+  };
+}
+
 async function api<T>(baseUrl: string, path: string, init?: RequestInit, token?: string): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   if (!(init?.body instanceof FormData)) headers.set("Content-Type", "application/json");
@@ -130,14 +190,17 @@ async function api<T>(baseUrl: string, path: string, init?: RequestInit, token?:
   const parsed = raw ? safeJSON(raw, raw) : null;
 
   if (!response.ok) {
-    const message = typeof parsed === "object" && parsed && "message" in parsed ? String((parsed as any).message) : raw || `Ошибка ${response.status}`;
+    const message =
+      typeof parsed === "object" && parsed && "message" in parsed
+        ? String((parsed as any).message)
+        : raw || `Ошибка ${response.status}`;
     throw new Error(message);
   }
 
   return parsed as T;
 }
 
-export default function MobileMessengerWebRedesign() {
+export default function App() {
   const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem(STORAGE_BASE_URL) || DEFAULT_BASE_URL);
   const [session, setSession] = useState<Session | null>(() => safeJSON(localStorage.getItem(STORAGE_SESSION), null));
   const [activeTab, setActiveTab] = useState<TabKey>("chats");
@@ -590,7 +653,7 @@ function ContactsPane({
   useEffect(() => {
     let mounted = true;
     api<ContactDTO[]>(baseUrl, "auth/contacts", { method: "GET" }, token)
-      .then((data) => mounted && setContacts(data))
+      .then((data) => mounted && setContacts(Array.isArray(data) ? data : []))
       .catch((e) => mounted && setError(e instanceof Error ? e.message : "Не удалось загрузить контакты"))
       .finally(() => mounted && setLoading(false));
     return () => {
@@ -606,11 +669,11 @@ function ContactsPane({
 
   async function openChat(contact: ContactDTO) {
     if (contact.isCurrentUser) return;
-    const created = await api<ChatListItem>(baseUrl, "chats", {
+    const createdRaw = await api<any>(baseUrl, "chats", {
       method: "POST",
       body: JSON.stringify({ title: contact.displayName, participantContacts: [contact.contact] }),
     }, token);
-    onChatOpen(created);
+    onChatOpen(normalizeChat(createdRaw));
   }
 
   return (
@@ -668,9 +731,9 @@ function ChatsPane({
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(true);
-      api<ChatListItem[]>(baseUrl, `chats${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`, { method: "GET" }, token)
+      api<any[]>(baseUrl, `chats${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`, { method: "GET" }, token)
         .then((data) => {
-          setChats(data);
+          setChats(Array.isArray(data) ? data.map(normalizeChat) : []);
           setError(null);
         })
         .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить чаты"))
@@ -681,16 +744,17 @@ function ChatsPane({
 
   useEffect(() => {
     api<ContactDTO[]>(baseUrl, "auth/contacts", { method: "GET" }, token)
-      .then((data) => setContacts(data.filter((x) => !x.isCurrentUser)))
+      .then((data) => setContacts(Array.isArray(data) ? data.filter((x) => !x.isCurrentUser) : []))
       .catch(() => undefined);
   }, [baseUrl, token]);
 
   async function createGroup() {
     const participantContacts = contacts.filter((c) => selectedContacts.includes(c.userID)).map((c) => c.contact);
-    const created = await api<ChatListItem>(baseUrl, "chats", {
+    const createdRaw = await api<any>(baseUrl, "chats", {
       method: "POST",
       body: JSON.stringify({ title: groupTitle.trim(), participantContacts }),
     }, token);
+    const created = normalizeChat(createdRaw);
     setShowCreate(false);
     setGroupTitle("");
     setSelectedContacts([]);
@@ -828,8 +892,8 @@ function DialoguePane({
     if (!chat) return;
     setLoading(true);
     setError(null);
-    api<MessageRecord[]>(baseUrl, `chats/${chat.id}/messages?limit=100`, { method: "GET" }, token)
-      .then((data) => setMessages(data))
+    api<any[]>(baseUrl, `chats/${chat.id}/messages?limit=100`, { method: "GET" }, token)
+      .then((data) => setMessages(Array.isArray(data) ? data.map(normalizeMessage) : []))
       .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить историю"))
       .finally(() => setLoading(false));
   }, [baseUrl, token, chat?.id]);
@@ -847,16 +911,18 @@ function DialoguePane({
       text,
       createdAt: new Date().toISOString(),
       status: "sending",
+      attachments: [],
     };
 
     setMessages((prev) => [...prev, optimistic]);
     setInput("");
 
     try {
-      const created = await api<MessageRecord>(baseUrl, `chats/${chat.id}/messages`, {
+      const createdRaw = await api<any>(baseUrl, `chats/${chat.id}/messages`, {
         method: "POST",
         body: JSON.stringify({ messageID: optimisticId, kind: "text", text }),
       }, token);
+      const created = normalizeMessage(createdRaw);
       setMessages((prev) => prev.map((m) => (m.id === optimisticId ? created : m)));
     } catch (e) {
       setMessages((prev) => prev.map((m) => (m.id === optimisticId ? { ...m, status: "failed" } : m)));
@@ -931,7 +997,7 @@ function DialoguePane({
 
         <div className="relative border-t border-white/60 bg-white/75 px-4 py-4 backdrop-blur-xl">
           <div className="flex items-end gap-3 rounded-[28px] border border-white/70 bg-white/85 p-3 shadow-xl shadow-slate-200/70">
-            <button className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200">
+            <button className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200" type="button">
               <ImageIcon className="h-5 w-5" />
             </button>
             <textarea
