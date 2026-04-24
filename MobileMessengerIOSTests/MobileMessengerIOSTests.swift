@@ -39,20 +39,22 @@ final class MobileMessengerIOSTests: XCTestCase {
             {
               "token": "token-123",
               "userID": "\(userID.uuidString)",
-              "displayName": "Анна Demo"
+              "displayName": "Alex Carter",
+              "phone": "+10000000001"
             }
             """.data(using: .utf8)!
         )
 
         let response = try await service.verifyCode(
             method: .phone,
-            contact: "+15551230011",
-            code: "123456"
+            contact: "+10000000001",
+            code: "111111"
         )
 
         XCTAssertEqual(response.token, "token-123")
         XCTAssertEqual(response.userID, userID)
-        XCTAssertEqual(response.displayName, "Анна Demo")
+        XCTAssertEqual(response.displayName, "Alex Carter")
+        XCTAssertEqual(response.phone, "+10000000001")
     }
 
     func testAuthServiceMapsBackendError() async {
@@ -83,7 +85,8 @@ final class MobileMessengerIOSTests: XCTestCase {
         let session = AuthenticatedSession(
             accessToken: "secure-token",
             userID: userID,
-            displayName: "Вера"
+            displayName: "Maria Stone",
+            phone: "+10000000002"
         )
 
         let store = SessionStore(tokenStore: tokenStore, defaults: defaults)
@@ -93,13 +96,14 @@ final class MobileMessengerIOSTests: XCTestCase {
         XCTAssertEqual(store.authToken, "secure-token")
 
         let restored = SessionStore(tokenStore: tokenStore, defaults: defaults)
-        guard case .authenticated(let token, let restoredUserID, let displayName) = restored.state else {
+        guard case .authenticated(let token, let restoredUserID, let displayName, let phone) = restored.state else {
             return XCTFail("Expected authenticated state")
         }
 
         XCTAssertEqual(token, "secure-token")
         XCTAssertEqual(restoredUserID, userID)
-        XCTAssertEqual(displayName, "Вера")
+        XCTAssertEqual(displayName, "Maria Stone")
+        XCTAssertEqual(phone, "+10000000002")
     }
 
     @MainActor
@@ -109,7 +113,8 @@ final class MobileMessengerIOSTests: XCTestCase {
             signInResponse: AuthVerifyResponse(
                 token: "mock-token",
                 userID: userID,
-                displayName: "Mock User"
+                displayName: "Mock User",
+                phone: "+10000000003"
             )
         )
         let sessionStore = SessionStore(
@@ -123,12 +128,13 @@ final class MobileMessengerIOSTests: XCTestCase {
         await viewModel.signInWithPassword()
 
         XCTAssertEqual(authRepository.signInCalls.count, 1)
-        guard case .authenticated(let token, let restoredUserID, let displayName) = sessionStore.state else {
+        guard case .authenticated(let token, let restoredUserID, let displayName, let phone) = sessionStore.state else {
             return XCTFail("Expected authenticated state")
         }
         XCTAssertEqual(token, "mock-token")
         XCTAssertEqual(restoredUserID, userID)
         XCTAssertEqual(displayName, "Mock User")
+        XCTAssertEqual(phone, "+10000000003")
     }
 
     func testServerMessageMapsToDomainMessage() throws {
@@ -137,9 +143,10 @@ final class MobileMessengerIOSTests: XCTestCase {
         let authorID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
         let payload = """
         {
-          "id": "55555555-5555-5555-5555-555555555555",
-          "messageID": "\(messageID.uuidString)",
+          "id": "\(messageID.uuidString)",
+          "serverID": "55555555-5555-5555-5555-555555555555",
           "chatID": "\(chatID.uuidString)",
+          "senderID": "\(authorID.uuidString)",
           "authorID": "\(authorID.uuidString)",
           "authorName": "Алиса",
           "kind": "image",
@@ -165,34 +172,59 @@ final class MobileMessengerIOSTests: XCTestCase {
         let payload = """
         {
           "id": "11111111-1111-1111-1111-111111111111",
-          "title": "General Chat",
-          "lastMessagePreview": "Привет",
-          "lastActivity": "2026-04-18T20:44:53.671Z",
+          "title": "Chat with Maria Stone",
+          "participants": [
+            "10000000-0000-0000-0000-000000000001",
+            "10000000-0000-0000-0000-000000000002"
+          ],
+          "lastMessage": "Привет",
+          "updatedAt": "2026-04-18T20:44:53.671Z",
           "unreadCount": 2,
           "typingParticipants": ["Анна"],
-          "participantNames": ["Анна", "Борис"],
-          "participantCount": 3
+          "participantNames": ["Maria Stone"],
+          "participantCount": 2
         }
         """.data(using: .utf8)!
 
         let chat = try makeChatDecoder().decode(ServerChat.self, from: payload).asDomainChat()
 
-        XCTAssertEqual(chat.title, "General Chat")
+        XCTAssertEqual(chat.title, "Chat with Maria Stone")
         XCTAssertEqual(chat.unreadCount, 2)
         XCTAssertEqual(chat.typingParticipants, ["Анна"])
-        XCTAssertEqual(chat.participantCount, 3)
-        XCTAssertTrue(chat.isGroup)
+        XCTAssertEqual(chat.participantCount, 2)
+        XCTAssertEqual(chat.participants.count, 2)
+        XCTAssertFalse(chat.isGroup)
     }
 
     func testAuthVerifyResponseMapsToAuthenticatedSession() {
         let userID = UUID()
-        let response = AuthVerifyResponse(token: "token-123", userID: userID, displayName: "Борис")
+        let response = AuthVerifyResponse(token: "token-123", userID: userID, displayName: "Борис", phone: "+10000000004")
 
         let session = response.asAuthenticatedSession()
 
         XCTAssertEqual(session.accessToken, "token-123")
         XCTAssertEqual(session.userID, userID)
         XCTAssertEqual(session.displayName, "Борис")
+        XCTAssertEqual(session.phone, "+10000000004")
+    }
+
+    @MainActor
+    func testSessionStoreLogoutClearsPersistedSession() {
+        let defaults = UserDefaults(suiteName: "SessionStoreLogoutTests.\(UUID().uuidString)")!
+        let tokenStore = InMemoryTokenStore()
+        let store = SessionStore(tokenStore: tokenStore, defaults: defaults)
+
+        store.authenticate(
+            with: "token",
+            userID: UUID(),
+            displayName: "Alex Carter",
+            phone: "+10000000001"
+        )
+        store.logout()
+
+        XCTAssertNil(tokenStore.getAccessToken())
+        XCTAssertEqual(store.authToken, nil)
+        XCTAssertEqual(defaults.string(forKey: SessionStore.Constants.displayNameKey), nil)
     }
 
     @MainActor

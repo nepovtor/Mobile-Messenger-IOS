@@ -1,12 +1,18 @@
 import Foundation
 
 public final class DefaultChatRepository: ChatRepository {
+    public struct SessionContext: Sendable, Equatable {
+        public let userID: UUID
+        public let displayName: String
+    }
+
     private let store: ChatLocalStore
     private let remote: ChatNetworking
     private let realtime: ChatRealtimeService
     private let analytics: AnalyticsService
     private let reachability: ReachabilityService
     private let fileManager: FileManager
+    private let currentSessionProvider: @Sendable () async -> SessionContext?
     private let pendingSendCoordinator = PendingSendCoordinator()
     private var reachabilityTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
@@ -17,6 +23,7 @@ public final class DefaultChatRepository: ChatRepository {
         realtime: ChatRealtimeService,
         analytics: AnalyticsService,
         reachability: ReachabilityService,
+        currentSessionProvider: @escaping @Sendable () async -> SessionContext?,
         fileManager: FileManager = .default
     ) {
         self.store = store
@@ -25,6 +32,7 @@ public final class DefaultChatRepository: ChatRepository {
         self.analytics = analytics
         self.reachability = reachability
         self.fileManager = fileManager
+        self.currentSessionProvider = currentSessionProvider
 
         reachabilityTask = Task { [weak self] in
             await self?.observeReachability()
@@ -55,7 +63,7 @@ public final class DefaultChatRepository: ChatRepository {
     public func listChats(searchQuery: String?) async throws -> [Chat] {
         do {
             let chats = try await remote.listChats(searchQuery: searchQuery).map { try $0.asDomainChat() }
-            try await store.upsert(chats: chats)
+            try await store.replaceChats(with: chats)
             return try await store.fetchChats(searchQuery: searchQuery)
         } catch {
             let cached = try await store.fetchChats(searchQuery: searchQuery)
@@ -170,9 +178,17 @@ public final class DefaultChatRepository: ChatRepository {
         await retryAllPendingMessages()
         do {
             let chats = try await remote.listChats(searchQuery: nil).map { try $0.asDomainChat() }
-            try await store.upsert(chats: chats)
+            try await store.replaceChats(with: chats)
         } catch {
             analytics.track(error: error, context: "foreground_refresh_chats")
+        }
+    }
+
+    public func resetLocalState() async {
+        do {
+            try await store.reset()
+        } catch {
+            analytics.track(error: error, context: "chat_store_reset")
         }
     }
 
@@ -254,14 +270,15 @@ public final class DefaultChatRepository: ChatRepository {
 
     private func observeRealtime() async {
         for await envelope in realtime.observeAllEvents() {
+            guard await currentSessionProvider() != nil else { continue }
+            guard await store.containsChat(id: envelope.chatID) else { continue }
+
             switch envelope.event {
             case .message(let message):
-                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.append(message: message, for: envelope.chatID)
             case .messageRead(let messageID):
                 try? await store.updateStatus(for: messageID, in: envelope.chatID, status: .read)
             case .typing(let participants):
-                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.updateTypingParticipants(participants, in: envelope.chatID)
             case .connected, .disconnected:
                 break

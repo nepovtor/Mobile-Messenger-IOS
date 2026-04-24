@@ -494,7 +494,7 @@ private struct DemoAccountCard: View {
                         Text(account.contact)
                             .font(.system(size: 16, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.65))
-                        Text("Password:  \(account.password)")
+                        Text("Code: \(account.code)")
                             .font(.system(size: 15, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.55))
                     }

@@ -5,7 +5,7 @@ import Combine
 public final class SessionStore: ObservableObject {
     public enum State: Equatable {
         case unauthenticated
-        case authenticated(token: String, userID: UUID, displayName: String)
+        case authenticated(token: String, userID: UUID, displayName: String, phone: String)
     }
 
     public enum Constants {
@@ -15,6 +15,7 @@ public final class SessionStore: ObservableObject {
         public static var currentUserDisplayName = defaultUserDisplayName
         static let userIDKey = "auth.user_id"
         static let displayNameKey = "auth.display_name"
+        static let phoneKey = "auth.phone"
     }
 
     @Published public private(set) var state: State
@@ -28,8 +29,9 @@ public final class SessionStore: ObservableObject {
         if let token = tokenStore.getAccessToken(),
            let storedUserID = defaults.string(forKey: Constants.userIDKey),
            let userID = UUID(uuidString: storedUserID),
-           let displayName = defaults.string(forKey: Constants.displayNameKey) {
-            state = .authenticated(token: token, userID: userID, displayName: displayName)
+           let displayName = defaults.string(forKey: Constants.displayNameKey),
+           let phone = defaults.string(forKey: Constants.phoneKey) {
+            state = .authenticated(token: token, userID: userID, displayName: displayName, phone: phone)
             updateCurrentUser(userID: userID, displayName: displayName)
         } else {
             state = .unauthenticated
@@ -37,19 +39,21 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    public func authenticate(with token: String, userID: UUID, displayName: String) {
+    public func authenticate(with token: String, userID: UUID, displayName: String, phone: String) {
         tokenStore.saveAccessToken(token)
         defaults.set(userID.uuidString, forKey: Constants.userIDKey)
         defaults.set(displayName, forKey: Constants.displayNameKey)
+        defaults.set(phone, forKey: Constants.phoneKey)
         updateCurrentUser(userID: userID, displayName: displayName)
-        state = .authenticated(token: token, userID: userID, displayName: displayName)
+        state = .authenticated(token: token, userID: userID, displayName: displayName, phone: phone)
     }
 
     public func authenticate(with session: AuthenticatedSession) {
         authenticate(
             with: session.accessToken,
             userID: session.userID,
-            displayName: session.displayName
+            displayName: session.displayName,
+            phone: session.phone
         )
     }
 
@@ -57,12 +61,13 @@ public final class SessionStore: ObservableObject {
         tokenStore.clearAccessToken()
         defaults.removeObject(forKey: Constants.userIDKey)
         defaults.removeObject(forKey: Constants.displayNameKey)
+        defaults.removeObject(forKey: Constants.phoneKey)
         resetCurrentUser()
         state = .unauthenticated
     }
 
     public var authToken: String? {
-        if case .authenticated(let token, _, _) = state { return token }
+        if case .authenticated(let token, _, _, _) = state { return token }
         return nil
     }
 
@@ -87,10 +92,12 @@ public struct AuthenticatedSession: Equatable, Sendable {
     public let accessToken: String
     public let userID: UUID
     public let displayName: String
+    public let phone: String
 
-    public init(accessToken: String, userID: UUID, displayName: String) {
+    public init(accessToken: String, userID: UUID, displayName: String, phone: String) {
         self.accessToken = accessToken
         self.userID = userID
         self.displayName = displayName
+        self.phone = phone
     }
 }

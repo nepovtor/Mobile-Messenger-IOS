@@ -67,6 +67,7 @@ public final class AppContainer: ObservableObject {
     private var sessionStateCancellable: AnyCancellable?
     private var connectionStateTask: Task<Void, Never>?
     private var isSceneActive = false
+    private var activeSessionUserID: UUID?
     private var latestRealtimeState: ChatRealtimeConnectionState = .disconnected
     @Published public private(set) var connectionStatus: ConnectionStatus = .offline
 
@@ -186,7 +187,15 @@ public final class AppContainer: ObservableObject {
             remote: chatService,
             realtime: realtimeService,
             analytics: analytics,
-            reachability: reachability
+            reachability: reachability,
+            currentSessionProvider: { [sessionStore] in
+                await MainActor.run {
+                    guard case .authenticated(_, let userID, let displayName, _) = sessionStore.state else {
+                        return nil
+                    }
+                    return DefaultChatRepository.SessionContext(userID: userID, displayName: displayName)
+                }
+            }
         )
     }
 
@@ -217,13 +226,20 @@ public final class AppContainer: ObservableObject {
         sessionStateCancellable = sessionStore.$state.sink { [weak self] state in
             guard let self else { return }
             switch state {
-            case .authenticated:
+            case .authenticated(_, let userID, _, _):
+                let previousUserID = activeSessionUserID
+                activeSessionUserID = userID
+                if previousUserID != userID {
+                    Task { await self.resetSessionScopedState(forLogout: false) }
+                }
                 if isSceneActive {
                     Task { await self.refreshApplicationState() }
                 }
             case .unauthenticated:
+                activeSessionUserID = nil
                 realtimeService?.handleLogout()
                 connectionStatus = .offline
+                Task { await self.resetSessionScopedState(forLogout: true) }
             }
         }
     }
@@ -251,6 +267,19 @@ public final class AppContainer: ObservableObject {
         realtimeService.activate()
         updateConnectionStatus()
         await chatRepository.refreshForForeground()
+    }
+
+    private func resetSessionScopedState(forLogout: Bool) async {
+        if forLogout {
+            realtimeService.handleLogout()
+        } else {
+            realtimeService.deactivate()
+        }
+        try? await chatStore.reset()
+        chatPresentationStore.reset()
+        latestRealtimeState = .disconnected
+        connectionStatus = .offline
+        configurationRevision += 1
     }
 
     private func updateConnectionStatus() {
@@ -343,6 +372,12 @@ public final class ChatPresentationStore: ObservableObject {
             state.drafts[chatID.uuidString] = draft
         }
         persist()
+    }
+
+    public func reset() {
+        state = PersistedState()
+        defaults.removeObject(forKey: storageKey)
+        revision += 1
     }
 
     private func update(_ ids: inout [UUID], contains shouldContain: Bool, chatID: UUID) {

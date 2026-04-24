@@ -1,8 +1,9 @@
 import Foundation
 
-public struct ServerChat: Codable, Sendable {
+public struct ServerChat: Decodable, Sendable {
     public let id: UUID
     public let title: String
+    public let participants: [UUID]
     public let lastMessagePreview: String?
     public let lastActivity: Date
     public let unreadCount: Int
@@ -13,7 +14,10 @@ public struct ServerChat: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id
         case title
+        case participants
+        case lastMessage
         case lastMessagePreview
+        case updatedAt
         case lastActivity
         case unreadCount
         case typingParticipants
@@ -25,8 +29,13 @@ public struct ServerChat: Codable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
-        lastMessagePreview = try container.decodeIfPresent(String.self, forKey: .lastMessagePreview)
-        lastActivity = try container.decode(Date.self, forKey: .lastActivity)
+        participants = try container.decodeIfPresent([UUID].self, forKey: .participants) ?? []
+        lastMessagePreview =
+            try container.decodeIfPresent(String.self, forKey: .lastMessagePreview) ??
+            container.decodeIfPresent(String.self, forKey: .lastMessage)
+        lastActivity =
+            try container.decodeIfPresent(Date.self, forKey: .lastActivity) ??
+            container.decode(Date.self, forKey: .updatedAt)
         unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
         typingParticipants = try container.decodeIfPresent([String].self, forKey: .typingParticipants) ?? []
         participantNames = try container.decodeIfPresent([String].self, forKey: .participantNames) ?? []
@@ -36,10 +45,12 @@ public struct ServerChat: Codable, Sendable {
     }
 }
 
-public struct ServerMessage: Codable, Sendable {
+public struct ServerMessage: Decodable, Sendable {
     public let id: UUID
+    public let serverID: UUID?
     public let messageID: UUID
     public let chatID: UUID
+    public let senderID: UUID
     public let authorID: UUID
     public let authorName: String
     public let kind: Message.Kind
@@ -51,8 +62,10 @@ public struct ServerMessage: Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case serverID
         case messageID
         case chatID
+        case senderID
         case authorID
         case authorName
         case kind
@@ -66,9 +79,13 @@ public struct ServerMessage: Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        messageID = try container.decode(UUID.self, forKey: .messageID)
+        serverID = try container.decodeIfPresent(UUID.self, forKey: .serverID)
+        messageID = try container.decodeIfPresent(UUID.self, forKey: .messageID) ?? id
         chatID = try container.decode(UUID.self, forKey: .chatID)
-        authorID = try container.decode(UUID.self, forKey: .authorID)
+        senderID =
+            try container.decodeIfPresent(UUID.self, forKey: .senderID) ??
+            container.decode(UUID.self, forKey: .authorID)
+        authorID = try container.decodeIfPresent(UUID.self, forKey: .authorID) ?? senderID
         authorName = try container.decode(String.self, forKey: .authorName)
         kind = try container.decodeIfPresent(Message.Kind.self, forKey: .kind) ?? .text
         text = try container.decodeIfPresent(String.self, forKey: .text)
@@ -98,7 +115,7 @@ public struct ServerMessage: Codable, Sendable {
         return Message(
             id: Message.Identifier(chatID: chatID, messageID: messageID),
             localID: localID ?? messageID,
-            authorID: authorID,
+            authorID: senderID,
             authorName: authorName,
             kind: kind,
             text: text ?? "",
@@ -308,6 +325,7 @@ extension ServerChat {
         Chat(
             id: id,
             title: title,
+            participants: participants,
             lastMessagePreview: lastMessagePreview,
             lastActivity: lastActivity,
             unreadCount: unreadCount,

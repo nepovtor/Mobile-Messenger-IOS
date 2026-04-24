@@ -3,6 +3,7 @@ import Foundation
 public struct Chat: Identifiable, Hashable, Sendable, Codable {
     public let id: UUID
     public let title: String
+    public let participants: [UUID]
     public let lastMessagePreview: String?
     public let lastMessageAuthorName: String?
     public let lastMessageIsOutgoing: Bool
@@ -17,6 +18,7 @@ public struct Chat: Identifiable, Hashable, Sendable, Codable {
     public init(
         id: UUID,
         title: String,
+        participants: [UUID] = [],
         lastMessagePreview: String?,
         lastMessageAuthorName: String? = nil,
         lastMessageIsOutgoing: Bool = false,
@@ -30,6 +32,7 @@ public struct Chat: Identifiable, Hashable, Sendable, Codable {
     ) {
         self.id = id
         self.title = title
+        self.participants = participants
         self.lastMessagePreview = lastMessagePreview
         self.lastMessageAuthorName = lastMessageAuthorName
         self.lastMessageIsOutgoing = lastMessageIsOutgoing
@@ -44,5 +47,9 @@ public struct Chat: Identifiable, Hashable, Sendable, Codable {
 
     public var isGroup: Bool {
         participantCount > 2
+    }
+
+    public func isVisible(to userID: UUID) -> Bool {
+        participants.isEmpty || participants.contains(userID)
     }
 }

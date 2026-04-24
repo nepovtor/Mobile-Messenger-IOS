@@ -27,13 +27,13 @@ public struct AuthDemoAccount: Identifiable, Hashable, Sendable {
     public let id: String
     public let displayName: String
     public let contact: String
-    public let password: String
+    public let code: String
 
-    public init(displayName: String, contact: String, password: String) {
+    public init(displayName: String, contact: String, code: String) {
         self.id = contact
         self.displayName = displayName
         self.contact = contact
-        self.password = password
+        self.code = code
     }
 }
 
@@ -55,11 +55,10 @@ public final class AuthViewModel: ObservableObject {
     private let authService: AuthNetworking
     let sessionStore: SessionStore
     public let demoAccounts: [AuthDemoAccount] = [
-        AuthDemoAccount(displayName: "Анна Demo", contact: "+15551230011", password: "demo1111"),
-        AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222"),
-        AuthDemoAccount(displayName: "Вера Demo", contact: "+15551230013", password: "demo3333"),
-        AuthDemoAccount(displayName: "Глеб Demo", contact: "+15551230014", password: "demo4444"),
-        AuthDemoAccount(displayName: "Даша Demo", contact: "+15551230015", password: "demo5555")
+        AuthDemoAccount(displayName: "Alex Carter", contact: "+10000000001", code: "111111"),
+        AuthDemoAccount(displayName: "Maria Stone", contact: "+10000000002", code: "222222"),
+        AuthDemoAccount(displayName: "Daniel Reed", contact: "+10000000003", code: "333333"),
+        AuthDemoAccount(displayName: "Emily Brooks", contact: "+10000000004", code: "444444")
     ]
 
     public init(authService: AuthNetworking, sessionStore: SessionStore) {
@@ -143,7 +142,7 @@ public final class AuthViewModel: ObservableObject {
 
         do {
             let response = try await authService.verifyCode(method: method, contact: sanitizedContact, code: sanitizedCode)
-            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
+            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName, phone: response.phone)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -164,7 +163,7 @@ public final class AuthViewModel: ObservableObject {
                 contact: sanitizedContact,
                 password: sanitizedPassword
             )
-            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
+            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName, phone: response.phone)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -175,7 +174,8 @@ public final class AuthViewModel: ObservableObject {
         screenMode = .signIn
         credentialMode = .password
         contact = account.contact
-        password = account.password
+        password = account.code
+        code = account.code
         clearTransientState(keepContact: true)
     }
 

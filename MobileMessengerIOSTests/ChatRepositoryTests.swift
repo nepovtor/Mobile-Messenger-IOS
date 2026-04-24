@@ -63,10 +63,21 @@ final class ChatRepositoryTests: XCTestCase {
             remote: remote,
             realtime: realtime,
             analytics: FakeAnalyticsService(),
-            reachability: reachability
+            reachability: reachability,
+            currentSessionProvider: {
+                DefaultChatRepository.SessionContext(
+                    userID: SessionStore.Constants.currentUserID,
+                    displayName: SessionStore.Constants.currentUserDisplayName
+                )
+            }
         )
 
-        let optimistic = try await repository.sendMessage(chatID: chatID, text: "Привет", localID: localID, repliedTo: nil)
+        let optimistic = try await repository.sendMessage(
+            chatID: chatID,
+            text: "Привет",
+            localID: localID,
+            repliedTo: Optional<Message.Identifier>.none
+        )
         XCTAssertEqual(optimistic.status, .sending)
         XCTAssertEqual(optimistic.localID, localID)
 
@@ -97,12 +108,20 @@ final class ChatRepositoryTests: XCTestCase {
             status: .delivered
         )
 
+        try await store.ensureChatExists(id: chatID, title: "Диалог")
+
         let repository = DefaultChatRepository(
             store: store,
             remote: remote,
             realtime: realtime,
             analytics: FakeAnalyticsService(),
-            reachability: reachability
+            reachability: reachability,
+            currentSessionProvider: {
+                DefaultChatRepository.SessionContext(
+                    userID: SessionStore.Constants.currentUserID,
+                    displayName: SessionStore.Constants.currentUserDisplayName
+                )
+            }
         )
         _ = repository
 
@@ -123,6 +142,119 @@ final class ChatRepositoryTests: XCTestCase {
         XCTAssertEqual(updated.status, .read)
     }
 
+    func testRealtimeDuplicateMessageIsNotAddedTwice() async throws {
+        let chatID = UUID()
+        let messageID = UUID()
+        let remote = FakeChatNetworking()
+        let realtime = FakeRealtimeService()
+        let reachability = FakeReachabilityService(isReachable: true)
+        let store = SwiftDataChatStore(storageURL: uniqueStoreURL())
+        try await store.ensureChatExists(id: chatID, title: "Диалог")
+
+        let repository = DefaultChatRepository(
+            store: store,
+            remote: remote,
+            realtime: realtime,
+            analytics: FakeAnalyticsService(),
+            reachability: reachability,
+            currentSessionProvider: {
+                DefaultChatRepository.SessionContext(
+                    userID: SessionStore.Constants.currentUserID,
+                    displayName: SessionStore.Constants.currentUserDisplayName
+                )
+            }
+        )
+        _ = repository
+
+        let message = makeDomainMessage(
+            chatID: chatID,
+            messageID: messageID,
+            authorID: UUID(),
+            authorName: "Maria Stone",
+            text: "One event only",
+            status: .sent
+        )
+
+        realtime.emit(chatID: chatID, event: .message(message))
+        realtime.emit(chatID: chatID, event: .message(message))
+
+        _ = try await waitUntil { [store] in
+            let messages = try await store.loadMessages(for: chatID, limit: 10, before: nil)
+            return messages.count == 1 ? messages[0] : nil
+        }
+
+        let messages = try await store.loadMessages(for: chatID, limit: 10, before: nil)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertEqual(messages.first?.id.messageID, messageID)
+    }
+
+    func testRealtimeEventForUnknownChatIsIgnored() async throws {
+        let knownChatID = UUID()
+        let unknownChatID = UUID()
+        let remote = FakeChatNetworking()
+        let realtime = FakeRealtimeService()
+        let reachability = FakeReachabilityService(isReachable: true)
+        let store = SwiftDataChatStore(storageURL: uniqueStoreURL())
+        try await store.ensureChatExists(id: knownChatID, title: "Known")
+
+        let repository = DefaultChatRepository(
+            store: store,
+            remote: remote,
+            realtime: realtime,
+            analytics: FakeAnalyticsService(),
+            reachability: reachability,
+            currentSessionProvider: {
+                DefaultChatRepository.SessionContext(
+                    userID: SessionStore.Constants.currentUserID,
+                    displayName: SessionStore.Constants.currentUserDisplayName
+                )
+            }
+        )
+        _ = repository
+
+        realtime.emit(
+            chatID: unknownChatID,
+            event: .message(
+                makeDomainMessage(
+                    chatID: unknownChatID,
+                    messageID: UUID(),
+                    authorID: UUID(),
+                    authorName: "Emily Brooks",
+                    text: "Should be ignored",
+                    status: .sent
+                )
+            )
+        )
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let messages = try await store.loadMessages(for: knownChatID, limit: 10, before: nil)
+        let hasUnknownChat = await store.containsChat(id: unknownChatID)
+        XCTAssertTrue(messages.isEmpty)
+        XCTAssertFalse(hasUnknownChat)
+    }
+
+    func testChatStoreResetClearsChatsAndMessages() async throws {
+        let store = SwiftDataChatStore(storageURL: uniqueStoreURL())
+        let chatID = UUID()
+        let message = makeDomainMessage(
+            chatID: chatID,
+            messageID: UUID(),
+            authorID: UUID(),
+            authorName: "Alex Carter",
+            text: "Persist me",
+            status: .sent
+        )
+
+        try await store.ensureChatExists(id: chatID, title: "Reset Me")
+        try await store.append(message: message, for: chatID)
+        try await store.reset()
+
+        let chats = try await store.fetchChats(searchQuery: nil)
+        let messages = try await store.loadMessages(for: chatID, limit: 10, before: nil)
+        XCTAssertTrue(chats.isEmpty)
+        XCTAssertTrue(messages.isEmpty)
+    }
+
     private func uniqueStoreURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -139,9 +271,11 @@ final class ChatRepositoryTests: XCTestCase {
         createdAt: Date = Date()
     ) -> ServerMessage {
         let payload: [String: Any] = [
-            "id": UUID().uuidString,
+            "id": messageID.uuidString,
+            "serverID": UUID().uuidString,
             "messageID": messageID.uuidString,
             "chatID": chatID.uuidString,
+            "senderID": authorID.uuidString,
             "authorID": authorID.uuidString,
             "authorName": authorName,
             "kind": Message.Kind.text.rawValue,
@@ -319,6 +453,7 @@ private final class MockChatRepository: ChatRepository, @unchecked Sendable {
         return Chat(
             id: UUID(),
             title: title,
+            participants: [],
             lastMessagePreview: nil,
             lastActivity: Date(),
             unreadCount: 0,

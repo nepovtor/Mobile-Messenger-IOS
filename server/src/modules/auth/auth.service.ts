@@ -7,45 +7,15 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import {
+  DEMO_ACCOUNTS,
+  findDemoAccountByPhone,
+} from "../../demo/demo-data";
 import { User } from "../../entities/user.entity";
 import { RequestCodeDto } from "./dto/request-code.dto";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { VerifyCodeDto } from "./dto/verify-code.dto";
-
-type DemoAccount = {
-  contact: string;
-  displayName: string;
-  password: string;
-};
-
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  {
-    contact: "+15551230011",
-    displayName: "Анна Demo",
-    password: "demo1111",
-  },
-  {
-    contact: "+15551230012",
-    displayName: "Борис Demo",
-    password: "demo2222",
-  },
-  {
-    contact: "+15551230013",
-    displayName: "Вера Demo",
-    password: "demo3333",
-  },
-  {
-    contact: "+15551230014",
-    displayName: "Глеб Demo",
-    password: "demo4444",
-  },
-  {
-    contact: "+15551230015",
-    displayName: "Даша Demo",
-    password: "demo5555",
-  },
-];
 
 @Injectable()
 export class AuthService {
@@ -60,6 +30,7 @@ export class AuthService {
       throw new BadRequestException("Only phone method supported");
     }
 
+    await this.ensureDemoAccounts();
     return { expiresIn: 300 };
   }
 
@@ -68,7 +39,10 @@ export class AuthService {
       throw new BadRequestException("Only phone method supported");
     }
 
-    const acceptedCode = "123456";
+    await this.ensureDemoAccounts();
+    const demoAccount = findDemoAccountByPhone(contact);
+    const acceptedCode =
+      demoAccount?.code ?? process.env.AUTH_TEST_CODE?.trim() ?? "123456";
 
     if (code !== acceptedCode) {
       throw new UnauthorizedException("Invalid or expired code");
@@ -83,11 +57,20 @@ export class AuthService {
       const requestedDisplayName = this.normalizeDisplayName(displayName);
 
       user = this.userRepository.create({
+        id: demoAccount?.id,
         phone: contact,
-        displayName: requestedDisplayName ?? fallbackName,
+        displayName:
+          demoAccount?.displayName ?? requestedDisplayName ?? fallbackName,
       });
 
       await this.userRepository.save(user);
+    } else if (demoAccount && user.id !== demoAccount.id) {
+      throw new UnauthorizedException("Demo account mapping mismatch");
+    } else if (demoAccount) {
+      if (user.displayName !== demoAccount.displayName) {
+        user.displayName = demoAccount.displayName;
+        await this.userRepository.save(user);
+      }
     } else if (displayName) {
       const requestedDisplayName = this.normalizeDisplayName(displayName);
 
@@ -105,9 +88,10 @@ export class AuthService {
       throw new BadRequestException("Only phone method supported");
     }
 
+    await this.ensureDemoAccounts();
     const demoAccount = DEMO_ACCOUNTS.find(
       (account) =>
-        account.contact === contact && account.password === password.trim(),
+        account.phone === contact && account.code === password.trim(),
     );
 
     if (!demoAccount) {
@@ -115,8 +99,9 @@ export class AuthService {
     }
 
     const user = await this.findOrCreateUser(
-      demoAccount.contact,
+      demoAccount.phone,
       demoAccount.displayName,
+      demoAccount.id,
     );
 
     return this.createSessionResponse(user);
@@ -139,7 +124,7 @@ export class AuthService {
       order: { displayName: "ASC" },
     });
     const demoOrder = new Map(
-      DEMO_ACCOUNTS.map((account, index) => [account.contact, index]),
+      DEMO_ACCOUNTS.map((account, index) => [account.phone, index]),
     );
 
     return users
@@ -227,6 +212,7 @@ export class AuthService {
       sub: userID,
       userID,
       phone: user.phone,
+      displayName: user.displayName,
     });
 
     return {
@@ -239,22 +225,33 @@ export class AuthService {
 
   private async ensureDemoAccounts() {
     for (const account of DEMO_ACCOUNTS) {
-      await this.findOrCreateUser(account.contact, account.displayName);
+      await this.findOrCreateUser(account.phone, account.displayName, account.id);
     }
   }
 
-  private async findOrCreateUser(contact: string, displayName: string) {
+  private async findOrCreateUser(
+    contact: string,
+    displayName: string,
+    id?: string,
+  ) {
     let user = await this.userRepository.findOne({
       where: { phone: contact },
     });
 
     if (!user) {
       user = this.userRepository.create({
+        id,
         phone: contact,
         displayName,
       });
       await this.userRepository.save(user);
       return user;
+    }
+
+    if (id && user.id !== id) {
+      throw new UnauthorizedException(
+        `Demo account ${contact} has unexpected user ID ${user.id}`,
+      );
     }
 
     if (user.displayName !== displayName) {

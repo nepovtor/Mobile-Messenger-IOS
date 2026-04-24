@@ -28,6 +28,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             chats[id] = ChatRecord(
                 id: id,
                 title: title,
+                participants: [],
                 lastMessagePreview: nil,
                 lastActivity: Date(),
                 unreadCount: 0,
@@ -45,6 +46,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             var record = self.chats[chat.id] ?? ChatRecord(
                 id: chat.id,
                 title: chat.title,
+                participants: chat.participants,
                 lastMessagePreview: chat.lastMessagePreview,
                 lastActivity: chat.lastActivity,
                 unreadCount: chat.unreadCount,
@@ -56,6 +58,31 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             record.merge(chat: chat)
             self.chats[chat.id] = record
         }
+        try persistState()
+        broadcastChats()
+    }
+
+    public func replaceChats(with chats: [Chat]) async throws {
+        let existingMessages = self.chats.mapValues(\.messages)
+        self.chats = [:]
+
+        for chat in chats {
+            var record = ChatRecord(
+                id: chat.id,
+                title: chat.title,
+                participants: chat.participants,
+                lastMessagePreview: chat.lastMessagePreview,
+                lastActivity: chat.lastActivity,
+                unreadCount: chat.unreadCount,
+                typingParticipants: chat.typingParticipants,
+                participantNames: chat.participantNames,
+                participantCount: chat.participantCount,
+                messages: existingMessages[chat.id] ?? []
+            )
+            record.merge(chat: chat)
+            self.chats[chat.id] = record
+        }
+
         try persistState()
         broadcastChats()
     }
@@ -82,6 +109,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         var record = chats[chatID] ?? ChatRecord(
             id: chatID,
             title: "Диалог",
+            participants: [],
             lastMessagePreview: nil,
             lastActivity: message.createdAt,
             unreadCount: 0,
@@ -134,6 +162,10 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
     public func fetchChats(searchQuery: String?) async throws -> [Chat] {
         currentChats(searchQuery: searchQuery)
+    }
+
+    public func containsChat(id: UUID) async -> Bool {
+        chats[id] != nil
     }
 
     public func updateTypingParticipants(_ participants: [String], in chatID: UUID) async throws {
@@ -192,6 +224,12 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         broadcastChats()
     }
 
+    public func reset() async throws {
+        chats.removeAll()
+        try persistState()
+        broadcastChats()
+    }
+
     private func removeContinuation(for chatID: UUID, id: UUID) {
         messageStreams[chatID]?[id] = nil
         if messageStreams[chatID]?.isEmpty == true {
@@ -207,6 +245,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         var record = chats[chatID] ?? ChatRecord(
             id: chatID,
             title: "Диалог",
+            participants: [],
             lastMessagePreview: nil,
             lastActivity: message.createdAt,
             unreadCount: 0,
@@ -303,6 +342,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     private struct ChatRecord: Codable {
         var id: UUID
         var title: String
+        var participants: [UUID]
         var lastMessagePreview: String?
         var lastActivity: Date
         var unreadCount: Int
@@ -315,6 +355,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             return Chat(
                 id: id,
                 title: title,
+                participants: participants,
                 lastMessagePreview: lastMessagePreview,
                 lastMessageAuthorName: messages.last?.authorName,
                 lastMessageIsOutgoing: messages.last?.isOutgoing ?? false,
@@ -330,6 +371,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
         mutating func merge(chat: Chat) {
             title = chat.title
+            participants = chat.participants
             unreadCount = chat.unreadCount
             typingParticipants = chat.typingParticipants
             participantNames = chat.participantNames

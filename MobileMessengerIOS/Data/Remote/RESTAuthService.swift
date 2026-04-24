@@ -142,12 +142,28 @@ public struct AuthVerifyResponse: Codable {
     public let token: String
     public let userID: UUID
     public let displayName: String
+    public let phone: String
+
+    private enum CodingKeys: String, CodingKey {
+        case token
+        case userID
+        case displayName
+        case phone
+    }
+
+    public init(token: String, userID: UUID, displayName: String, phone: String) {
+        self.token = token
+        self.userID = userID
+        self.displayName = displayName
+        self.phone = phone
+    }
 
     public func asAuthenticatedSession() -> AuthenticatedSession {
         AuthenticatedSession(
             accessToken: token,
             userID: userID,
-            displayName: displayName
+            displayName: displayName,
+            phone: phone
         )
     }
 }

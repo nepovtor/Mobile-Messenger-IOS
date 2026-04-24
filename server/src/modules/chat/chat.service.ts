@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
+import { DEMO_ACCOUNTS, DEMO_CHATS } from "../../demo/demo-data";
 import { Chat as ChatEntity } from "../../entities/chat.entity";
 import { ChatReadState } from "../../entities/chat-read-state.entity";
 import {
@@ -23,8 +24,10 @@ import { MediaStorageService } from "./media-storage.service";
 
 export interface Message {
   id: string;
+  serverID: string;
   chatID: string;
   messageID: string;
+  senderID: string;
   kind: MessageKind;
   text: string | null;
   mediaID: string | null;
@@ -38,6 +41,9 @@ export interface Message {
 export interface Chat {
   id: string;
   title: string;
+  participants: string[];
+  lastMessage: string | null;
+  updatedAt: string;
   lastMessagePreview?: string | null;
   lastActivity: string;
   unreadCount: number;
@@ -69,19 +75,23 @@ export class ChatService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.initializeCommonChat();
+    await this.initializeDemoSeed();
   }
 
   async listChats(userID: string): Promise<Chat[]> {
-    const chats = await this.chatRepository.find({
-      relations: ["participants"],
-      order: { lastActivity: "DESC", createdAt: "DESC" },
-    });
+    const chats = await this.chatRepository
+      .createQueryBuilder("chat")
+      .distinct(true)
+      .innerJoin("chat.participants", "viewer", "viewer.id = :userID", {
+        userID,
+      })
+      .leftJoinAndSelect("chat.participants", "participants")
+      .orderBy("chat.lastActivity", "DESC")
+      .addOrderBy("chat.createdAt", "DESC")
+      .getMany();
 
     return Promise.all(
-      chats
-        .filter((chat) => this.hasAccess(chat, userID))
-        .map((chat) => this.toChatDto(chat, userID)),
+      chats.map((chat) => this.toChatDto(chat, userID)),
     );
   }
 
@@ -166,7 +176,7 @@ export class ChatService implements OnModuleInit {
       author,
       chat,
       createdAt: new Date(),
-      status: "delivered",
+      status: "sent",
     });
 
     await this.messageRepository.save(message);
@@ -176,7 +186,11 @@ export class ChatService implements OnModuleInit {
     await this.chatRepository.save(chat);
 
     const messageDto = this.toMessageDto(message, normalizedChatID);
-    this.chatEventsService.publishMessage(normalizedChatID, messageDto);
+    this.chatEventsService.publishMessage(
+      normalizedChatID,
+      messageDto,
+      this.participantIDs(chat),
+    );
     await this.publishChatUpdated(chat);
     return messageDto;
   }
@@ -284,10 +298,7 @@ export class ChatService implements OnModuleInit {
       }
       await this.messageRepository.save(updatedMessages);
       for (const message of updatedMessages) {
-        this.chatEventsService.publishMessageRead(
-          normalizedChatID,
-          message.messageID,
-        );
+        this.chatEventsService.publishMessageRead(normalizedChatID, message.messageID, this.participantIDs(chat));
       }
     }
 
@@ -295,6 +306,7 @@ export class ChatService implements OnModuleInit {
     this.chatEventsService.publishTypingChanged(
       normalizedChatID,
       chatDto.typingParticipants,
+      this.participantIDs(chat),
     );
     await this.publishChatUpdated(chat);
     return chatDto;
@@ -333,22 +345,107 @@ export class ChatService implements OnModuleInit {
     return chatDto;
   }
 
-  private async initializeCommonChat() {
-    const existing = await this.chatRepository.findOne({
-      where: { title: "General Chat" },
-    });
+  private async initializeDemoSeed() {
+    for (const account of DEMO_ACCOUNTS) {
+      const existingUser =
+        (await this.userRepository.findOne({
+          where: { id: account.id },
+        })) ??
+        (await this.userRepository.findOne({
+          where: { phone: account.phone },
+        }));
 
-    if (existing) {
-      return;
+      const user = existingUser ?? this.userRepository.create();
+      user.id = account.id;
+      user.phone = account.phone;
+      user.displayName = account.displayName;
+      await this.userRepository.save(user);
     }
 
-    const chat = this.chatRepository.create({
-      title: "General Chat",
-      lastActivity: new Date(),
-      participants: [],
+    const users = await this.userRepository.findBy({
+      id: In(
+        Array.from(
+          new Set(DEMO_CHATS.flatMap((chat) => chat.participantIDs)),
+        ),
+      ),
     });
-    await this.chatRepository.save(chat);
-    this.logger.log("Seeded General Chat");
+    const usersByID = new Map(users.map((user) => [user.id, user]));
+
+    for (const chatSeed of DEMO_CHATS) {
+      const participants = chatSeed.participantIDs
+        .map((participantID) => usersByID.get(participantID))
+        .filter((participant): participant is User => Boolean(participant));
+
+      if (participants.length !== chatSeed.participantIDs.length) {
+        this.logger.warn(`Skipped demo chat ${chatSeed.id}: missing participants`);
+        continue;
+      }
+
+      let chat = await this.chatRepository.findOne({
+        where: { id: chatSeed.id },
+        relations: ["participants"],
+      });
+
+      if (!chat) {
+        chat = this.chatRepository.create({
+          id: chatSeed.id,
+          title: chatSeed.title,
+          participants,
+          lastActivity: new Date(
+            chatSeed.messages[chatSeed.messages.length - 1]?.createdAt ??
+              Date.now(),
+          ),
+        });
+      } else {
+        chat.title = chatSeed.title;
+        chat.participants = participants;
+      }
+
+      chat = await this.chatRepository.save(chat);
+
+      for (const messageSeed of chatSeed.messages) {
+        const existingMessage = await this.messageRepository.findOne({
+          where: { messageID: messageSeed.id },
+        });
+
+        if (existingMessage) {
+          continue;
+        }
+
+        const author = usersByID.get(messageSeed.senderID);
+        if (!author) {
+          continue;
+        }
+
+        await this.messageRepository.save(
+          this.messageRepository.create({
+            messageID: messageSeed.id,
+            kind: "text",
+            text: messageSeed.text,
+            mediaID: null,
+            mediaURL: null,
+            author,
+            chat,
+            createdAt: new Date(messageSeed.createdAt),
+            status: "read",
+          }),
+        );
+      }
+
+      const latestMessage = await this.messageRepository.findOne({
+        where: { chat: { id: chat.id } },
+        order: { createdAt: "DESC" },
+      });
+
+      if (latestMessage) {
+        chat.lastActivity = latestMessage.createdAt;
+        chat.lastMessagePreview = this.buildMessagePreview(
+          latestMessage.kind,
+          latestMessage.text ?? "",
+        );
+        await this.chatRepository.save(chat);
+      }
+    }
   }
 
   private async requireChatAccess(
@@ -369,10 +466,7 @@ export class ChatService implements OnModuleInit {
   }
 
   private hasAccess(chat: ChatEntity, userID: string): boolean {
-    return (
-      chat.participants.length === 0 ||
-      chat.participants.some((user) => user.id === userID)
-    );
+    return chat.participants.some((user) => user.id === userID);
   }
 
   private async requireUser(userID: string): Promise<User> {
@@ -392,12 +486,23 @@ export class ChatService implements OnModuleInit {
       .map((participant) => participant.displayName)
       .sort((left, right) => left.localeCompare(right));
     const participantCount = Math.max(chat.participants?.length ?? 0, 1);
+    const title =
+      chat.title === "Direct Chat" &&
+      chat.participants?.length === 2 &&
+      participantNames.length > 0
+        ? `Chat with ${participantNames[0]}`
+        : chat.title;
+    const lastMessage = chat.lastMessagePreview ?? null;
+    const updatedAt = (chat.lastActivity ?? chat.createdAt).toISOString();
 
     return {
       id: chat.id,
-      title: chat.title,
-      lastMessagePreview: chat.lastMessagePreview,
-      lastActivity: (chat.lastActivity ?? chat.createdAt).toISOString(),
+      title,
+      participants: this.participantIDs(chat),
+      lastMessage,
+      updatedAt,
+      lastMessagePreview: lastMessage,
+      lastActivity: updatedAt,
       unreadCount,
       typingParticipants: this.getTypingParticipants(chat.id, userID),
       participantNames,
@@ -407,9 +512,11 @@ export class ChatService implements OnModuleInit {
 
   private toMessageDto(message: MessageEntity, chatId: string): Message {
     return {
-      id: message.id,
+      id: message.messageID,
+      serverID: message.id,
       chatID: chatId,
       messageID: message.messageID,
+      senderID: message.author.id,
       kind: message.kind,
       text: message.text || null,
       mediaID: message.mediaID,
@@ -419,6 +526,10 @@ export class ChatService implements OnModuleInit {
       createdAt: message.createdAt.toISOString(),
       status: message.status,
     };
+  }
+
+  private participantIDs(chat: ChatEntity): string[] {
+    return (chat.participants ?? []).map((participant) => participant.id);
   }
 
   private buildMessagePreview(kind: MessageKind, text: string): string {

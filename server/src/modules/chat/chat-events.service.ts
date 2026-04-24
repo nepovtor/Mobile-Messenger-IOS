@@ -69,7 +69,7 @@ export class ChatEventsService {
     );
   }
 
-  publishMessage(chatID: string, message: Message) {
+  publishMessage(chatID: string, message: Message, participantUserIDs: string[]) {
     const subscribers = this.subscribers.get(chatID);
     const event = this.makeMessageEvent("message", message);
 
@@ -80,6 +80,9 @@ export class ChatEventsService {
     }
 
     for (const subscriber of this.globalSubscribers.values()) {
+      if (!participantUserIDs.includes(subscriber.userID)) {
+        continue;
+      }
       subscriber.subject.next({
         type: "message.created",
         data: {
@@ -107,8 +110,15 @@ export class ChatEventsService {
     );
   }
 
-  publishMessageRead(chatID: string, messageID: string) {
+  publishMessageRead(
+    chatID: string,
+    messageID: string,
+    participantUserIDs: string[],
+  ) {
     for (const subscriber of this.globalSubscribers.values()) {
+      if (!participantUserIDs.includes(subscriber.userID)) {
+        continue;
+      }
       subscriber.subject.next({
         type: "message.read",
         data: {
@@ -119,8 +129,15 @@ export class ChatEventsService {
     }
   }
 
-  publishTypingChanged(chatID: string, typingParticipants: string[]) {
+  publishTypingChanged(
+    chatID: string,
+    typingParticipants: string[],
+    participantUserIDs: string[],
+  ) {
     for (const subscriber of this.globalSubscribers.values()) {
+      if (!participantUserIDs.includes(subscriber.userID)) {
+        continue;
+      }
       subscriber.subject.next({
         type: "typing.changed",
         data: {

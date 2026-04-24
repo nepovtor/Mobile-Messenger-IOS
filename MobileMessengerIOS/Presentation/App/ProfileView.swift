@@ -336,7 +336,7 @@ struct ProfileView: View {
 
     private var currentProfile: (userID: UUID, displayName: String) {
         switch sessionStore.state {
-        case .authenticated(_, let userID, let displayName):
+        case .authenticated(_, let userID, let displayName, _):
             return (userID, displayName)
         case .unauthenticated:
             return (SessionStore.Constants.currentUserID, SessionStore.Constants.currentUserDisplayName)

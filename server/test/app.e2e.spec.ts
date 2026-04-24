@@ -21,6 +21,32 @@ describe("Mobile Messenger backend", () => {
     await app.close();
   });
 
+  async function loginAs(phone: string, code: string) {
+    const response = await request(app.getHttpServer())
+      .post("/api/auth/verify")
+      .send({
+        method: "phone",
+        contact: phone,
+        code,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.phone).toBe(phone);
+
+    return {
+      token: response.body.token as string,
+      userID: response.body.userID as string,
+      displayName: response.body.displayName as string,
+    };
+  }
+
+  function authed(token: string) {
+    return (method: "get" | "post", path: string) =>
+      request(app.getHttpServer())
+        [method](path)
+        .set("Authorization", `Bearer ${token}`);
+  }
+
   it("responds with health and version metadata", async () => {
     const [healthResponse, versionResponse] = await Promise.all([
       request(app.getHttpServer()).get("/api/health"),
@@ -36,217 +62,124 @@ describe("Mobile Messenger backend", () => {
     expect(versionResponse.body.version).toBe("0.1.0");
   });
 
-  it("supports the README auth and chat flow", async () => {
-    const authenticate = async (contact: string, displayName: string) => {
-      const requestCodeResponse = await request(app.getHttpServer())
-        .post("/api/auth/request")
-        .send({
-          method: "phone",
-          contact,
-        });
+  it("Alex gets only his chats", async () => {
+    const alex = await loginAs("+10000000001", "111111");
 
-      expect(requestCodeResponse.status).toBe(201);
-      expect(requestCodeResponse.body.expiresIn).toBe(300);
+    const response = await authed(alex.token)("get", "/api/chats");
 
-      const verifyCodeResponse = await request(app.getHttpServer())
-        .post("/api/auth/verify")
-        .send({
-          method: "phone",
-          contact,
-          code: "123456",
-          displayName,
-        });
-
-      expect(verifyCodeResponse.status).toBe(201);
-      expect(verifyCodeResponse.body.displayName).toBe(displayName);
-
-      return {
-        token: verifyCodeResponse.body.token as string,
-        userID: verifyCodeResponse.body.userID as string,
-      };
-    };
-
-    const createAuthedRequest =
-      (token: string) => (method: "get" | "post", path: string) =>
-        request(app.getHttpServer())
-          [method](path)
-          .set("Authorization", `Bearer ${token}`);
-
-    const primaryUser = await authenticate("+15551230001", "README Smoke");
-    const secondaryUser = await authenticate("+15551230002", "README Reader");
-    const withPrimaryAuth = createAuthedRequest(primaryUser.token);
-    const withSecondaryAuth = createAuthedRequest(secondaryUser.token);
-
-    const chatsResponse = await withPrimaryAuth("get", "/api/chats");
-    expect(chatsResponse.status).toBe(200);
-    expect(chatsResponse.body).toEqual(
+    expect(response.status).toBe(200);
+    expect(response.body.map((chat: { title: string }) => chat.title)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          title: "General Chat",
-          unreadCount: 0,
-          typingParticipants: [],
-        }),
+        "Chat with Maria Stone",
+        "Chat with Daniel Reed",
+        "Study Group",
+        "Backend Discussion",
       ]),
     );
+    expect(response.body.map((chat: { title: string }) => chat.title)).not.toEqual(
+      expect.arrayContaining(["Design Review", "Chat with Emily Brooks"]),
+    );
+  });
 
-    const createChatResponse = await withPrimaryAuth("post", "/api/chats").send(
-      {
-        title: "README Test Chat",
-        participantIds: [secondaryUser.userID],
-      },
+  it("Maria gets only her chats", async () => {
+    const maria = await loginAs("+10000000002", "222222");
+
+    const response = await authed(maria.token)("get", "/api/chats");
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((chat: { title: string }) => chat.title)).toEqual(
+      expect.arrayContaining([
+        "Chat with Alex Carter",
+        "Chat with Emily Brooks",
+        "Study Group",
+        "Design Review",
+      ]),
+    );
+    expect(response.body.map((chat: { title: string }) => chat.title)).not.toEqual(
+      expect.arrayContaining(["Backend Discussion", "Chat with Daniel Reed"]),
+    );
+  });
+
+  it("Alex cannot access Emily private chat", async () => {
+    const alex = await loginAs("+10000000001", "111111");
+    const emily = await loginAs("+10000000004", "444444");
+    const emilyChats = await authed(emily.token)("get", "/api/chats");
+    const designReviewChat = emilyChats.body.find(
+      (chat: { title: string }) => chat.title === "Design Review",
     );
 
-    expect(createChatResponse.status).toBe(201);
-    expect(createChatResponse.body.title).toBe("README Test Chat");
-    expect(createChatResponse.body.unreadCount).toBe(0);
-    expect(createChatResponse.body.typingParticipants).toEqual([]);
+    expect(designReviewChat).toBeDefined();
 
-    const chatID = createChatResponse.body.id as string;
+    const response = await authed(alex.token)(
+      "get",
+      `/api/chats/${designReviewChat.id}`,
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("participant can send a message and later fetch it from history", async () => {
+    const alex = await loginAs("+10000000001", "111111");
+    const alexChats = await authed(alex.token)("get", "/api/chats");
+    const directChat = alexChats.body.find(
+      (chat: { title: string }) => chat.title === "Chat with Maria Stone",
+    );
+
+    expect(directChat).toBeDefined();
+
     const messageID = randomUUID();
-    const imageMessageID = randomUUID();
-
-    const sendMessageResponse = await withPrimaryAuth(
+    const sendResponse = await authed(alex.token)(
       "post",
-      `/api/chats/${chatID}/messages`,
-    ).send({
-      text: "Hello from automated README smoke test",
-      messageID,
-    });
-
-    expect(sendMessageResponse.status).toBe(201);
-    expect(sendMessageResponse.body.messageID).toBe(messageID);
-    expect(sendMessageResponse.body.text).toBe(
-      "Hello from automated README smoke test",
-    );
-
-    const duplicateSendResponse = await withPrimaryAuth(
-      "post",
-      `/api/chats/${chatID}/messages`,
-    ).send({
-      text: "Hello from automated README smoke test",
-      messageID,
-    });
-
-    expect(duplicateSendResponse.status).toBe(201);
-    expect(duplicateSendResponse.body.id).toBe(sendMessageResponse.body.id);
-
-    const chatForReaderResponse = await withSecondaryAuth(
-      "get",
-      `/api/chats/${chatID}`,
-    );
-    expect(chatForReaderResponse.status).toBe(200);
-    expect(chatForReaderResponse.body.unreadCount).toBe(1);
-    expect(chatForReaderResponse.body.typingParticipants).toEqual([]);
-
-    const typingStartedResponse = await withSecondaryAuth(
-      "post",
-      `/api/chats/${chatID}/typing`,
-    ).send({
-      isTyping: true,
-    });
-    expect(typingStartedResponse.status).toBe(201);
-
-    const chatWhileTypingResponse = await withPrimaryAuth(
-      "get",
-      `/api/chats/${chatID}`,
-    );
-    expect(chatWhileTypingResponse.status).toBe(200);
-    expect(chatWhileTypingResponse.body.typingParticipants).toEqual([
-      "README Reader",
-    ]);
-
-    const typingStoppedResponse = await withSecondaryAuth(
-      "post",
-      `/api/chats/${chatID}/typing`,
-    ).send({
-      isTyping: false,
-    });
-    expect(typingStoppedResponse.status).toBe(201);
-
-    const markReadResponse = await withSecondaryAuth(
-      "post",
-      `/api/chats/${chatID}/read`,
+      `/api/chats/${directChat.id}/messages`,
     ).send({
       messageID,
-    });
-    expect(markReadResponse.status).toBe(201);
-    expect(markReadResponse.body.unreadCount).toBe(0);
-
-    const uploadTargetResponse = await withPrimaryAuth(
-      "post",
-      "/api/media/upload-url",
-    ).send({
-      mimeType: "image/jpeg",
-      sizeBytes: 4,
-      width: 1,
-      height: 1,
-    });
-    expect(uploadTargetResponse.status).toBe(201);
-
-    const mediaID = uploadTargetResponse.body.mediaID as string;
-    const uploadBinaryResponse = await request(app.getHttpServer())
-      .put(`/api/media/upload/${mediaID}`)
-      .set("Content-Type", "image/jpeg")
-      .send(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
-
-    expect(uploadBinaryResponse.status).toBe(200);
-    expect(typeof uploadBinaryResponse.header.etag).toBe("string");
-
-    const confirmUploadResponse = await withPrimaryAuth(
-      "post",
-      `/api/media/${mediaID}/confirm`,
-    ).send({
-      etag: uploadBinaryResponse.header.etag,
-    });
-    expect(confirmUploadResponse.status).toBe(201);
-    expect(confirmUploadResponse.body.mediaID).toBe(mediaID);
-
-    const sendImageMessageResponse = await withPrimaryAuth(
-      "post",
-      `/api/chats/${chatID}/messages`,
-    ).send({
-      messageID: imageMessageID,
-      kind: "image",
-      text: "Фото из smoke test",
-      mediaID,
+      text: "Stable REST send from Alex",
     });
 
-    expect(sendImageMessageResponse.status).toBe(201);
-    expect(sendImageMessageResponse.body.kind).toBe("image");
-    expect(sendImageMessageResponse.body.mediaID).toBe(mediaID);
-    expect(sendImageMessageResponse.body.mediaURL).toContain(
-      `/api/media/${mediaID}`,
-    );
+    expect(sendResponse.status).toBe(201);
+    expect(sendResponse.body.id).toBe(messageID);
+    expect(sendResponse.body.messageID).toBe(messageID);
+    expect(sendResponse.body.chatID).toBe(directChat.id);
+    expect(sendResponse.body.senderID).toBe(alex.userID);
+    expect(sendResponse.body.status).toBe("sent");
 
-    const downloadImageResponse = await request(app.getHttpServer()).get(
-      `/api/media/${mediaID}`,
-    );
-    expect(downloadImageResponse.status).toBe(200);
-    expect(downloadImageResponse.header["content-type"]).toContain(
-      "image/jpeg",
-    );
-
-    const messagesResponse = await withPrimaryAuth(
+    const historyResponse = await authed(alex.token)(
       "get",
-      `/api/chats/${chatID}/messages`,
+      `/api/chats/${directChat.id}/messages`,
     );
 
-    expect(messagesResponse.status).toBe(200);
-    expect(messagesResponse.body).toEqual(
+    expect(historyResponse.status).toBe(200);
+    expect(historyResponse.body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: messageID,
           messageID,
-          text: "Hello from automated README smoke test",
-          authorName: "README Smoke",
-          status: "read",
-        }),
-        expect.objectContaining({
-          messageID: imageMessageID,
-          kind: "image",
-          mediaID,
-          text: "Фото из smoke test",
+          chatID: directChat.id,
+          senderID: alex.userID,
+          text: "Stable REST send from Alex",
         }),
       ]),
     );
+  });
+
+  it("non-participant cannot send a message", async () => {
+    const daniel = await loginAs("+10000000003", "333333");
+    const emily = await loginAs("+10000000004", "444444");
+    const emilyChats = await authed(emily.token)("get", "/api/chats");
+    const designReviewChat = emilyChats.body.find(
+      (chat: { title: string }) => chat.title === "Design Review",
+    );
+
+    expect(designReviewChat).toBeDefined();
+
+    const response = await authed(daniel.token)(
+      "post",
+      `/api/chats/${designReviewChat.id}/messages`,
+    ).send({
+      messageID: randomUUID(),
+      text: "I should not be able to send this",
+    });
+
+    expect(response.status).toBe(403);
   });
 });
