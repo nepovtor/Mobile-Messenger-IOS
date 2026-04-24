@@ -1,168 +1,236 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
-  NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { User } from "../../entities/user.entity";
-import { RequestCodeDto } from "./dto/request-code.dto";
+import { AuthMethod, UserEntity } from "../../entities/user.entity";
+import { buildDisplayName, normalizeContact } from "../common/contact.utils";
+import {
+  areDemoAccountsEnabled,
+  getJwtSecret,
+  isPasswordLoginEnabled,
+  shouldExposeDebugAuthCode,
+} from "../common/runtime-config";
 import { LoginAuthDto } from "./dto/login-auth.dto";
-import { UpdateProfileDto } from "./dto/update-profile.dto";
-import { VerifyCodeDto } from "./dto/verify-code.dto";
+import { RequestAuthDto } from "./dto/request-auth.dto";
+import { VerifyAuthDto } from "./dto/verify-auth.dto";
+
+type AuthResult = {
+  token: string;
+  userID: string;
+  displayName: string;
+};
 
 type DemoAccount = {
+  method: AuthMethod;
   contact: string;
   displayName: string;
   password: string;
 };
 
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  {
-    contact: "+15551230011",
-    displayName: "Анна Demo",
-    password: "demo1111",
-  },
-  {
-    contact: "+15551230012",
-    displayName: "Борис Demo",
-    password: "demo2222",
-  },
-  {
-    contact: "+15551230013",
-    displayName: "Вера Demo",
-    password: "demo3333",
-  },
-  {
-    contact: "+15551230014",
-    displayName: "Глеб Demo",
-    password: "demo4444",
-  },
-  {
-    contact: "+15551230015",
-    displayName: "Даша Demo",
-    password: "demo5555",
-  },
-];
-
 @Injectable()
-export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+export class AuthService implements OnModuleInit {
+  private readonly verificationCodes = new Map<
+    string,
+    { code: string; expiresAt: number }
+  >();
+  private readonly demoAccounts: DemoAccount[] = [
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230011",
+      displayName: "Анна Demo",
+      password: "demo1111",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230012",
+      displayName: "Борис Demo",
+      password: "demo2222",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230013",
+      displayName: "Вера Demo",
+      password: "demo3333",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230014",
+      displayName: "Глеб Demo",
+      password: "demo4444",
+    },
+    {
+      method: AuthMethod.PHONE,
+      contact: "+15551230015",
+      displayName: "Даша Demo",
+      password: "demo5555",
+    },
+  ];
 
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepository: Repository<UserEntity>,
     private readonly jwtService: JwtService,
   ) {}
 
-  async requestCode({ method, contact }: RequestCodeDto) {
-    if (method !== "phone") {
-      throw new BadRequestException("Only phone method supported");
+  async onModuleInit(): Promise<void> {
+    if (!areDemoAccountsEnabled()) {
+      return;
     }
 
-    const code = "123456";
-    this.logger.log(`Verification code generated for ${contact}`);
-    this.logger.debug(`Verification code for ${contact}: ${code}`);
-
-    return { expiresIn: 300 };
+    for (const account of this.demoAccounts) {
+      await this.findOrCreateUser(
+        account.method,
+        account.contact,
+        account.displayName,
+      );
+    }
   }
 
-  async verifyCode({ method, contact, code, displayName }: VerifyCodeDto) {
-    if (method !== "phone") {
-      throw new BadRequestException("Only phone method supported");
-    }
+  async requestCode(dto: RequestAuthDto): Promise<{
+    expiresIn: number;
+    debugCode?: string;
+  }> {
+    const normalizedContact = normalizeContact(dto.method, dto.contact);
+    const expiresIn = 300;
+    const debugCode = this.generateVerificationCode();
 
-    const acceptedCode = "123456";
-
-    if (code !== acceptedCode) {
-      throw new UnauthorizedException("Invalid or expired code");
-    }
-
-    let user = await this.userRepository.findOne({
-      where: { phone: contact },
-    });
-
-    if (!user) {
-      const fallbackName = `User ${contact.slice(-4)}`;
-      const requestedDisplayName = this.normalizeDisplayName(displayName);
-
-      user = this.userRepository.create({
-        phone: contact,
-        displayName: requestedDisplayName ?? fallbackName,
-      });
-
-      await this.userRepository.save(user);
-    } else if (displayName) {
-      const requestedDisplayName = this.normalizeDisplayName(displayName);
-
-      if (requestedDisplayName && requestedDisplayName !== user.displayName) {
-        user.displayName = requestedDisplayName;
-        await this.userRepository.save(user);
-      }
-    }
-
-    return this.createSessionResponse(user);
-  }
-
-  async login({ method, contact, password }: LoginAuthDto) {
-    if (method !== "phone") {
-      throw new BadRequestException("Only phone method supported");
-    }
-
-    const demoAccount = DEMO_ACCOUNTS.find(
-      (account) =>
-        account.contact === contact &&
-        account.password === password.trim(),
+    this.verificationCodes.set(
+      this.makeVerificationKey(dto.method, normalizedContact),
+      {
+        code: debugCode,
+        expiresAt: Date.now() + expiresIn * 1000,
+      },
     );
 
-    if (!demoAccount) {
+    return {
+      expiresIn,
+      ...(shouldExposeDebugAuthCode() ? { debugCode } : {}),
+    };
+  }
+
+  async verifyCode(dto: VerifyAuthDto): Promise<{
+    token: string;
+    userID: string;
+    displayName: string;
+  }> {
+    const normalizedContact = normalizeContact(dto.method, dto.contact);
+    const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
+    const verificationKey = this.makeVerificationKey(
+      dto.method,
+      normalizedContact,
+    );
+    const verificationCode = this.verificationCodes.get(verificationKey);
+
+    if (
+      !verificationCode ||
+      verificationCode.expiresAt < Date.now() ||
+      dto.code !== verificationCode.code
+    ) {
+      throw new UnauthorizedException("Invalid verification code");
+    }
+
+    this.verificationCodes.delete(verificationKey);
+
+    const user = await this.findOrCreateUser(
+      dto.method,
+      normalizedContact,
+      demoAccount?.displayName,
+    );
+
+    return this.buildAuthResult(user);
+  }
+
+  async login(dto: LoginAuthDto): Promise<AuthResult> {
+    if (!areDemoAccountsEnabled() || !isPasswordLoginEnabled()) {
+      throw new ForbiddenException("Password login is disabled");
+    }
+
+    const normalizedContact = normalizeContact(dto.method, dto.contact);
+    const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
+    const password = dto.password.trim();
+
+    if (!demoAccount || password !== demoAccount.password) {
       throw new UnauthorizedException("Invalid demo credentials");
     }
 
     const user = await this.findOrCreateUser(
-      demoAccount.contact,
+      dto.method,
+      normalizedContact,
       demoAccount.displayName,
     );
 
-    return this.createSessionResponse(user);
+    return this.buildAuthResult(user);
   }
 
-  async getCurrentUser(userID: string) {
-    const user = await this.requireUser(userID);
+  async getMe(userID: string): Promise<{
+    userID: string;
+    displayName: string;
+    contact: string;
+    method: string;
+  }> {
+    const user = await this.usersRepository.findOneBy({
+      id: userID as UserEntity["id"],
+    });
+    if (!user) {
+      throw new BadRequestException("User not found");
+    }
 
     return {
-      userID: String((user as any).id),
+      userID: user.id,
       displayName: user.displayName,
-      phone: user.phone,
+      contact: user.contact,
+      method: user.method,
     };
   }
 
-  async listContacts(userID: string) {
-    await this.ensureDemoAccounts();
-    const currentUser = await this.requireUser(userID);
-    const users = await this.userRepository.find({
-      order: { displayName: "ASC" },
-    });
+  async listContacts(userID: string): Promise<
+    Array<{
+      userID: string;
+      displayName: string;
+      contact: string;
+      method: AuthMethod;
+      isCurrentUser: boolean;
+    }>
+  > {
+    await this.getMe(userID);
+
     const demoOrder = new Map(
-      DEMO_ACCOUNTS.map((account, index) => [account.contact, index]),
+      this.demoAccounts.map((account, index) => [account.contact, index]),
     );
 
+    const demoContacts = new Set(
+      this.demoAccounts.map((account) => account.contact),
+    );
+    const users = await this.usersRepository.find();
+
     return users
+      .filter(
+        (user) =>
+          user.id === userID ||
+          !areDemoAccountsEnabled() ||
+          demoContacts.has(user.contact),
+      )
       .sort((left, right) => {
-        if (left.id === currentUser.id) {
+        if (left.id === userID) {
           return -1;
         }
-        if (right.id === currentUser.id) {
+        if (right.id === userID) {
           return 1;
         }
 
-        const leftOrder = demoOrder.get(left.phone);
-        const rightOrder = demoOrder.get(right.phone);
-
-        if (leftOrder !== undefined && rightOrder !== undefined) {
+        const leftOrder = demoOrder.get(left.contact);
+        const rightOrder = demoOrder.get(right.contact);
+        if (
+          leftOrder !== undefined &&
+          rightOrder !== undefined &&
+          leftOrder !== rightOrder
+        ) {
           return leftOrder - rightOrder;
         }
         if (leftOrder !== undefined) {
@@ -175,101 +243,79 @@ export class AuthService {
         return left.displayName.localeCompare(right.displayName);
       })
       .map((user) => ({
-        userID: String((user as any).id),
+        userID: user.id,
         displayName: user.displayName,
-        contact: user.phone,
-        isCurrentUser: user.id === currentUser.id,
+        contact: user.contact,
+        method: user.method,
+        isCurrentUser: user.id === userID,
       }));
   }
 
-  async updateProfile(userID: string, { displayName }: UpdateProfileDto) {
-    const user = await this.requireUser(userID);
-    const requestedDisplayName = this.normalizeDisplayName(displayName);
-
-    if (!requestedDisplayName) {
-      throw new BadRequestException("Display name is required");
-    }
-
-    if (requestedDisplayName !== user.displayName) {
-      user.displayName = requestedDisplayName;
-      await this.userRepository.save(user);
-    }
-
-    return {
-      userID: String((user as any).id),
-      displayName: user.displayName,
-      phone: user.phone,
-    };
+  private findDemoAccount(
+    method: AuthMethod,
+    contact: string,
+  ): DemoAccount | undefined {
+    return this.demoAccounts.find(
+      (account) => account.method === method && account.contact === contact,
+    );
   }
 
-  private normalizeDisplayName(value?: string): string | null {
-    if (typeof value !== "string") {
-      return null;
-    }
-
-    const normalized = value.trim().replace(/\s+/g, " ");
-
-    if (!normalized) {
-      return null;
-    }
-
-    return normalized.slice(0, 50);
-  }
-
-  private async requireUser(userID: string): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { id: userID as never },
+  private async findOrCreateUser(
+    method: AuthMethod,
+    contact: string,
+    preferredDisplayName?: string,
+  ): Promise<UserEntity> {
+    let user = await this.usersRepository.findOne({
+      where: { method, contact },
     });
 
+    const displayName =
+      preferredDisplayName ?? buildDisplayName(method, contact);
+
     if (!user) {
-      throw new NotFoundException("User not found");
+      user = this.usersRepository.create({
+        method,
+        contact,
+        displayName,
+      });
+
+      return this.usersRepository.save(user);
+    }
+
+    if (preferredDisplayName && user.displayName !== preferredDisplayName) {
+      user.displayName = preferredDisplayName;
+      return this.usersRepository.save(user);
     }
 
     return user;
   }
 
-  private createSessionResponse(user: User) {
-    const userID = String((user as any).id);
-
-    const token = this.jwtService.sign({
-      sub: userID,
-      userID,
-      phone: user.phone,
-    });
+  private async buildAuthResult(user: UserEntity): Promise<AuthResult> {
+    const token = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+        displayName: user.displayName,
+        contact: user.contact,
+        method: user.method,
+      },
+      {
+        secret: getJwtSecret(),
+        expiresIn: "30d",
+      },
+    );
 
     return {
       token,
-      userID,
+      userID: user.id,
       displayName: user.displayName,
-      phone: user.phone,
     };
   }
 
-  private async ensureDemoAccounts() {
-    for (const account of DEMO_ACCOUNTS) {
-      await this.findOrCreateUser(account.contact, account.displayName);
-    }
+  private generateVerificationCode(): string {
+    return String(Math.floor(1000 + Math.random() * 9000));
   }
 
-  private async findOrCreateUser(contact: string, displayName: string) {
-    let user = await this.userRepository.findOne({
-      where: { phone: contact },
-    });
-
-    if (!user) {
-      user = this.userRepository.create({
-        phone: contact,
-        displayName,
-      });
-      await this.userRepository.save(user);
-      return user;
-    }
-
-    if (user.displayName !== displayName) {
-      user.displayName = displayName;
-      await this.userRepository.save(user);
-    }
-
-    return user;
+  private makeVerificationKey(method: AuthMethod, contact: string): string {
+    return `${method}:${contact}`;
   }
 }

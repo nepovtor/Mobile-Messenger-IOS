@@ -67,6 +67,7 @@ public final class AppContainer: ObservableObject {
     private var connectionStateTask: Task<Void, Never>?
     private var isSceneActive = false
     private var latestRealtimeState: ChatRealtimeConnectionState = .disconnected
+    private var lastAuthenticatedUserID: UUID?
     @Published public private(set) var connectionStatus: ConnectionStatus = .offline
 
     @Published public private(set) var configurationRevision: Int = 0
@@ -171,7 +172,7 @@ public final class AppContainer: ObservableObject {
             authTokenProvider: authTokenProvider
         )
         realtimeService = DefaultChatRealtimeService(
-            baseURL: configService.restBaseURL,
+            websocketURL: configService.websocketURL,
             authTokenProvider: authTokenProvider,
             analytics: analytics,
             reachability: reachability,
@@ -213,12 +214,23 @@ public final class AppContainer: ObservableObject {
         sessionStateCancellable = sessionStore.$state.sink { [weak self] state in
             guard let self else { return }
             switch state {
-            case .authenticated:
-                if isSceneActive {
-                    Task { await self.refreshApplicationState() }
+            case .authenticated(_, let userID, _):
+                let previousUserID = self.lastAuthenticatedUserID
+                self.lastAuthenticatedUserID = userID
+                Task {
+                    if previousUserID != nil, previousUserID != userID {
+                        self.realtimeService.handleLogout()
+                        await self.chatRepository?.resetLocalState()
+                    }
+
+                    if self.isSceneActive {
+                        await self.refreshApplicationState()
+                    }
                 }
             case .unauthenticated:
-                realtimeService?.deactivate()
+                self.lastAuthenticatedUserID = nil
+                realtimeService?.handleLogout()
+                Task { await self.chatRepository?.resetLocalState() }
                 connectionStatus = .offline
             }
         }
@@ -269,6 +281,8 @@ public final class AppContainer: ObservableObject {
             connectionStatus = .connecting
         case .reconnecting, .disconnected:
             connectionStatus = .reconnecting
+        case .failed:
+            connectionStatus = .offline
         }
     }
 }

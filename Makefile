@@ -1,0 +1,172 @@
+SHELL := /bin/bash
+
+PROJECT_DIR := $(CURDIR)
+SERVER_DIR := $(PROJECT_DIR)/server
+BUILD_DIR := $(PROJECT_DIR)/build-ios
+IOS_CONFIG_DIR := $(PROJECT_DIR)/MobileMessengerIOS/Configurations
+PUBLIC_DEBUG_XCCONFIG := $(IOS_CONFIG_DIR)/Debug.public.xcconfig
+
+DEVICE_NAME := iPhone S
+DEVICE_ID := 00008101-000210163441001E
+BUNDLE_ID := com.mobilemessenger.app
+
+PORT ?= 8080
+
+CONFIGURATION ?= Release
+APP_PATH := $(BUILD_DIR)/Build/Products/$(CONFIGURATION)-iphoneos/MobileMessengerIOS.app
+
+SERVER_PID_FILE := $(PROJECT_DIR)/.server.pid
+TUNNEL_PID_FILE := $(PROJECT_DIR)/.cloudflared.pid
+TUNNEL_LOG := $(PROJECT_DIR)/.cloudflared.log
+TUNNEL_URL_FILE := $(PROJECT_DIR)/.tunnel_url
+
+.PHONY: help infra infra-stop server server-stop tunnel tunnel-stop tunnel-url configure-ios build-ios install-ios launch-ios reinstall-ios up all down status clean
+
+help:
+	@echo "make infra          - start PostgreSQL and MinIO via Docker Compose"
+	@echo "make infra-stop     - stop PostgreSQL and MinIO containers"
+	@echo "make server         - start backend on port $(PORT)"
+	@echo "make tunnel         - start Cloudflare tunnel and save URL"
+	@echo "make tunnel-url     - print current tunnel URL"
+	@echo "make configure-ios  - generate Debug.public.xcconfig from tunnel URL"
+	@echo "make build-ios      - build app for $(DEVICE_NAME)"
+	@echo "make install-ios    - install app on $(DEVICE_NAME)"
+	@echo "make launch-ios     - launch app on $(DEVICE_NAME)"
+	@echo "make reinstall-ios  - uninstall, install, launch app"
+	@echo "make up             - start backend + tunnel + patch config"
+	@echo "make all            - full flow: backend + tunnel + patch + build + reinstall"
+	@echo "make down           - stop tunnel and backend"
+	@echo "make status         - show backend/tunnel status"
+	@echo "make clean          - remove build artifacts"
+
+infra:
+	@docker compose -f "$(SERVER_DIR)/docker-compose.dev.yml" up -d
+	@echo "Waiting for PostgreSQL..."
+	@for i in {1..30}; do \
+		if docker compose -f "$(SERVER_DIR)/docker-compose.dev.yml" exec -T postgres pg_isready -U postgres -d messenger >/dev/null 2>&1; then \
+			echo "PostgreSQL is ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "PostgreSQL did not become ready"; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo "Waiting for MinIO..."
+	@for i in {1..30}; do \
+		if curl -sf "http://127.0.0.1:9000/minio/health/live" >/dev/null; then \
+			echo "MinIO is ready"; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "MinIO did not become ready"; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+
+infra-stop:
+	@docker compose -f "$(SERVER_DIR)/docker-compose.dev.yml" down
+	@echo "Infrastructure stopped"
+
+server: infra
+	@mkdir -p "$(SERVER_DIR)"
+	@if [ ! -f "$(SERVER_DIR)/.env" ] && [ -f "$(SERVER_DIR)/.env.example" ]; then cp "$(SERVER_DIR)/.env.example" "$(SERVER_DIR)/.env"; fi
+	@if [ ! -d "$(SERVER_DIR)/node_modules" ]; then cd "$(SERVER_DIR)" && npm install; fi
+	@kill -9 $$(lsof -ti tcp:$(PORT)) 2>/dev/null || true
+	@cd "$(SERVER_DIR)" && nohup npm run start:dev > "$(PROJECT_DIR)/.server.log" 2>&1 & echo $$! > "$(SERVER_PID_FILE)"
+	@echo "Starting backend..."
+	@for i in {1..30}; do \
+		if curl -sf "http://127.0.0.1:$(PORT)/api/health" >/dev/null; then \
+			echo "Backend is up on http://127.0.0.1:$(PORT)/api"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "Backend did not start. Check .server.log"; \
+	exit 1
+
+server-stop:
+	@if [ -f "$(SERVER_PID_FILE)" ]; then kill -9 $$(cat "$(SERVER_PID_FILE)") 2>/dev/null || true; rm -f "$(SERVER_PID_FILE)"; fi
+	@kill -9 $$(lsof -ti tcp:$(PORT)) 2>/dev/null || true
+	@echo "Backend stopped"
+
+tunnel:
+	@if ! command -v cloudflared >/dev/null 2>&1; then echo "cloudflared is not installed"; exit 1; fi
+	@rm -f "$(TUNNEL_LOG)" "$(TUNNEL_URL_FILE)"
+	@nohup cloudflared tunnel --url "http://localhost:$(PORT)" > "$(TUNNEL_LOG)" 2>&1 & echo $$! > "$(TUNNEL_PID_FILE)"
+	@echo "Starting tunnel..."
+	@for i in {1..20}; do \
+		URL=$$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "$(TUNNEL_LOG)" | head -n1); \
+		if [ -n "$$URL" ]; then echo "$$URL" > "$(TUNNEL_URL_FILE)"; echo "Tunnel URL: $$URL"; exit 0; fi; \
+		sleep 1; \
+	done; \
+	echo "Tunnel URL not found. Check $(TUNNEL_LOG)"; exit 1
+
+tunnel-stop:
+	@if [ -f "$(TUNNEL_PID_FILE)" ]; then kill -9 $$(cat "$(TUNNEL_PID_FILE)") 2>/dev/null || true; rm -f "$(TUNNEL_PID_FILE)"; fi
+	@pkill -f "cloudflared tunnel --url http://localhost:$(PORT)" 2>/dev/null || true
+	@echo "Tunnel stopped"
+
+tunnel-url:
+	@if [ -f "$(TUNNEL_URL_FILE)" ]; then cat "$(TUNNEL_URL_FILE)"; else echo "No tunnel URL saved"; exit 1; fi
+
+configure-ios:
+	@if [ ! -f "$(TUNNEL_URL_FILE)" ]; then echo "Tunnel URL not found. Run: make tunnel"; exit 1; fi
+	@export NEW_URL="$$(cat "$(TUNNEL_URL_FILE)")"; \
+	python3 scripts/configure_ios.py "$(PUBLIC_DEBUG_XCCONFIG)"
+
+build-ios:
+	@rm -rf "$(BUILD_DIR)"
+	@xcodebuild \
+		-project MobileMessengerIOS.xcodeproj \
+		-scheme MobileMessengerIOS \
+		-configuration $(CONFIGURATION) \
+		-destination 'id=$(DEVICE_ID)' \
+		-derivedDataPath "$(BUILD_DIR)" \
+		build
+
+install-ios:
+	@xcrun devicectl device install app \
+		--device $(DEVICE_ID) \
+		"$(APP_PATH)"
+
+launch-ios:
+	@xcrun devicectl device process launch \
+		--device $(DEVICE_ID) \
+		$(BUNDLE_ID)
+
+reinstall-ios:
+	-@xcrun devicectl device uninstall app \
+		--device $(DEVICE_ID) \
+		$(BUNDLE_ID)
+	@xcrun devicectl device install app \
+		--device $(DEVICE_ID) \
+		"$(APP_PATH)"
+	@xcrun devicectl device process launch \
+		--device $(DEVICE_ID) \
+		$(BUNDLE_ID)
+
+up: server tunnel configure-ios
+
+all: up build-ios reinstall-ios
+
+down: tunnel-stop server-stop
+	@$(MAKE) infra-stop
+
+status:
+	@echo "=== Backend ==="
+	@curl -s "http://127.0.0.1:$(PORT)/api/version" || echo "Backend is not responding"
+	@echo
+	@echo "=== Tunnel ==="
+	@if [ -f "$(TUNNEL_URL_FILE)" ]; then cat "$(TUNNEL_URL_FILE)"; else echo "No tunnel URL"; fi
+	@echo
+	@echo "=== iOS Debug Endpoint Override ==="
+	@if [ -f "$(PUBLIC_DEBUG_XCCONFIG)" ]; then cat "$(PUBLIC_DEBUG_XCCONFIG)"; else echo "No generated xcconfig"; fi
+	@echo
+	@echo "=== Device ==="
+	@xcrun xctrace list devices | grep "iPhone S" || true
+
+clean:
+	@rm -rf "$(BUILD_DIR)" "$(TUNNEL_LOG)" "$(TUNNEL_URL_FILE)" "$(SERVER_PID_FILE)" "$(TUNNEL_PID_FILE)" "$(PROJECT_DIR)/.server.log" "$(PUBLIC_DEBUG_XCCONFIG)"

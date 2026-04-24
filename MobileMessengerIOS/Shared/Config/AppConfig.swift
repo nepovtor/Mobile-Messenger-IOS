@@ -41,7 +41,6 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     @Published public private(set) var restBaseURL: URL
     public let defaultRESTBaseURL: URL
-    public let websocketURL: URL
     public let features: FeatureFlags
 
     private let defaults: UserDefaults
@@ -49,11 +48,6 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
     public init(bundle: Bundle = .main, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.defaultRESTBaseURL = Self.readRESTBaseURL(from: bundle)
-        self.websocketURL = Self.readURL(
-            from: bundle,
-            key: "WEBSOCKET_URL",
-            fallback: "wss://mobile-messenger-ios-production.up.railway.app"
-        )
         self.features = Self.readFeatures(from: bundle)
 
         if let overrideValue = defaults.string(forKey: Constants.restBaseURLOverrideKey),
@@ -66,6 +60,10 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     public var hasCustomRESTBaseURL: Bool {
         restBaseURL != defaultRESTBaseURL
+    }
+
+    public var websocketURL: URL {
+        Self.makeWebSocketURL(from: restBaseURL)
     }
 
     public func updateRESTBaseURL(_ rawValue: String) throws {
@@ -85,15 +83,7 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
             return url
         }
 
-        return URL(string: "https://mobile-messenger-ios-production.up.railway.app/api")!
-    }
-
-    private static func readURL(from bundle: Bundle, key: String, fallback: String) -> URL {
-        guard let string = bundle.object(forInfoDictionaryKey: key) as? String,
-              let url = URL(string: string) else {
-            return URL(string: fallback)!
-        }
-        return url
+        return URL(string: "https://api.example.com/api")!
     }
 
     private static func readFeatures(from bundle: Bundle) -> FeatureFlags {
@@ -153,5 +143,18 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
         }
 
         return url
+    }
+
+    private static func makeWebSocketURL(from restBaseURL: URL) -> URL {
+        guard var components = URLComponents(url: restBaseURL, resolvingAgainstBaseURL: false) else {
+            return URL(string: "wss://ws.example.com/realtime")!
+        }
+
+        components.scheme = components.scheme == "https" ? "wss" : "ws"
+        components.query = nil
+        components.fragment = nil
+        components.path = "/realtime"
+
+        return components.url ?? URL(string: "wss://ws.example.com/realtime")!
     }
 }

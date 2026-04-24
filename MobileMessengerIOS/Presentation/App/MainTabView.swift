@@ -258,10 +258,10 @@ struct MainTabView: View {
                     Label("Профиль", systemImage: "person.crop.circle")
                 }
         }
-        .overlay(alignment: .topTrailing) {
-            ConnectionStatusBadge(status: container.connectionStatus)
-                .padding(.trailing, 14)
-                .padding(.top, 6)
+        .overlay(alignment: .top) {
+            ConnectionStatusBanner(status: container.connectionStatus)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
         }
         .task {
             await PushNotificationManager.shared.registerForNotifications()
@@ -269,45 +269,33 @@ struct MainTabView: View {
     }
 }
 
-private struct ConnectionStatusBadge: View {
+private struct ConnectionStatusBanner: View {
     let status: AppContainer.ConnectionStatus
 
     var body: some View {
-        Group {
-            if status != .online {
-                HStack(spacing: 8) {
-                    Image(systemName: status.systemImage)
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(compactTitle)
-                        .font(.caption2.weight(.semibold))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.thinMaterial, in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(strokeColor, lineWidth: 1)
-                }
-                .foregroundStyle(foregroundColor)
-                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 6)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
-        }
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: status)
-    }
+        HStack(spacing: 12) {
+            Image(systemName: status.systemImage)
+                .font(.headline)
 
-    private var compactTitle: String {
-        switch status {
-        case .online:
-            return ""
-        case .connecting:
-            return "Подключение"
-        case .reconnecting:
-            return "Повтор"
-        case .offline:
-            return "Офлайн"
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(status.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(strokeColor, lineWidth: 1)
+        }
+        .foregroundStyle(foregroundColor)
+        .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
     }
 
     private var strokeColor: Color {

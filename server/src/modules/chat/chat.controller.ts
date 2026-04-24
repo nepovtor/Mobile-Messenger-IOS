@@ -1,115 +1,87 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
-  MessageEvent,
   Param,
+  ParseUUIDPipe,
   Post,
-  Req,
-  Sse,
+  Query,
   UseGuards,
 } from "@nestjs/common";
-import { Observable } from "rxjs";
-import { AuthenticatedRequest } from "../../auth.types";
-import { JwtAuthGuard } from "../../jwt-auth.guard";
-import { ChatEventsService } from "./chat-events.service";
+import { AuthGuard } from "../auth/auth.guard";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { AuthenticatedUser } from "../common/authenticated-user";
 import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
-import { MarkChatReadDto } from "./dto/mark-chat-read.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
-import { UpdateTypingDto } from "./dto/update-typing.dto";
+import { SetTypingDto } from "./dto/set-typing.dto";
 
 @Controller("chats")
-@UseGuards(JwtAuthGuard)
+@UseGuards(AuthGuard)
 export class ChatController {
-  constructor(
-    private readonly chatService: ChatService,
-    private readonly chatEventsService: ChatEventsService,
-  ) {}
-
-  @Get()
-  listChats(@Req() request: AuthenticatedRequest) {
-    return this.chatService.listChats(request.user.sub);
-  }
-
-  @Get(":chatId")
-  getChat(
-    @Param("chatId") chatId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.chatService.getChat(chatId, request.user.sub);
-  }
-
-  @Sse(":chatId/events")
-  async streamChatEvents(
-    @Param("chatId") chatId: string,
-    @Req() request: AuthenticatedRequest,
-  ): Promise<Observable<MessageEvent>> {
-    const chat = await this.chatService.getChat(chatId, request.user.sub);
-    return this.chatEventsService.subscribe(
-      chatId.toLowerCase(),
-      request.user.sub,
-      chat,
-    );
-  }
-
-  @Get(":chatId/messages")
-  getMessages(
-    @Param("chatId") chatId: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.chatService.getMessages(chatId, request.user.sub);
-  }
-
-  @Post(":chatId/messages")
-  sendMessage(
-    @Param("chatId") chatId: string,
-    @Body() body: SendMessageDto,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return this.chatService.addMessage(chatId, body, request.user.sub);
-  }
+  constructor(private readonly chatService: ChatService) {}
 
   @Post()
   createChat(
-    @Body() body: CreateChatDto,
-    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateChatDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.chatService.createChat(body, request.user.sub);
+    return this.chatService.createChat(dto, user);
   }
 
-  @Post(":chatId/read")
-  markChatRead(
-    @Param("chatId") chatId: string,
-    @Body() body: MarkChatReadDto,
-    @Req() request: AuthenticatedRequest,
+  @Get()
+  listChats(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("search") search?: string,
   ) {
-    return this.chatService.markChatRead(
-      chatId,
-      request.user.sub,
-      body.messageID,
-    );
+    return this.chatService.listChats(user.sub, search);
   }
 
-  @Post(":chatId/messages/:messageID/read")
-  markMessageRead(
-    @Param("chatId") chatId: string,
-    @Param("messageID") messageID: string,
-    @Req() request: AuthenticatedRequest,
+  @Get(":chatID/messages")
+  getMessages(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("limit") limit?: string,
+    @Query("before") before?: string,
   ) {
-    return this.chatService.markChatRead(
-      chatId,
-      request.user.sub,
-      messageID,
-    );
+    let parsedLimit: number | undefined;
+    if (limit !== undefined) {
+      parsedLimit = Number(limit);
+      if (!Number.isInteger(parsedLimit)) {
+        throw new BadRequestException(
+          "Validation failed (numeric string is expected)",
+        );
+      }
+    }
+
+    return this.chatService.getMessages(chatID, user.sub, parsedLimit, before);
   }
 
-  @Post(":chatId/typing")
-  updateTyping(
-    @Param("chatId") chatId: string,
-    @Body() body: UpdateTypingDto,
-    @Req() request: AuthenticatedRequest,
+  @Post(":chatID/messages")
+  addMessage(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @Body() dto: SendMessageDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.chatService.setTyping(chatId, request.user.sub, body.isTyping);
+    return this.chatService.addMessage(chatID, dto, user);
+  }
+
+  @Post(":chatID/messages/:messageID/read")
+  markRead(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @Param("messageID", new ParseUUIDPipe()) messageID: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.chatService.markRead(chatID, messageID, user);
+  }
+
+  @Post(":chatID/typing")
+  setTyping(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @Body() dto: SetTypingDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.chatService.setTyping(chatID, dto, user);
   }
 }

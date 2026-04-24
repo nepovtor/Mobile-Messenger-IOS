@@ -1,37 +1,31 @@
-import { Module } from "@nestjs/common";
-import { JwtModule } from "@nestjs/jwt";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { Chat } from "../../entities/chat.entity";
-import { ChatReadState } from "../../entities/chat-read-state.entity";
-import { Message } from "../../entities/message.entity";
-import { User } from "../../entities/user.entity";
+import { ChatEntity } from "../../entities/chat.entity";
+import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
+import { MediaEntity } from "../../entities/media.entity";
+import { MessageEntity } from "../../entities/message.entity";
+import { UserEntity } from "../../entities/user.entity";
+import { AuthModule } from "../auth/auth.module";
+import { MediaModule } from "../media/media.module";
+import { RealtimeModule } from "../realtime/realtime.module";
 import { ChatController } from "./chat.controller";
-import { ChatEventsService } from "./chat-events.service";
-import { ChatGateway } from "./chat.gateway";
 import { ChatService } from "./chat.service";
-import { RealtimeController } from "./realtime.controller";
-
-function resolveJwtSecret(): string {
-  if (process.env.JWT_SECRET) {
-    return process.env.JWT_SECRET;
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET is required in production");
-  }
-
-  return "development-only-secret";
-}
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Chat, Message, User, ChatReadState]),
-    JwtModule.register({
-      secret: resolveJwtSecret(),
-    }),
+    TypeOrmModule.forFeature([
+      ChatEntity,
+      ChatParticipantEntity,
+      MessageEntity,
+      UserEntity,
+      MediaEntity,
+    ]),
+    AuthModule,
+    forwardRef(() => RealtimeModule),
+    MediaModule,
   ],
-  controllers: [ChatController, RealtimeController],
-  providers: [ChatService, ChatGateway, ChatEventsService],
-  exports: [ChatService, ChatEventsService],
+  controllers: [ChatController],
+  providers: [ChatService],
+  exports: [ChatService],
 })
 export class ChatModule {}

@@ -16,4 +16,5 @@ public protocol ChatLocalStore: Sendable {
     func pendingMessages(in chatID: UUID) async throws -> [Message]
     func allPendingMessages() async throws -> [Message]
     func purgeMessages(olderThan date: Date) async throws
+    func reset() async throws
 }

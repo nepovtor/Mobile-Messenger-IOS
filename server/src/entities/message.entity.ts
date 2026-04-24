@@ -1,45 +1,74 @@
+import { randomUUID } from "node:crypto";
 import {
   Column,
+  CreateDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
 } from "typeorm";
-import { Chat } from "./chat.entity";
-import { User } from "./user.entity";
+import { ChatEntity } from "./chat.entity";
+import { MediaEntity } from "./media.entity";
+import { UserEntity } from "./user.entity";
 
-export type MessageStatus =
-  | "sending"
-  | "sent"
-  | "delivered"
-  | "read"
-  | "failed";
+export enum MessageStatus {
+  SENDING = "sending",
+  SENT = "sent",
+  DELIVERED = "delivered",
+  READ = "read",
+  FAILED = "failed",
+}
 
-@Entity()
-export class Message {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+export enum MessageKind {
+  TEXT = "text",
+  IMAGE = "image",
+}
 
-  @Column({ unique: true })
-  messageID!: string;
+@Entity({ name: "messages" })
+export class MessageEntity {
+  @PrimaryColumn("uuid")
+  id = randomUUID();
 
-  @Column()
-  text!: string;
+  @Column({ name: "chat_id", type: "uuid" })
+  chatId!: string;
 
-  @ManyToOne(() => User)
-  @JoinColumn()
-  author!: User;
+  @ManyToOne(() => ChatEntity, (chat) => chat.messages, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "chat_id" })
+  chat!: ChatEntity;
 
-  @ManyToOne(() => Chat)
-  @JoinColumn()
-  chat!: Chat;
+  @Column({ name: "author_id", type: "uuid" })
+  authorId!: string;
 
-  @Column({ type: "datetime" })
-  createdAt!: Date;
+  @ManyToOne(() => UserEntity, (user) => user.messages, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "author_id" })
+  author!: UserEntity;
+
+  @Column({ name: "client_message_id", type: "uuid" })
+  clientMessageId!: string;
+
+  @Column({ type: "simple-enum", enum: MessageKind, default: MessageKind.TEXT })
+  kind!: MessageKind;
+
+  @Column({ type: "text", nullable: true })
+  text!: string | null;
+
+  @Column({ name: "media_id", type: "uuid", nullable: true })
+  mediaId!: string | null;
+
+  @ManyToOne(() => MediaEntity, (media) => media.messages, {
+    onDelete: "SET NULL",
+    nullable: true,
+  })
+  @JoinColumn({ name: "media_id" })
+  media!: MediaEntity | null;
 
   @Column({
     type: "simple-enum",
-    enum: ["sending", "sent", "delivered", "read", "failed"],
+    enum: MessageStatus,
+    default: MessageStatus.SENT,
   })
   status!: MessageStatus;
+
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
+  createdAt!: Date;
 }

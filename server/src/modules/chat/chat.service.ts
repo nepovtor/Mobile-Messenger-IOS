@@ -1,469 +1,791 @@
 import {
-  ForbiddenException,
+  BadRequestException,
   Injectable,
-  Logger,
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
-import { Chat as ChatEntity } from "../../entities/chat.entity";
-import { ChatReadState } from "../../entities/chat-read-state.entity";
+import { In, LessThanOrEqual, Not, Repository } from "typeorm";
+import { ChatEntity } from "../../entities/chat.entity";
+import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
+import { MediaEntity } from "../../entities/media.entity";
 import {
-  Message as MessageEntity,
+  MessageEntity,
+  MessageKind,
   MessageStatus,
 } from "../../entities/message.entity";
-import { User } from "../../entities/user.entity";
-import { ChatEventsService } from "./chat-events.service";
+import { AuthMethod, UserEntity } from "../../entities/user.entity";
+import { AuthenticatedUser } from "../common/authenticated-user";
+import { normalizeContact } from "../common/contact.utils";
+import { isDemoChatSeedingEnabled } from "../common/runtime-config";
+import { MediaService } from "../media/media.service";
+import { RealtimeService } from "../realtime/realtime.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
+import { SetTypingDto } from "./dto/set-typing.dto";
 
-export interface Message {
-  id: string;
-  chatID: string;
-  messageID: string;
-  kind: "text";
-  text: string;
-  mediaID: string | null;
-  mediaURL: string | null;
-  authorID: string;
-  authorName: string;
-  createdAt: string;
-  status: MessageStatus;
-}
-
-export interface Chat {
+export interface ChatSummary {
   id: string;
   title: string;
-  lastMessagePreview?: string | null;
-  lastActivity: string;
+  lastMessagePreview: string | null;
+  lastActivity: Date;
   unreadCount: number;
   typingParticipants: string[];
   participantNames: string[];
   participantCount: number;
 }
 
+export interface MessageResponse {
+  id: string;
+  messageID: string;
+  chatID: string;
+  authorID: string;
+  authorName: string;
+  kind: MessageKind;
+  text: string | null;
+  mediaID: string | null;
+  mediaURL: string | null;
+  status: MessageStatus;
+  createdAt: Date;
+}
+
+interface RealtimeSendMessageDto {
+  clientMessageId: string;
+  kind: MessageKind;
+  text?: string;
+  mediaID?: string;
+}
+
 @Injectable()
 export class ChatService implements OnModuleInit {
-  private readonly logger = new Logger(ChatService.name);
-  private readonly typingTTL = 5_000;
-  private readonly typingParticipants = new Map<
-    string,
-    Map<string, { displayName: string; expiresAt: number }>
-  >();
-
   constructor(
     @InjectRepository(ChatEntity)
-    private readonly chatRepository: Repository<ChatEntity>,
-    @InjectRepository(ChatReadState)
-    private readonly chatReadStateRepository: Repository<ChatReadState>,
+    private readonly chatsRepository: Repository<ChatEntity>,
+    @InjectRepository(ChatParticipantEntity)
+    private readonly participantsRepository: Repository<ChatParticipantEntity>,
     @InjectRepository(MessageEntity)
-    private readonly messageRepository: Repository<MessageEntity>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    private readonly chatEventsService: ChatEventsService,
+    private readonly messagesRepository: Repository<MessageEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepository: Repository<UserEntity>,
+    @InjectRepository(MediaEntity)
+    private readonly mediaRepository: Repository<MediaEntity>,
+    private readonly realtimeService: RealtimeService,
+    private readonly mediaService: MediaService,
   ) {}
 
-  async onModuleInit() {
-    await this.initializeCommonChat();
+  async onModuleInit(): Promise<void> {
+    if (!isDemoChatSeedingEnabled()) {
+      return;
+    }
+    await this.seedDemoChats();
   }
 
-  async listChats(userID: string): Promise<Chat[]> {
-    const chats = await this.chatRepository.find({
-      relations: ["participants"],
-      order: { lastActivity: "DESC", createdAt: "DESC" },
+  async createChat(
+    dto: CreateChatDto,
+    user: AuthenticatedUser,
+  ): Promise<ChatSummary> {
+    const title = dto.title.trim();
+    if (!title) {
+      throw new BadRequestException("Chat title is required");
+    }
+
+    const otherUsers = await this.resolveParticipants(dto);
+    const participantIDs = new Set([
+      user.sub,
+      ...otherUsers.map((item) => item.id),
+    ]);
+    const normalizedParticipantIDs = Array.from(participantIDs).sort();
+
+    if (normalizedParticipantIDs.length === 2) {
+      const existingDirectChat = await this.findExistingDirectChat(
+        normalizedParticipantIDs,
+      );
+      if (existingDirectChat) {
+        return this.getChatSummary(existingDirectChat.id, user.sub);
+      }
+    }
+
+    const chat = await this.chatsRepository.save(
+      this.chatsRepository.create({
+        title,
+        lastMessagePreview: null,
+        lastActivity: new Date(),
+      }),
+    );
+
+    const participantEntities = Array.from(participantIDs).map(
+      (participantID) =>
+        this.participantsRepository.create({
+          chatId: chat.id,
+          userId: participantID,
+          lastReadAt: null,
+          lastReadMessageId: null,
+        }),
+    );
+    await this.participantsRepository.save(participantEntities);
+
+    const summary = await this.getChatSummary(chat.id, user.sub);
+    const createdPayload = { chatID: chat.id, chat: summary };
+    this.realtimeService.publishToUsers(Array.from(participantIDs), {
+      type: "chat.created",
+      payload: createdPayload,
+    });
+    return summary;
+  }
+
+  async listChats(userID: string, search?: string): Promise<ChatSummary[]> {
+    const participants = await this.participantsRepository.find({
+      where: { userId: userID },
+      relations: { chat: true },
+      order: { chat: { lastActivity: "DESC" } },
     });
 
-    return Promise.all(
-      chats
-        .filter((chat) => this.hasAccess(chat, userID))
-        .map((chat) => this.toChatDto(chat, userID)),
+    const summaries = await Promise.all(
+      participants.map((participant) =>
+        this.buildChatSummaryEnvelope(participant.chat, participant, userID),
+      ),
     );
-  }
 
-  async getChat(chatId: string, userID: string): Promise<Chat> {
-    const normalizedChatID = chatId.toLowerCase();
-    const chat = await this.requireChatAccess(normalizedChatID, userID);
-    return this.toChatDto(chat, userID);
-  }
+    const normalizedSearch = search?.trim().toLowerCase();
+    const filtered = summaries.filter(({ summary }) => {
+      if (!normalizedSearch) {
+        return true;
+      }
 
-  async getMessages(chatId: string, userID: string): Promise<Message[]> {
-    const normalizedChatID = chatId.toLowerCase();
-    await this.requireChatAccess(normalizedChatID, userID);
-    const messages = await this.messageRepository.find({
-      where: { chat: { id: normalizedChatID } },
-      relations: ["author"],
-      order: { createdAt: "ASC" },
+      return [
+        summary.title,
+        summary.lastMessagePreview ?? "",
+        ...summary.participantNames,
+      ].some((value) => value.toLowerCase().includes(normalizedSearch));
     });
 
-    return messages.map((message) =>
-      this.toMessageDto(message, normalizedChatID),
+    filtered.sort(
+      (left, right) =>
+        right.summary.lastActivity.getTime() -
+        left.summary.lastActivity.getTime(),
     );
+
+    const deduped = new Map<string, ChatSummary>();
+    for (const item of filtered) {
+      if (!deduped.has(item.dedupeKey)) {
+        deduped.set(item.dedupeKey, item.summary);
+      }
+    }
+
+    return Array.from(deduped.values());
+  }
+
+  async getMessages(
+    chatID: string,
+    userID: string,
+    limit = 100,
+    before?: string,
+  ): Promise<MessageResponse[]> {
+    await this.getParticipantOrFail(chatID, userID);
+
+    let createdBefore: Date | undefined;
+    if (before) {
+      const beforeMessage = await this.messagesRepository.findOneBy({
+        id: before as MessageEntity["id"],
+        chatId: chatID,
+      });
+      if (beforeMessage) {
+        createdBefore = beforeMessage.createdAt;
+      }
+    }
+
+    const messages = await this.messagesRepository.find({
+      where: {
+        chatId: chatID,
+        ...(createdBefore ? { createdAt: LessThanOrEqual(createdBefore) } : {}),
+      },
+      relations: { author: true, media: true },
+      order: { createdAt: "DESC" },
+      take: Math.min(Math.max(limit, 1), 200),
+    });
+
+    const filteredMessages = before
+      ? messages.filter((message) => message.id !== before)
+      : messages;
+
+    const ascending = filteredMessages.reverse();
+    return Promise.all(ascending.map((message) => this.mapMessage(message)));
   }
 
   async addMessage(
-    chatId: string,
-    data: SendMessageDto,
-    authorID: string,
-  ): Promise<Message> {
-    const normalizedChatID = chatId.toLowerCase();
-    const chat = await this.requireChatAccess(normalizedChatID, authorID);
-    const normalizedMessageID = data.messageID.toLowerCase();
-    const trimmedText = data.text.trim();
+    chatID: string,
+    dto: SendMessageDto,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
+    return this.createMessage(
+      chatID,
+      {
+        clientMessageId: dto.messageID,
+        kind: dto.kind,
+        text: dto.text,
+        mediaID: dto.mediaID,
+      },
+      user,
+    );
+  }
 
-    const existingMessage = await this.messageRepository.findOne({
-      where: { messageID: normalizedMessageID },
-      relations: ["author", "chat"],
+  async addRealtimeMessage(
+    chatID: string,
+    dto: RealtimeSendMessageDto,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
+    return this.createMessage(chatID, dto, user);
+  }
+
+  async setRealtimeTyping(
+    chatID: string,
+    dto: SetTypingDto,
+    user: AuthenticatedUser,
+  ): Promise<{
+    chatID: string;
+    userID: string;
+    isTyping: boolean;
+    typingParticipants: string[];
+  }> {
+    return this.setTyping(chatID, dto, user);
+  }
+
+  private async createMessage(
+    chatID: string,
+    dto: RealtimeSendMessageDto,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
+    const participant = await this.getParticipantOrFail(chatID, user.sub);
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chatID },
+    });
+
+    const trimmedText = dto.text?.trim();
+    let media: MediaEntity | null = null;
+
+    const existingMessage = await this.messagesRepository.findOne({
+      where: {
+        chatId: chatID,
+        authorId: user.sub,
+        clientMessageId: dto.clientMessageId,
+      },
+      relations: { author: true, media: true },
     });
     if (existingMessage) {
-      if (
-        existingMessage.chat.id !== normalizedChatID ||
-        existingMessage.author.id !== authorID
-      ) {
-        throw new ForbiddenException(
-          "Message ID already belongs to another message",
-        );
+      return this.mapMessage(existingMessage);
+    }
+
+    if (dto.kind === MessageKind.TEXT) {
+      if (!trimmedText) {
+        throw new BadRequestException("Text message must contain text");
       }
-      return this.toMessageDto(existingMessage, normalizedChatID);
-    }
-
-    const author = await this.userRepository.findOne({
-      where: { id: authorID },
-    });
-    if (!author) {
-      throw new NotFoundException("Author not found");
-    }
-
-    const message = this.messageRepository.create({
-      messageID: normalizedMessageID,
-      text: trimmedText,
-      author,
-      chat,
-      createdAt: new Date(),
-      status: "delivered",
-    });
-
-    await this.messageRepository.save(message);
-
-    chat.lastMessagePreview = trimmedText.slice(0, 50);
-    chat.lastActivity = message.createdAt;
-    await this.chatRepository.save(chat);
-
-    const messageDto = this.toMessageDto(message, normalizedChatID);
-    this.chatEventsService.publishMessage(normalizedChatID, messageDto);
-    await this.publishChatUpdated(chat);
-    return messageDto;
-  }
-
-  async createChat(body: CreateChatDto, ownerID: string): Promise<Chat> {
-    const participantIDsFromContacts = body.participantContacts?.length
-      ? (
-          await this.userRepository.findBy({
-            phone: In(body.participantContacts),
-          })
-        ).map((user) => user.id)
-      : [];
-    const participantIDs = Array.from(
-      new Set([
-        ...(body.participantIds ?? []),
-        ...participantIDsFromContacts,
-        ownerID,
-      ]),
-    );
-    const participants = await this.userRepository.findBy({
-      id: In(participantIDs),
-    });
-
-    const chat = this.chatRepository.create({
-      title: body.title.trim(),
-      participants,
-      lastActivity: new Date(),
-    });
-
-    const savedChat = await this.chatRepository.save(chat);
-    return this.toChatDto(savedChat, ownerID);
-  }
-
-  async markChatRead(
-    chatId: string,
-    userID: string,
-    messageID?: string,
-  ): Promise<Chat> {
-    const normalizedChatID = chatId.toLowerCase();
-    const chat = await this.requireChatAccess(normalizedChatID, userID);
-    const user = await this.requireUser(userID);
-    const targetMessage = messageID
-      ? await this.messageRepository.findOne({
-          where: {
-            messageID: messageID.toLowerCase(),
-            chat: { id: normalizedChatID },
-          },
-          relations: ["author"],
-        })
-      : await this.messageRepository.findOne({
-          where: { chat: { id: normalizedChatID } },
-          relations: ["author"],
-          order: { createdAt: "DESC" },
-        });
-
-    if (messageID && !targetMessage) {
-      throw new NotFoundException("Message not found");
-    }
-
-    const readAt = targetMessage?.createdAt ?? chat.lastActivity ?? new Date();
-
-    let readState = await this.chatReadStateRepository.findOne({
-      where: {
-        chat: { id: normalizedChatID },
-        user: { id: userID },
-      },
-      relations: ["chat", "user"],
-    });
-
-    if (!readState) {
-      readState = this.chatReadStateRepository.create({
-        chat,
-        user,
-        lastReadAt: readAt,
-        lastReadMessageID: targetMessage?.messageID ?? null,
-      });
+    } else if (dto.kind === MessageKind.IMAGE) {
+      if (!dto.mediaID) {
+        throw new BadRequestException("Image message must contain mediaID");
+      }
+      media = await this.mediaService.getUploadedMediaOrFail(dto.mediaID);
+      if (media.uploadedById !== user.sub) {
+        throw new BadRequestException("Media belongs to another user");
+      }
     } else {
-      const nextReadAt =
-        readState.lastReadAt && readState.lastReadAt > readAt
-          ? readState.lastReadAt
-          : readAt;
-      readState.lastReadAt = nextReadAt;
-      readState.lastReadMessageID =
-        targetMessage?.messageID ?? readState.lastReadMessageID;
+      throw new BadRequestException("Unsupported message kind");
     }
 
-    await this.chatReadStateRepository.save(readState);
-
-    const messagesToMarkRead = await this.messageRepository.find({
-      where: { chat: { id: normalizedChatID } },
-      relations: ["author"],
-      order: { createdAt: "ASC" },
-    });
-
-    const updatedMessages = messagesToMarkRead.filter(
-      (message) =>
-        message.author.id !== userID &&
-        message.createdAt <= readAt &&
-        message.status !== "read",
+    const message = await this.messagesRepository.save(
+      this.messagesRepository.create({
+        chatId: chatID,
+        authorId: user.sub,
+        clientMessageId: dto.clientMessageId,
+        kind: dto.kind,
+        text:
+          dto.kind === MessageKind.TEXT
+            ? trimmedText || null
+            : trimmedText || null,
+        mediaId: media?.id ?? null,
+        status:
+          participants.length > 1
+            ? MessageStatus.DELIVERED
+            : MessageStatus.SENT,
+      }),
     );
 
-    if (updatedMessages.length > 0) {
-      for (const message of updatedMessages) {
-        message.status = "read";
-      }
-      await this.messageRepository.save(updatedMessages);
-      for (const message of updatedMessages) {
-        this.chatEventsService.publishMessageRead(
-          normalizedChatID,
-          message.messageID,
-        );
-      }
-    }
+    participant.lastReadAt = message.createdAt;
+    participant.lastReadMessageId = message.id;
+    await this.participantsRepository.save(participant);
 
-    const chatDto = await this.toChatDto(chat, userID);
-    this.chatEventsService.publishTypingChanged(
-      normalizedChatID,
-      chatDto.typingParticipants,
-    );
-    await this.publishChatUpdated(chat);
-    return chatDto;
-  }
-
-  async setTyping(
-    chatId: string,
-    userID: string,
-    isTyping: boolean,
-  ): Promise<Chat> {
-    const normalizedChatID = chatId.toLowerCase();
-    const chat = await this.requireChatAccess(normalizedChatID, userID);
-    const user = await this.requireUser(userID);
-
-    this.pruneTypingParticipants(normalizedChatID);
-    const chatTypingParticipants =
-      this.typingParticipants.get(normalizedChatID) ?? new Map();
-
-    if (isTyping) {
-      chatTypingParticipants.set(userID, {
-        displayName: user.displayName,
-        expiresAt: Date.now() + this.typingTTL,
-      });
-      this.typingParticipants.set(normalizedChatID, chatTypingParticipants);
-    } else {
-      chatTypingParticipants.delete(userID);
-      if (chatTypingParticipants.size === 0) {
-        this.typingParticipants.delete(normalizedChatID);
-      } else {
-        this.typingParticipants.set(normalizedChatID, chatTypingParticipants);
-      }
-    }
-
-    const chatDto = await this.toChatDto(chat, userID);
-    await this.publishChatUpdated(chat);
-    return chatDto;
-  }
-
-  private async initializeCommonChat() {
-    const existing = await this.chatRepository.findOne({
-      where: { title: "General Chat" },
-    });
-
-    if (existing) {
-      return;
-    }
-
-    const chat = this.chatRepository.create({
-      title: "General Chat",
-      lastActivity: new Date(),
-      participants: [],
-    });
-    await this.chatRepository.save(chat);
-    this.logger.log("Seeded General Chat");
-  }
-
-  private async requireChatAccess(
-    chatId: string,
-    userID: string,
-  ): Promise<ChatEntity> {
-    const chat = await this.chatRepository.findOne({
-      where: { id: chatId },
-      relations: ["participants"],
+    const chat = await this.chatsRepository.findOneBy({
+      id: chatID as ChatEntity["id"],
     });
     if (!chat) {
       throw new NotFoundException("Chat not found");
     }
-    if (!this.hasAccess(chat, userID)) {
-      throw new ForbiddenException("Access denied");
-    }
-    return chat;
-  }
+    chat.lastMessagePreview =
+      dto.kind === MessageKind.IMAGE ? "Фото" : trimmedText || null;
+    chat.lastActivity = message.createdAt;
+    await this.chatsRepository.save(chat);
 
-  private hasAccess(chat: ChatEntity, userID: string): boolean {
-    return (
-      chat.participants.length === 0 ||
-      chat.participants.some((user) => user.id === userID)
-    );
-  }
-
-  private async requireUser(userID: string): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { id: userID },
+    const hydratedMessage = await this.messagesRepository.findOne({
+      where: { id: message.id },
+      relations: { author: true, media: true },
     });
-    if (!user) {
-      throw new NotFoundException("User not found");
+    if (!hydratedMessage) {
+      throw new NotFoundException("Message not found after save");
     }
-    return user;
+
+    const payload = await this.mapMessage(hydratedMessage);
+    this.realtimeService.broadcastToChatParticipants(participants, {
+      event: "message.created",
+      data: {
+        chatID,
+        message: payload,
+      },
+    });
+    return payload;
   }
 
-  private async toChatDto(chat: ChatEntity, userID: string): Promise<Chat> {
-    const unreadCount = await this.getUnreadCount(chat.id, userID);
-    const participantNames = (chat.participants ?? [])
-      .filter((participant) => participant.id !== userID)
-      .map((participant) => participant.displayName)
-      .sort((left, right) => left.localeCompare(right));
-    const participantCount = Math.max(chat.participants?.length ?? 0, 1);
-
-    return {
-      id: chat.id,
-      title: chat.title,
-      lastMessagePreview: chat.lastMessagePreview,
-      lastActivity: (chat.lastActivity ?? chat.createdAt).toISOString(),
-      unreadCount,
-      typingParticipants: this.getTypingParticipants(chat.id, userID),
-      participantNames,
-      participantCount,
-    };
-  }
-
-  private toMessageDto(message: MessageEntity, chatId: string): Message {
-    return {
-      id: message.id,
-      chatID: chatId,
-      messageID: message.messageID,
-      kind: "text",
-      text: message.text,
-      mediaID: null,
-      mediaURL: null,
-      authorID: message.author.id,
-      authorName: message.author.displayName,
-      createdAt: message.createdAt.toISOString(),
-      status: message.status,
-    };
-  }
-
-  private async getUnreadCount(
+  async markRead(
     chatID: string,
-    userID: string,
-  ): Promise<number> {
-    const readState = await this.chatReadStateRepository.findOne({
-      where: {
-        chat: { id: chatID },
-        user: { id: userID },
+    messageID: string,
+    user: AuthenticatedUser,
+  ): Promise<{ ok: true }> {
+    const participant = await this.getParticipantOrFail(chatID, user.sub);
+    const message = await this.messagesRepository.findOne({
+      where: { id: messageID as MessageEntity["id"], chatId: chatID },
+    });
+    if (!message) {
+      throw new NotFoundException("Message not found");
+    }
+
+    participant.lastReadAt = message.createdAt;
+    participant.lastReadMessageId = message.id;
+    await this.participantsRepository.save(participant);
+
+    await this.messagesRepository.update(
+      {
+        chatId: chatID,
+        authorId: Not(user.sub),
+        createdAt: LessThanOrEqual(message.createdAt),
+      },
+      {
+        status: MessageStatus.READ,
+      },
+    );
+
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chatID },
+    });
+    this.realtimeService.publishToUsers(
+      participants.map((item) => item.userId),
+      {
+        type: "message.read",
+        payload: {
+          chatID,
+          messageID,
+          userID: user.sub,
+          readAt: message.createdAt.toISOString(),
+        },
+      },
+    );
+
+    return { ok: true };
+  }
+
+  async setTyping(
+    chatID: string,
+    dto: SetTypingDto,
+    user: AuthenticatedUser,
+  ): Promise<{
+    chatID: string;
+    userID: string;
+    isTyping: boolean;
+    typingParticipants: string[];
+  }> {
+    await this.getParticipantOrFail(chatID, user.sub);
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chatID },
+    });
+    const typingParticipants = this.realtimeService.setTyping(
+      chatID,
+      user.sub,
+      user.displayName,
+      dto.isTyping,
+    );
+
+    this.realtimeService.broadcastToChatParticipants(participants, {
+      event: dto.isTyping ? "typing.started" : "typing.stopped",
+      data: {
+        chatID,
+        userID: user.sub,
+        displayName: user.displayName,
+        isTyping: dto.isTyping,
+        typingParticipants,
       },
     });
 
-    const query = this.messageRepository
-      .createQueryBuilder("message")
-      .innerJoin("message.author", "author")
-      .innerJoin("message.chat", "chat")
-      .where("chat.id = :chatID", { chatID })
-      .andWhere("author.id != :userID", { userID });
+    return {
+      chatID,
+      userID: user.sub,
+      isTyping: dto.isTyping,
+      typingParticipants,
+    };
+  }
 
-    if (readState?.lastReadAt) {
-      query.andWhere("message.createdAt > :lastReadAt", {
-        lastReadAt: readState.lastReadAt,
+  private async resolveParticipants(dto: CreateChatDto): Promise<UserEntity[]> {
+    const byID = dto.participantIDs?.length
+      ? await this.usersRepository.find({
+          where: { id: In(dto.participantIDs) },
+        })
+      : [];
+
+    const byContact = dto.participantContacts?.length
+      ? await this.resolveParticipantsByContact(dto.participantContacts)
+      : [];
+
+    const uniqueUsers = new Map<string, UserEntity>();
+    for (const user of [...byID, ...byContact]) {
+      uniqueUsers.set(user.id, user);
+    }
+    return Array.from(uniqueUsers.values());
+  }
+
+  private async resolveParticipantsByContact(
+    contacts: string[],
+  ): Promise<UserEntity[]> {
+    const allUsers = await this.usersRepository.find();
+    const result = new Map<string, UserEntity>();
+
+    for (const rawContact of contacts) {
+      const normalizedVariants = new Set<string>();
+      try {
+        normalizedVariants.add(normalizeContact(AuthMethod.EMAIL, rawContact));
+      } catch {
+        // ignore invalid variant
+      }
+      try {
+        normalizedVariants.add(normalizeContact(AuthMethod.PHONE, rawContact));
+      } catch {
+        // ignore invalid variant
+      }
+
+      const match = allUsers.find((candidate) =>
+        normalizedVariants.has(candidate.contact),
+      );
+      if (match) {
+        result.set(match.id, match);
+      }
+    }
+
+    return Array.from(result.values());
+  }
+
+  private async getParticipantOrFail(
+    chatID: string,
+    userID: string,
+  ): Promise<ChatParticipantEntity> {
+    const participant = await this.participantsRepository.findOne({
+      where: { chatId: chatID, userId: userID },
+      relations: { chat: true },
+    });
+    if (!participant) {
+      throw new NotFoundException("Chat not found for current user");
+    }
+    return participant;
+  }
+
+  private async getChatSummary(
+    chatID: string,
+    userID: string,
+  ): Promise<ChatSummary> {
+    const participant = await this.getParticipantOrFail(chatID, userID);
+    return (
+      await this.buildChatSummaryEnvelope(participant.chat, participant, userID)
+    ).summary;
+  }
+
+  private async buildChatSummaryEnvelope(
+    chat: ChatEntity,
+    participant: ChatParticipantEntity,
+    userID: string,
+  ): Promise<{ summary: ChatSummary; dedupeKey: string }> {
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chat.id },
+      relations: { user: true },
+    });
+    const unreadQuery = this.messagesRepository
+      .createQueryBuilder("message")
+      .where("message.chat_id = :chatID", { chatID: chat.id })
+      .andWhere("message.author_id != :userID", { userID });
+
+    if (participant.lastReadAt) {
+      unreadQuery.andWhere("message.created_at > :lastReadAt", {
+        lastReadAt: participant.lastReadAt,
       });
     }
 
-    return query.getCount();
+    const unreadCount = await unreadQuery.getCount();
+    const otherParticipants = participants.filter(
+      (item) => item.userId !== userID,
+    );
+    return {
+      summary: {
+        id: chat.id,
+        title: chat.title,
+        lastMessagePreview: chat.lastMessagePreview,
+        lastActivity: chat.lastActivity,
+        unreadCount,
+        typingParticipants: this.realtimeService.getTypingParticipants(
+          chat.id,
+          userID,
+        ),
+        participantNames: otherParticipants.map(
+          (item) => item.user.displayName,
+        ),
+        participantCount: participants.length,
+      },
+      dedupeKey:
+        participants.length === 2
+          ? `direct:${otherParticipants
+              .map((item) => item.userId)
+              .sort()
+              .join(":")}`
+          : `chat:${chat.id}`,
+    };
   }
 
-  private getTypingParticipants(chatID: string, userID: string): string[] {
-    this.pruneTypingParticipants(chatID);
-    const chatTypingParticipants = this.typingParticipants.get(chatID);
-    if (!chatTypingParticipants) {
-      return [];
+  private async mapMessage(message: MessageEntity): Promise<MessageResponse> {
+    return {
+      id: message.id,
+      messageID: message.clientMessageId,
+      chatID: message.chatId,
+      authorID: message.authorId,
+      authorName: message.author.displayName,
+      kind: message.kind,
+      text: message.text,
+      mediaID: message.mediaId,
+      mediaURL: await this.mediaService.buildDownloadUrl(message.media),
+      status: message.status,
+      createdAt: message.createdAt,
+    };
+  }
+
+  private async findExistingDirectChat(
+    participantIDs: string[],
+  ): Promise<ChatEntity | null> {
+    if (participantIDs.length !== 2) {
+      return null;
     }
 
-    return Array.from(chatTypingParticipants.entries())
-      .filter(([participantUserID]) => participantUserID !== userID)
-      .map(([, participant]) => participant.displayName)
-      .sort((left, right) => left.localeCompare(right));
+    const candidateParticipants = await this.participantsRepository.find({
+      where: {
+        userId: In(participantIDs),
+      },
+      relations: {
+        chat: true,
+      },
+    });
+
+    const candidateChatIDs = Array.from(
+      candidateParticipants.reduce((result, participant) => {
+        const chatParticipants =
+          result.get(participant.chatId) ?? new Set<string>();
+        chatParticipants.add(participant.userId);
+        result.set(participant.chatId, chatParticipants);
+        return result;
+      }, new Map<string, Set<string>>()),
+    )
+      .filter(([, userIDs]) => userIDs.size === participantIDs.length)
+      .map(([chatID]) => chatID);
+
+    if (candidateChatIDs.length === 0) {
+      return null;
+    }
+
+    const fullParticipants = await this.participantsRepository.find({
+      where: {
+        chatId: In(candidateChatIDs),
+      },
+      relations: {
+        chat: true,
+      },
+    });
+
+    const normalizedParticipantsKey = participantIDs.slice().sort().join(":");
+    const matchedChats = Array.from(
+      fullParticipants.reduce((result, participant) => {
+        const entry = result.get(participant.chatId) ?? {
+          userIDs: [] as string[],
+          chat: participant.chat,
+        };
+        entry.userIDs.push(participant.userId);
+        result.set(participant.chatId, entry);
+        return result;
+      }, new Map<string, { userIDs: string[]; chat: ChatEntity }>()),
+    )
+      .filter(([, entry]) => {
+        const key = entry.userIDs.slice().sort().join(":");
+        return (
+          entry.userIDs.length === participantIDs.length &&
+          key === normalizedParticipantsKey
+        );
+      })
+      .map(([, entry]) => entry.chat)
+      .sort(
+        (left, right) =>
+          right.lastActivity.getTime() - left.lastActivity.getTime(),
+      );
+
+    return matchedChats[0] ?? null;
   }
 
-  private pruneTypingParticipants(chatID?: string) {
-    const now = Date.now();
-    const chatIDs = chatID
-      ? [chatID]
-      : Array.from(this.typingParticipants.keys());
+  private async seedDemoChats(): Promise<void> {
+    const demoUsers = new Map<string, UserEntity>();
+    for (const account of [
+      ["+15551230011", "Анна Demo"],
+      ["+15551230012", "Борис Demo"],
+      ["+15551230013", "Вера Demo"],
+      ["+15551230014", "Глеб Demo"],
+      ["+15551230015", "Даша Demo"],
+    ] as const) {
+      const [contact, displayName] = account;
+      let user = await this.usersRepository.findOne({
+        where: { contact },
+      });
+      if (!user) {
+        user = await this.usersRepository.save(
+          this.usersRepository.create({
+            method: AuthMethod.PHONE,
+            contact,
+            displayName,
+          }),
+        );
+      }
+      demoUsers.set(contact, user);
+    }
 
-    for (const currentChatID of chatIDs) {
-      const participants = this.typingParticipants.get(currentChatID);
-      if (!participants) {
+    const seeds = [
+      {
+        id: "10000000-0000-0000-0000-000000000001",
+        title: "Анна и Борис",
+        participants: ["+15551230011", "+15551230012"],
+        messages: [
+          {
+            id: "20000000-0000-0000-0000-000000000001",
+            author: "+15551230011",
+            text: "Привет, Борис!",
+          },
+        ],
+      },
+      {
+        id: "10000000-0000-0000-0000-000000000002",
+        title: "Анна и Вера",
+        participants: ["+15551230011", "+15551230013"],
+        messages: [
+          {
+            id: "20000000-0000-0000-0000-000000000002",
+            author: "+15551230013",
+            text: "Я собрала идеи для фото.",
+          },
+        ],
+      },
+      {
+        id: "10000000-0000-0000-0000-000000000003",
+        title: "Борис и Глеб",
+        participants: ["+15551230012", "+15551230014"],
+        messages: [
+          {
+            id: "20000000-0000-0000-0000-000000000003",
+            author: "+15551230014",
+            text: "Соберу билд сегодня вечером.",
+          },
+        ],
+      },
+      {
+        id: "10000000-0000-0000-0000-000000000004",
+        title: "Demo Team",
+        participants: [
+          "+15551230011",
+          "+15551230012",
+          "+15551230014",
+          "+15551230015",
+        ],
+        messages: [
+          {
+            id: "20000000-0000-0000-0000-000000000004",
+            author: "+15551230015",
+            text: "Проверила demo flow перед ревью.",
+          },
+        ],
+      },
+    ];
+
+    for (const seed of seeds) {
+      let chat: ChatEntity | null = await this.chatsRepository.findOneBy({
+        id: seed.id as ChatEntity["id"],
+      });
+
+      if (!chat) {
+        const seededChat = this.chatsRepository.create({
+          id: seed.id as ChatEntity["id"],
+          title: seed.title,
+          lastActivity: new Date("2026-04-24T12:00:00.000Z"),
+          lastMessagePreview: null,
+        });
+        chat = await this.chatsRepository.save(seededChat);
+      }
+
+      if (!chat) {
         continue;
       }
 
-      for (const [participantUserID, participant] of participants.entries()) {
-        if (participant.expiresAt <= now) {
-          participants.delete(participantUserID);
-        }
+      const existingParticipants = await this.participantsRepository.find({
+        where: { chatId: chat.id },
+      });
+      if (existingParticipants.length === 0) {
+        await this.participantsRepository.save(
+          seed.participants.map((contact) => {
+            const user = demoUsers.get(contact);
+            if (!user) {
+              throw new Error(`Missing demo user ${contact}`);
+            }
+            return this.participantsRepository.create({
+              chatId: chat.id,
+              userId: user.id,
+              lastReadAt: null,
+              lastReadMessageId: null,
+            });
+          }),
+        );
       }
 
-      if (participants.size === 0) {
-        this.typingParticipants.delete(currentChatID);
-      } else {
-        this.typingParticipants.set(currentChatID, participants);
+      for (const seedMessage of seed.messages) {
+        const exists = await this.messagesRepository.findOneBy({
+          id: seedMessage.id as MessageEntity["id"],
+        });
+        if (exists) {
+          continue;
+        }
+
+        const author = demoUsers.get(seedMessage.author);
+        if (!author) {
+          continue;
+        }
+
+        const seededMessage = this.messagesRepository.create({
+          id: seedMessage.id as MessageEntity["id"],
+          chatId: chat.id,
+          authorId: author.id,
+          clientMessageId: seedMessage.id as MessageEntity["clientMessageId"],
+          kind: MessageKind.TEXT,
+          text: seedMessage.text,
+          mediaId: null,
+          status: MessageStatus.READ,
+        });
+        await this.messagesRepository.save(seededMessage);
+
+        chat.lastMessagePreview = seedMessage.text;
+        chat.lastActivity = new Date("2026-04-24T12:00:00.000Z");
+        await this.chatsRepository.save(chat);
       }
     }
-  }
-
-  private async publishChatUpdated(chat: ChatEntity) {
-    await this.chatEventsService.publishChatUpdated(chat.id, (userID) =>
-      this.toChatDto(chat, userID),
-    );
   }
 }

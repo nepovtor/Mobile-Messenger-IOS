@@ -1,35 +1,38 @@
+import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinTable,
-  ManyToMany,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
+  OneToMany,
+  PrimaryColumn,
 } from "typeorm";
-import { User } from "./user.entity";
+import { ChatParticipantEntity } from "./chat-participant.entity";
+import { MessageEntity } from "./message.entity";
 
-@Entity()
-export class Chat {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+@Entity({ name: "chats" })
+export class ChatEntity {
+  @PrimaryColumn("uuid")
+  id = randomUUID();
 
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
 
-  @Column({ type: "text", nullable: true })
-  lastMessagePreview!: string;
+  @Column({ name: "last_message_preview", type: "varchar", nullable: true })
+  lastMessagePreview!: string | null;
 
-  @Column({ type: "datetime", nullable: true })
-  lastActivity!: Date | null;
+  @Column({
+    name: "last_activity",
+    type: "timestamptz",
+    default: () => "CURRENT_TIMESTAMP",
+  })
+  lastActivity!: Date;
 
-  @ManyToMany(() => User)
-  @JoinTable()
-  participants!: User[];
-
-  @CreateDateColumn()
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
-  updatedAt!: Date;
+  @OneToMany(() => ChatParticipantEntity, (participant) => participant.chat)
+  participants?: ChatParticipantEntity[];
+
+  @OneToMany(() => MessageEntity, (message) => message.chat)
+  messages?: MessageEntity[];
 }

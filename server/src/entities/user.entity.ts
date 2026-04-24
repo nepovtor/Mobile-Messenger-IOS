@@ -1,25 +1,43 @@
+import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
   Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
+  OneToMany,
+  PrimaryColumn,
 } from "typeorm";
+import { ChatParticipantEntity } from "./chat-participant.entity";
+import { MediaEntity } from "./media.entity";
+import { MessageEntity } from "./message.entity";
 
-@Entity()
-export class User {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+export enum AuthMethod {
+  PHONE = "phone",
+  EMAIL = "email",
+}
 
-  @Column({ unique: true })
-  phone!: string;
+@Entity({ name: "users" })
+export class UserEntity {
+  @PrimaryColumn("uuid")
+  id = randomUUID();
 
-  @Column()
+  @Column({ type: "simple-enum", enum: AuthMethod })
+  method!: AuthMethod;
+
+  @Column({ type: "varchar", unique: true })
+  contact!: string;
+
+  @Column({ name: "display_name", type: "varchar" })
   displayName!: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn()
-  updatedAt!: Date;
+  @OneToMany(() => ChatParticipantEntity, (participant) => participant.user)
+  chatParticipants?: ChatParticipantEntity[];
+
+  @OneToMany(() => MessageEntity, (message) => message.author)
+  messages?: MessageEntity[];
+
+  @OneToMany(() => MediaEntity, (media) => media.uploadedBy)
+  uploadedMedia?: MediaEntity[];
 }

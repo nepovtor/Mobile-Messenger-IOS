@@ -1,272 +1,150 @@
-# 🚀 Mobile Messenger iOS
+# Mobile Messenger iOS
 
-![Platform](https://img.shields.io/badge/platform-iOS_17+-blueviolet?style=for-the-badge) ![Swift](https://img.shields.io/badge/swift-5.9-orange?style=for-the-badge) ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20UIKit-ff69b4?style=for-the-badge) ![Status](https://img.shields.io/badge/status-Active-success?style=for-the-badge)
+[![CI](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/workflows/swift.yml/badge.svg)](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/workflows/swift.yml)
 
-> **Гипербыстрый и стильный мессенджер для тех, кто любит общаться красиво.**
+Portfolio-ready messenger MVP with a SwiftUI iOS client and a NestJS backend. REST is used for auth, chat list/history, and media upload. Native WebSocket is used for realtime delivery, typing, read events, and message send acknowledgements.
 
-Добро пожаловать в репозиторий мобильного мессенджера под iOS. Здесь мы строим современное приложение для мгновенного обмена сообщениями, звонков и совместной работы — с акцентом на безопасность, гибкость и эстетичный интерфейс.
+## Architecture
 
----
+Text diagram:
 
-## 🎨 Дизайн & UX
-
-### Регистрация
-- **Красивый экран приветствия** с градиентным фоном
-- **Простая форма** с полями "Имя" и "Номер телефона"
-- **Современная кнопка** с градиентом и анимацией
-- **Валидация полей** в реальном времени
-
-### Список чатов
-- **Градиентная шапка** с заголовком и подзаголовком
-- **Красивые аватары** с градиентными фонами
-- **Карточки чатов** с тенями и закругленными углами
-- **Индикатор печати** с анимированными точками
-- **Бейджи непрочитанных** сообщений
-
-### Профиль
-- **Большой аватар** в шапке с градиентом
-- **Организованные настройки** с иконками
-- **Кнопка выхода** с предупреждением
-
-### Цветовая палитра
-- **Основной цвет**: Синий градиент (от `#007AFF` до `#5856D6`)
-- **Акценты**: Фиолетовый для второстепенных элементов
-- **Фон**: Адаптивный под системную тему
-
----
-
-## ✨ Что делает приложение особенным
-- 💬 Ультрабыстрые чаты тет-а-тет и мультиформатные групповые беседы.
-- 🔐 Сквозное шифрование личных сообщений и медиа.
-- 📞 Голосовые и видеозвонки с адаптацией качества под сеть.
-- 🎙️ Голосовые сообщения, пересылка файлов, фото и реакций.
-- 🔔 Гибкие уведомления, «Не беспокоить» и умные mute-правила.
-- 🌓 Автовыбор светлой/тёмной темы и настраиваемые палитры.
-- 🌍 Локализация интерфейса (RU / EN) и готовность к расширению.
-
-## 🧠 Архитектура & стек
-| Слой | Стек |
-| ---- | ---- |
-| Ядро | Swift 5+, Combine, async/await |
-| UI | SwiftUI + UIKit (гибридный подход) |
-| Сеть | URLSession, WebSocket, Network.framework |
-| Данные | SwiftData, Keychain, UserDefaults |
-| Пуши | Firebase Cloud Messaging, APNs |
-| CI/CD | Xcode Cloud, Fastlane, GitHub Actions |
-
-> ⚙️ Минимальная iOS: **17.0**. Собирается в Xcode 15+ на macOS 13 Ventura и выше.
-
-## 🗂 Структура проекта
-```
-Mobile-Messenger-IOS/
-├── App/                  # SwiftUI сцены, UIKit контейнеры, навигация
-├── Core/                 # Use Cases, бизнес-правила, DI-контейнер
-├── Data/                 # API-клиенты, WebSocket, репозитории данных
-├── Resources/            # Ассеты, локализации, конфиги
-├── Tests/                # Unit, Snapshot и UI тесты
-├── Scripts/              # Утилиты сборок и локальная проверка сценариев README
-└── README.md             # Документация проекта
+```text
+SwiftUI Views
+  -> ViewModels / UseCases
+    -> ChatRepository
+      -> RESTChatService (auth, chats, history, media)
+      -> DefaultChatRealtimeService (URLSessionWebSocketTask)
+        -> NestJS REST Controllers
+        -> NestJS WebSocketGateway (/realtime, native ws)
+          -> ChatService / RealtimeService / AuthService
+            -> PostgreSQL
+            -> MinIO
 ```
 
----
+## Implemented
 
-## 🚦 Как запустить (подробный гайд)
+- Native WebSocket realtime on `/realtime` with JWT handshake and connection registry.
+- Heartbeat ping/pong, dead connection cleanup, reconnect with exponential backoff.
+- Stable message lifecycle: `sending`, `sent`, `delivered`, `read`, `failed`, retry for failed local messages.
+- REST auth, chat list, history, media upload, read receipts, typing.
+- Demo accounts with seeded chats for predictable demo flow.
+- Backend e2e tests, backend heartbeat unit test, iOS unit tests, GitHub Actions CI.
 
-> Готовый блок, который можно вставить в README. Настроен так, чтобы даже новичок прошёл путь без лишних сюрпризов.
+## Planned
 
-### Требования
+- Push notification delivery from backend.
+- Real media thumbnails and richer attachment previews.
+- Presence / online indicators and stronger delivery semantics.
+- Snapshot screenshots for App Store style presentation.
 
-* macOS 12+
-* **Xcode 15.0+** (для SwiftData/iOS 17)
-* (Опционально) **Homebrew** и **CocoaPods**, если в проекте есть `Podfile`
+## Screenshots
 
-### Установка Xcode
+Screenshots placeholder:
 
-1. Откройте **App Store** → установите **Xcode** → запустите его один раз, соглашайтесь с лицензией.
-2. Убедитесь, что версия Xcode ≥ **15.0**.
+- `docs/screenshots/chat-list.png`
+- `docs/screenshots/chat-thread.png`
+- `docs/screenshots/auth.png`
 
-### Клонирование проекта
+## Demo Accounts
+
+Backend seeds 5 demo users and 4 deterministic chats in development.
+
+- `+15551230011` / `demo1111` — Анна Demo
+  sees: `Анна и Борис`, `Анна и Вера`, `Demo Team`
+  does not see: `Борис и Глеб`
+- `+15551230012` / `demo2222` — Борис Demo
+  sees: `Анна и Борис`, `Борис и Глеб`, `Demo Team`
+  does not see: `Анна и Вера`
+- `+15551230013` / `demo3333` — Вера Demo
+  sees: `Анна и Вера`
+  does not see: `Анна и Борис`, `Борис и Глеб`, `Demo Team`
+- `+15551230014` / `demo4444` — Глеб Demo
+  sees: `Борис и Глеб`, `Demo Team`
+  does not see: `Анна и Вера`
+- `+15551230015` / `demo5555` — Даша Demo
+  sees: `Demo Team`
+  does not see: `Анна и Борис`, `Анна и Вера`, `Борис и Глеб`
+
+## Demo Flow
+
+1. Start backend and open the iOS app.
+2. Login as Анна Demo with `+15551230011` / `demo1111`.
+3. Open `Анна и Борис` or `Demo Team`.
+4. Send a message and watch it move from `sending` to `sent`.
+5. Login as Борис Demo with `+15551230012` / `demo2222`.
+6. Open the shared chat and verify realtime `message.created` without refresh.
+
+## Backend
+
+Requirements:
+
+- Node.js 20+
+- Docker Desktop
+
+Run local backend:
 
 ```bash
-git clone https://github.com/nepovtor/Mobile-Messenger-IOS.git
-cd Mobile-Messenger-IOS
+make server
 ```
 
-### Зависимости
-
-#### Вариант A — **без CocoaPods** (нет `Podfile`)
-
-Ничего ставить не нужно: SPM подтянет зависимости автоматически при сборке.
-
-#### Вариант B — **с CocoaPods** (есть `Podfile`)
-
-1. Установите Homebrew (если нет):
+Manual flow:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+docker compose -f server/docker-compose.dev.yml up -d
+cd server
+cp .env.example .env
+npm install
+npm run start:dev
 ```
 
-2. Установите CocoaPods:
+Key endpoints:
+
+- REST base: `http://localhost:8080/api`
+- WebSocket realtime: `ws://localhost:8080/realtime`
+- Legacy SSE fallback: `GET /api/realtime/events`
+
+## iOS
+
+Open `MobileMessengerIOS.xcodeproj`, choose the `MobileMessengerIOS` scheme, and run on a simulator.
+
+Build from terminal:
 
 ```bash
-brew install cocoapods
-pod --version   # должно показать номер версии
+xcodebuild \
+  -project MobileMessengerIOS.xcodeproj \
+  -scheme MobileMessengerIOS \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1' \
+  CODE_SIGNING_ALLOWED=NO \
+  build
 ```
 
-3. В корне проекта выполните:
+## Testing Commands
 
 ```bash
-pod install
+cd server && npm ci
+cd server && npm run lint
+cd server && npm test
+cd server && npm run build
+xcodebuild \
+  -project MobileMessengerIOS.xcodeproj \
+  -scheme MobileMessengerIOS \
+  -destination 'platform=iOS Simulator,id=5B35CA4E-0218-4562-98CD-22DDBFD7E68D' \
+  CODE_SIGNING_ALLOWED=NO \
+  test
 ```
 
-4. Открывайте **`.xcworkspace`**, а не `.xcodeproj`.
+## Security Notes
 
-> Если при `pod install` получите SSL-ошибку (self-signed cert) — попробуйте другую сеть (домашний Wi-Fi/мобильный хот-спот). Часто это из-за корпоративного прокси (Ubiquiti/ZScaler). После смены сети запустите команду ещё раз.
+- JWT is required for REST and WebSocket handshake; invalid or expired tokens are rejected.
+- Auth endpoints are rate limited.
+- iOS auth token is stored in Keychain with `ThisDeviceOnly` accessibility.
+- Logout clears token, current user session, local chats/messages, and closes realtime connection.
+- Reconnect is disabled for explicit logout or manual disconnect.
+- Sensitive auth values are not written to analytics/logging.
 
-### Конфигурация окружения
+## CI
 
-Скопируйте пример конфигурации и укажите собственные ключи и эндпоинты (при необходимости уточните их у команды):
+GitHub Actions runs:
 
-```bash
-cp Config/Config.example.xcconfig Config/Config.xcconfig
-```
-
-### Открытие в Xcode
-
-* Если использовали CocoaPods: откройте `MobileMessengerIOS.xcworkspace`.
-* Если нет Podfile: откройте `MobileMessengerIOS.xcodeproj`.
-
-### Запуск в симуляторе
-
-1. В верхней панели Xcode выберите **Scheme**: `MobileMessengerIOS`.
-2. Рядом выберите симулятор (например, **iPhone 17**).
-3. Нажмите ▶ (**Run**) или `Cmd + R`.
-
-### Запуск на реальном устройстве (опционально)
-
-1. Подключите iPhone по кабелю → нажмите **Trust** на устройстве.
-2. Xcode → **Settings → Accounts** → добавьте свой Apple ID.
-3. В Project Navigator → выберите **Target `MobileMessengerIOS` → Signing & Capabilities** → выберите **Team**.
-4. Выберите свой iPhone в списке устройств → **Run**.
-
-### Подсказки и решение проблем
-
-* Очистить кэш сборки: **Product → Clean Build Folder** (`Cmd + Shift + K`), затем снова **Run**.
-* Если `pod` не найден: закройте и откройте Terminal; при необходимости добавьте `/opt/homebrew/bin` в `PATH`:
-
-  ```bash
-  echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
-  source ~/.zshrc
-  ```
-
-* Если не запускается из-за подписи: включите **Automatically manage signing** и выберите **Team**.
-* Если Xcode ругается на iOS-версию симулятора: выберите устройство с iOS **17+**.
-* Если SPM завис: **File → Packages → Reset Package Caches**.
-
-----
-
-## 🏁 Быстрый старт для опытных
-1. Клонируйте репозиторий и перейдите в папку проекта.
-2. Откройте `MobileMessengerIOS.xcworkspace` или `MobileMessengerIOS.xcodeproj` (в зависимости от наличия CocoaPods).
-3. Выберите схему `MobileMessengerIOS` и запустите на симуляторе или устройстве.
-4. Создайте `Config.xcconfig` из примера и пропишите секреты.
-
-----
-
-## 🧪 Тестирование качества
-- **Unit**: `Cmd + U` или
-  ```bash
-  xcodebuild \
-    -project MobileMessengerIOS.xcodeproj \
-    -scheme MobileMessengerIOS \
-    -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17' \
-    CODE_SIGNING_ALLOWED=NO \
-    test
-  ```
-- **UI / Snapshot**: запускайте из Xcode или через `xcodebuild test` с нужной схемой.
-- **Static Analysis**: SwiftLint + SwiftFormat (рекомендуется добавить в pre-commit).
-- **Smoke / README check**: `./Scripts/verify-readme.sh`
-
-## 🛠️ Серверная разработка
-В репозитории добавлен рабочий каркас backend'а (NestJS) в папке `server/`. Он закрывает базовую инфраструктуру для интеграции с мобильным клиентом и может запускаться локально.
-
-### Минимальный стек
-- **TypeScript + NestJS** для HTTP/WebSocket API.
-- **SQLite** по умолчанию для локального запуска и smoke-тестов.
-- **PostgreSQL / Redis / MinIO / Redpanda** уже подготовлены в `docker-compose.dev.yml` как следующий слой инфраструктуры.
-- **REST + WebSocket** точки входа для интеграции мобильного клиента и real-time сценариев.
-- **Контрактно-ориентированная структура DTO** как база для дальнейшей OpenAPI/AsyncAPI генерации.
-
-### Быстрый старт локально
-1. **Поднимите инфраструктуру в Docker** (PostgreSQL, Redis, MinIO, Kafka/Redpanda):
-   ```bash
-   docker compose -f server/docker-compose.dev.yml up -d
-   ```
-2. **Настройте переменные окружения**:
-   ```bash
-   cd server
-   cp .env.example .env
-   ```
-3. **Установите зависимости** (Node 20+, npm):
-   ```bash
-   npm install
-   ```
-4. **Запустите backend в watch-режиме**:
-   ```bash
-   npm run start:dev
-   ```
-5. **Проверьте точки входа**:
-   - REST префикс: `http://localhost:8080/api`
-   - Healthcheck: `GET http://localhost:8080/api/health`
-   - Версия сборки: `GET http://localhost:8080/api/version`
-
-### Базовые модули
-- **Auth**: OAuth2/Password, refresh токены, 2FA, сессии в Redis (заготовлено в инфраструктуре).
-- **Messaging**: REST для CRUD диалогов, WebSocket для real-time доставки; idempotency ключи для повтора отправок.
-- **Media**: загрузка файлов с прямой выдачей pre-signed URL из MinIO/S3.
-- **Notifications**: Fanout в FCM/APNs, topic- и user-level подписки, настройка quiet hours.
-
-### Практики для команды
-- Контрактный подход: сначала OpenAPI/AsyncAPI, затем реализация.
-- Фича-флаги для безопасных выкатов и A/B.
-- Набор обязательных линтеров: **ESLint**, **Prettier**, **commitlint**.
-- Автотесты: **Jest** + **supertest** для REST, **ws** для WebSocket.
-- Наблюдаемость: **OpenTelemetry** трейсинг + метрики Prometheus, логирование в JSON.
-
-## 🔄 CI/CD потоки
-1. Install deps → Lint → Tests → Build IPA → Upload TestFlight.
-2. Пример `Fastlane`:
-   ```ruby
-   lane :beta do
-     match(type: "appstore")
-     build_app(scheme: "MobileMessengerIOS")
-     upload_to_testflight
-   end
-   ```
-3. GitHub Actions уже настроен в `.github/workflows/swift.yml` и прогоняет backend lint/build/test вместе с iOS build/test.
-
-## 🛡 Безопасность
-- SSL pinning, ATS без лишних исключений.
-- Keychain для секретов и токенов.
-- Регулярное обновление зависимостей и автоматические проверки.
-- Поддержка безопасного входа по Face ID / Touch ID.
-
-## 🤝 Вклад и комьюнити
-1. Форкните репозиторий и создайте ветку `feature/your-feature`.
-2. Реализуйте изменения, добавьте тесты, обновите документацию.
-3. Убедитесь, что линтеры и тесты зелёные.
-4. Оформите Pull Request со скриншотами UI, если затронут визуал.
-
-> Мы любим содержательные review: прикладывайте демо-видео, заметки по UX и артефакты тестов.
-
-## 🆘 Поддержка
-- Issues в GitHub — для вопросов и багов.
-- Срочные инциденты — команда в Slack/Teams.
-- Дополнительные материалы — раздел `Docs/` и Notion-хаб проекта.
-
-## 📄 Лицензия
-Укажите выбранную лицензию (например, MIT, Apache 2.0) в `LICENSE`.
-
----
-
-Создаём мессенджер, которым хочется пользоваться каждый день. Врывайтесь! 💜
+- backend: `npm ci`, `npm run lint`, `npm test`, `npm run build`
+- iOS: `xcodebuild test`

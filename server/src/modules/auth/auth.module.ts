@@ -1,32 +1,30 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { User } from "../../entities/user.entity";
+import { UserEntity } from "../../entities/user.entity";
+import { getJwtSecret } from "../common/runtime-config";
 import { AuthController } from "./auth.controller";
+import { AuthGuard } from "./auth.guard";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AuthService } from "./auth.service";
-
-function resolveJwtSecret(): string {
-  if (process.env.JWT_SECRET) {
-    return process.env.JWT_SECRET;
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET is required in production");
-  }
-
-  return "development-only-secret";
-}
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
-    JwtModule.register({
-      secret: resolveJwtSecret(),
-      signOptions: { expiresIn: "7d" },
+    TypeOrmModule.forFeature([UserEntity]),
+    JwtModule.registerAsync({
+      useFactory: async () => ({
+        secret: getJwtSecret(),
+      }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
-  exports: [AuthService],
+  providers: [AuthService, AuthGuard, AuthRateLimitService],
+  exports: [
+    AuthService,
+    AuthGuard,
+    AuthRateLimitService,
+    JwtModule,
+    TypeOrmModule,
+  ],
 })
 export class AuthModule {}

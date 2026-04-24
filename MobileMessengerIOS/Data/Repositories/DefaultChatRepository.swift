@@ -143,11 +143,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func setTyping(chatID: UUID, isTyping: Bool) async {
-        do {
-            try await remote.setTyping(chatID: chatID, isTyping: isTyping)
-        } catch {
-            analytics.track(error: error, context: "setTyping")
-        }
+        await realtime.setTyping(chatID: chatID, isTyping: isTyping)
     }
 
     public func retryPendingMessages(for chatID: UUID) async {
@@ -174,9 +170,17 @@ public final class DefaultChatRepository: ChatRepository {
         }
     }
 
+    public func resetLocalState() async {
+        do {
+            try await store.reset()
+        } catch {
+            analytics.track(error: error, context: "reset_local_state")
+        }
+    }
+
     public func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws {
         if status == .read {
-            try await remote.markRead(chatID: chatID, messageID: messageID)
+            await realtime.markRead(chatID: chatID, messageID: messageID)
         }
         try await store.updateStatus(for: messageID, in: chatID, status: status)
     }
@@ -193,14 +197,13 @@ public final class DefaultChatRepository: ChatRepository {
             let deliveredMessage: Message
             switch message.kind {
             case .text:
-                let response = try await remote.sendMessage(
+                deliveredMessage = try await realtime.sendMessage(
                     chatID: message.id.chatID,
                     kind: .text,
                     text: message.text,
                     mediaID: nil,
-                    localID: message.localID
+                    clientMessageID: message.localID
                 )
-                deliveredMessage = response.asDomainMessage(localID: message.localID)
             case .image:
                 let localFileURL = message.attachments.first(where: { $0.kind == .image })?.localPath
                 guard let localFileURL else {
@@ -217,14 +220,13 @@ public final class DefaultChatRepository: ChatRepository {
                 )
                 let etag = try await remote.uploadImage(to: upload.uploadURL, data: data, mimeType: "image/jpeg")
                 try await remote.confirmUpload(mediaID: upload.mediaID, etag: etag)
-                let response = try await remote.sendMessage(
+                deliveredMessage = try await realtime.sendMessage(
                     chatID: message.id.chatID,
                     kind: .image,
                     text: message.text.isEmpty ? nil : message.text,
                     mediaID: upload.mediaID,
-                    localID: message.localID
+                    clientMessageID: message.localID
                 )
-                deliveredMessage = response.asDomainMessage(localID: message.localID)
                 try? fileManager.removeItem(at: localFileURL)
             }
 

@@ -10,15 +10,14 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d messenger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-04-18T19-09-19Z
+    image: minio/minio:RELEASE.2024-04-18T19-09-19Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -29,32 +28,6 @@ services:
     volumes:
       - minio_data:/data
 
-  kafka:
-    image: redpandadata/redpanda:v23.3.15
-    restart: unless-stopped
-    command:
-      - redpanda
-      - start
-      - --overprovisioned
-      - --smp
-      - "1"
-      - --memory
-      - "1G"
-      - --reserve-memory
-      - "0M"
-      - --node-id
-      - "0"
-      - --check=false
-      - --kafka-addr
-      - PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr
-      - PLAINTEXT://localhost:9092
-    ports:
-      - "9092:9092"
-    volumes:
-      - redpanda_data:/var/lib/redpanda/data
-
 volumes:
   postgres_data:
   minio_data:
-  redpanda_data:

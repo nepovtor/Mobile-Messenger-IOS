@@ -1,7 +1,25 @@
-import { IsUUID } from "class-validator";
-import { SendMessageDto } from "./send-message.dto";
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from "class-validator";
+import { MessageKind } from "../../../entities/message.entity";
 
-export class SendRealtimeMessageDto extends SendMessageDto {
+export class SendRealtimeMessageDto {
   @IsUUID()
-  chatId!: string;
+  messageID!: string;
+
+  @IsEnum(MessageKind)
+  kind!: MessageKind;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  text?: string;
+
+  @IsOptional()
+  @IsUUID()
+  mediaID?: string;
 }

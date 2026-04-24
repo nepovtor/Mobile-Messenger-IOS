@@ -1,14 +1,41 @@
-import { Logger } from "@nestjs/common";
-import * as dotenv from "dotenv";
-import { createApp } from "./app";
-
-dotenv.config();
+import "dotenv/config";
+import { NestFactory } from "@nestjs/core";
+import { ValidationPipe } from "@nestjs/common";
+import { WsAdapter } from "@nestjs/platform-ws";
+import { AppModule } from "./modules/app.module";
+import { getCorsOrigins } from "./modules/common/runtime-config";
 
 async function bootstrap() {
-  const app = await createApp();
-  const port = Number(process.env.PORT ?? 8080);
-  await app.listen(port);
-  Logger.log(`API is ready on http://localhost:${port}/api`, "Bootstrap");
+  const app = await NestFactory.create(AppModule, { cors: false });
+  app.useWebSocketAdapter(new WsAdapter(app));
+  const corsOrigins = getCorsOrigins();
+  if (corsOrigins.length > 0) {
+    app.enableCors({
+      origin: (origin, callback) => {
+        if (!origin || corsOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error("CORS origin is not allowed"), false);
+      },
+      credentials: true,
+    });
+  }
+  app.setGlobalPrefix("api");
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+
+  const port = process.env.PORT ? Number(process.env.PORT) : 8080;
+  await app.listen(port, "0.0.0.0");
+  // eslint-disable-next-line no-console
+  console.log(
+    `API is ready on http://localhost:${port}/api with ${corsOrigins.length} CORS origin(s)`,
+  );
 }
 
-void bootstrap();
+bootstrap();

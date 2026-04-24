@@ -1,40 +1,35 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { Chat } from "../entities/chat.entity";
-import { ChatReadState } from "../entities/chat-read-state.entity";
-import { Message } from "../entities/message.entity";
-import { User } from "../entities/user.entity";
-import { AppController } from "./app.controller";
+import { isDatabaseSynchronizationEnabled } from "./common/runtime-config";
 import { AuthModule } from "./auth/auth.module";
 import { ChatModule } from "./chat/chat.module";
+import { DocsModule } from "./docs/docs.module";
 import { HealthModule } from "./health/health.module";
+import { MediaModule } from "./media/media.module";
+import { RealtimeModule } from "./realtime/realtime.module";
 import { VersionModule } from "./version/version.module";
-
-const isProduction = process.env.NODE_ENV === "production";
-const usePostgres = Boolean(process.env.DATABASE_URL);
-
-const databaseConfig = usePostgres
-  ? {
-      type: "postgres" as const,
-      url: process.env.DATABASE_URL!,
-    }
-  : {
-      type: "sqlite" as const,
-      database: process.env.SQLITE_PATH ?? "database.sqlite",
-    };
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
-      ...databaseConfig,
-      entities: [User, Chat, Message, ChatReadState],
-      synchronize: process.env.TYPEORM_SYNC === "true" || !isProduction,
+      type: "postgres",
+      host: process.env.DB_HOST || "localhost",
+      port: Number(process.env.DB_PORT || "5432"),
+      username: process.env.DB_USER || "postgres",
+      password: process.env.DB_PASSWORD || "postgres",
+      database: process.env.DB_NAME || "messenger",
+      autoLoadEntities: true,
+      synchronize: isDatabaseSynchronizationEnabled(),
+      retryAttempts: 5,
+      retryDelay: 2000,
     }),
+    DocsModule,
     HealthModule,
     VersionModule,
     AuthModule,
+    RealtimeModule,
+    MediaModule,
     ChatModule,
   ],
-  controllers: [AppController],
 })
 export class AppModule {}

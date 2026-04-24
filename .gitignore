@@ -1,18 +1,38 @@
+# macOS
 .DS_Store
+.vscode/
+Makefile.bak*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Xcode
-.derivedData/
-DerivedData/
 build/
+build-ios/
+build-ios-device/
+build-ios-sim/
+DerivedData/
+*.build/
 *.xcuserstate
+*.xcuserdatad/
 *.xcworkspace/xcuserdata/
-MobileMessengerIOS.xcodeproj/xcuserdata/
+*.xcodeproj/xcuserdata/
 
-# Backend artifacts
+# Local runtime artifacts
+.cloudflared.log
+.cloudflared.pid
+.server.log
+.server.pid
+.tunnel_url
+MobileMessengerIOS/Configurations/Debug.public.xcconfig
+
+# Backend
+node_modules/
+dist/
+.env
+.env.*
 server/node_modules/
 server/dist/
-server/database.sqlite
-server/*.tsbuildinfo
-
-# Environment
 server/.env
+server/.env.*
+!server/.env.example
