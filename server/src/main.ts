@@ -1,11 +1,13 @@
 import "dotenv/config";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
+import { WsAdapter } from "@nestjs/platform-ws";
 import { AppModule } from "./modules/app.module";
 import { getCorsOrigins } from "./modules/common/runtime-config";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
+  app.useWebSocketAdapter(new WsAdapter(app));
   const corsOrigins = getCorsOrigins();
   if (corsOrigins.length > 0) {
     app.enableCors({

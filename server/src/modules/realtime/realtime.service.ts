@@ -1,14 +1,21 @@
 import { Injectable, MessageEvent } from "@nestjs/common";
 import { Observable, Subject, interval, map, merge } from "rxjs";
+import { WebSocket } from "ws";
+
+export interface RealtimeEventEnvelope<T = unknown> {
+  event: string;
+  data: T;
+}
 
 interface RealtimePayload {
   type: string;
-  payload: string | object;
+  payload: unknown;
 }
 
 @Injectable()
 export class RealtimeService {
   private readonly userStreams = new Map<string, Subject<MessageEvent>>();
+  private readonly userConnections = new Map<string, Set<WebSocket>>();
   private readonly typingState = new Map<
     string,
     Map<string, { userID: string; displayName: string }>
@@ -29,13 +36,41 @@ export class RealtimeService {
     );
   }
 
-  publishToUsers(userIDs: string[], message: RealtimePayload): void {
+  registerConnection(userID: string, socket: WebSocket): void {
+    const sockets = this.userConnections.get(userID) ?? new Set<WebSocket>();
+    sockets.add(socket);
+    this.userConnections.set(userID, sockets);
+  }
+
+  unregisterConnection(userID: string, socket: WebSocket): void {
+    const sockets = this.userConnections.get(userID);
+    if (!sockets) {
+      return;
+    }
+
+    sockets.delete(socket);
+    if (sockets.size === 0) {
+      this.userConnections.delete(userID);
+    }
+  }
+
+  sendToUser<T>(userID: string, event: RealtimeEventEnvelope<T>): void {
+    this.sendEnvelope(userID, event);
+    this.getStream(userID).next({
+      type: event.event,
+      data:
+        event.data === null
+          ? {}
+          : typeof event.data === "string" || typeof event.data === "object"
+          ? event.data
+          : { value: event.data },
+    });
+  }
+
+  broadcastToUsers<T>(userIDs: string[], event: RealtimeEventEnvelope<T>): void {
     const uniqueUserIDs = new Set(userIDs);
     for (const userID of uniqueUserIDs) {
-      this.getStream(userID).next({
-        type: message.type,
-        data: message.payload,
-      });
+      this.sendToUser(userID, event);
     }
   }
 
@@ -72,6 +107,37 @@ export class RealtimeService {
     return Array.from(chatTyping.values())
       .filter((item) => item.userID !== excludeUserID)
       .map((item) => item.displayName);
+  }
+
+  publishToUsers(userIDs: string[], message: RealtimePayload): void {
+    this.broadcastToUsers(userIDs, {
+      event: message.type,
+      data: message.payload,
+    });
+  }
+
+  broadcastToChatParticipants<T>(
+    participants: Array<{ userId: string }>,
+    event: RealtimeEventEnvelope<T>,
+  ): void {
+    this.broadcastToUsers(
+      participants.map((participant) => participant.userId),
+      event,
+    );
+  }
+
+  private sendEnvelope<T>(userID: string, event: RealtimeEventEnvelope<T>): void {
+    const sockets = this.userConnections.get(userID);
+    if (!sockets?.size) {
+      return;
+    }
+
+    const payload = JSON.stringify(event);
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(payload);
+      }
+    }
   }
 
   private getStream(userID: string): Subject<MessageEvent> {

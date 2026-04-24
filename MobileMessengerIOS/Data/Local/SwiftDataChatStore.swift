@@ -191,6 +191,12 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         broadcastChats()
     }
 
+    public func reset() async throws {
+        chats = [:]
+        try persistState()
+        broadcastChats()
+    }
+
     private func removeContinuation(for chatID: UUID) {
         messageStreams[chatID] = nil
     }

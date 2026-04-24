@@ -8,6 +8,7 @@ import { UserEntity } from "../../entities/user.entity";
 import { AuthModule } from "../auth/auth.module";
 import { MediaModule } from "../media/media.module";
 import { RealtimeModule } from "../realtime/realtime.module";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { ChatController } from "./chat.controller";
 import { ChatService } from "./chat.service";
 
@@ -25,7 +26,7 @@ import { ChatService } from "./chat.service";
     MediaModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, RealtimeGateway],
   exports: [ChatService],
 })
 export class ChatModule {}

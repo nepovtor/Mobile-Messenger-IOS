@@ -62,6 +62,13 @@ npm run start:dev
 
 - `GET http://localhost:8080/api/health`
 - `GET http://localhost:8080/api/version`
+- realtime: native WebSocket `ws://localhost:8080/realtime`
+
+Realtime now uses native WebSocket:
+
+- REST остается для auth, списка чатов, истории сообщений и media upload.
+- Native WebSocket используется для `connection.ready`, `message.send` с ack, `message.created`, typing и read events.
+- Legacy SSE endpoint `/api/realtime/events` можно держать только для обратной совместимости, но основным realtime больше не считается.
 
 ## iOS-приложение
 
@@ -136,6 +143,28 @@ Backend e2e:
 cd server
 npm install
 npm test
+npm run build
+```
+
+## Demo Flow
+
+1. Login as user A (`+15551230011` / `demo1111`).
+2. Open a chat with user B.
+3. Send a message from iOS over native WebSocket.
+4. Login as user B (`+15551230012` / `demo2222`).
+5. See `message.created` arrive in realtime without manual refresh.
+
+## Testing Commands
+
+```bash
+cd server && npm test
+cd server && npm run build
+xcodebuild \
+  -project MobileMessengerIOS.xcodeproj \
+  -scheme MobileMessengerIOS \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1' \
+  CODE_SIGNING_ALLOWED=NO \
+  test
 ```
 
 ## GitHub / CI

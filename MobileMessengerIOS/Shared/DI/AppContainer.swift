@@ -171,7 +171,7 @@ public final class AppContainer: ObservableObject {
             authTokenProvider: authTokenProvider
         )
         realtimeService = DefaultChatRealtimeService(
-            baseURL: configService.restBaseURL,
+            websocketURL: configService.websocketURL,
             authTokenProvider: authTokenProvider,
             analytics: analytics,
             reachability: reachability,
@@ -218,7 +218,8 @@ public final class AppContainer: ObservableObject {
                     Task { await self.refreshApplicationState() }
                 }
             case .unauthenticated:
-                realtimeService?.deactivate()
+                realtimeService?.handleLogout()
+                Task { await self.chatRepository?.resetLocalState() }
                 connectionStatus = .offline
             }
         }
@@ -269,6 +270,8 @@ public final class AppContainer: ObservableObject {
             connectionStatus = .connecting
         case .reconnecting, .disconnected:
             connectionStatus = .reconnecting
+        case .failed:
+            connectionStatus = .offline
         }
     }
 }

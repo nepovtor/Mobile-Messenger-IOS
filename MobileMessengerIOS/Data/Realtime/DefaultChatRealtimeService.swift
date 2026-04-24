@@ -1,71 +1,119 @@
 import Foundation
 
+protocol RealtimeSocketTask: AnyObject, Sendable {
+    func resume()
+    func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?)
+    func send(_ message: URLSessionWebSocketTask.Message) async throws
+    func receive() async throws -> URLSessionWebSocketTask.Message
+}
+
+final class URLSessionRealtimeSocketTask: RealtimeSocketTask, @unchecked Sendable {
+    private let task: URLSessionWebSocketTask
+
+    init(task: URLSessionWebSocketTask) {
+        self.task = task
+    }
+
+    func resume() {
+        task.resume()
+    }
+
+    func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        task.cancel(with: closeCode, reason: reason)
+    }
+
+    func send(_ message: URLSessionWebSocketTask.Message) async throws {
+        try await task.send(message)
+    }
+
+    func receive() async throws -> URLSessionWebSocketTask.Message {
+        try await task.receive()
+    }
+}
+
 public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked Sendable {
-    private let baseURL: URL
-    private let session: URLSession
+    private let websocketURL: URL
     private let authTokenProvider: @Sendable () async -> String?
     private let analytics: AnalyticsService
     private let reachability: ReachabilityService
     private let featureFlags: FeatureFlags
     private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
+    private let socketFactory: @Sendable (URLRequest) -> RealtimeSocketTask
+    private let sleep: @Sendable (UInt64) async -> Void
+    private let maxReconnectDelay: TimeInterval
+
+    private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var state: ChatRealtimeConnectionState = .disconnected
     private var shouldMaintainConnection = false
+    private var reconnectAllowed = true
     private var subscribedChats: Set<UUID> = []
     private var eventContinuations: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation] = [:]
     private var globalEventContinuations: [UUID: AsyncStream<ChatRealtimeEnvelope>.Continuation] = [:]
     private var stateContinuations: [UUID: AsyncStream<ChatRealtimeConnectionState>.Continuation] = [:]
-    private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var connectionTask: Task<Void, Never>?
+    private var socket: RealtimeSocketTask?
+    private var pendingSends: [UUID: CheckedContinuation<Message, Error>] = [:]
 
-    public init(
-        baseURL: URL,
+    init(
+        websocketURL: URL,
         session: URLSession = .shared,
         authTokenProvider: @escaping @Sendable () async -> String?,
         analytics: AnalyticsService,
         reachability: ReachabilityService,
-        featureFlags: FeatureFlags
+        featureFlags: FeatureFlags,
+        maxReconnectDelay: TimeInterval = 15,
+        sleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        },
+        socketFactory: (@Sendable (URLRequest) -> RealtimeSocketTask)? = nil
     ) {
-        self.baseURL = baseURL
-        self.session = session
+        self.websocketURL = websocketURL
         self.authTokenProvider = authTokenProvider
         self.analytics = analytics
         self.reachability = reachability
         self.featureFlags = featureFlags
+        self.maxReconnectDelay = maxReconnectDelay
+        self.sleep = sleep
+        self.socketFactory = socketFactory ?? { request in
+            URLSessionRealtimeSocketTask(task: session.webSocketTask(with: request))
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         self.decoder = decoder
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        self.encoder = encoder
     }
 
     public func activate() {
         guard featureFlags.isRealtimeEnabled else { return }
         stateQueue.async { [weak self] in
             guard let self else { return }
+            reconnectAllowed = true
             shouldMaintainConnection = true
-            guard connectionTask == nil else { return }
-            updateState(.connecting(retry: 0))
-            connectionTask = Task { [weak self] in
-                await self?.runConnectionLoop(retry: 0)
-            }
+            startConnectionIfNeeded(retry: 0)
         }
     }
 
     public func deactivate() {
         stateQueue.async { [weak self] in
-            guard let self else { return }
-            shouldMaintainConnection = false
-            connectionTask?.cancel()
-            connectionTask = nil
-            updateState(.disconnected)
-            broadcast(event: .disconnected(nil))
+            self?.stopConnection(manual: true, reason: nil)
+        }
+    }
+
+    public func handleLogout() {
+        stateQueue.async { [weak self] in
+            self?.stopConnection(manual: true, reason: AppError.unauthorized)
         }
     }
 
     public func connect(to chatID: UUID) {
         guard featureFlags.isRealtimeEnabled else { return }
         stateQueue.async { [weak self] in
-            guard let self else { return }
-            subscribedChats.insert(chatID)
+            self?.subscribedChats.insert(chatID)
         }
     }
 
@@ -77,9 +125,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             eventContinuations[chatID] = nil
 
             guard subscribedChats.isEmpty, !shouldMaintainConnection else { return }
-            connectionTask?.cancel()
-            connectionTask = nil
-            updateState(.disconnected)
+            stopConnection(manual: true, reason: nil)
         }
     }
 
@@ -126,92 +172,191 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         }
     }
 
+    public func sendMessage(
+        chatID: UUID,
+        kind: Message.Kind,
+        text: String?,
+        mediaID: UUID?,
+        clientMessageID: UUID
+    ) async throws -> Message {
+        guard featureFlags.isRealtimeEnabled else {
+            throw AppError.network(description: "Realtime disabled")
+        }
+
+        guard await currentState() == .connected else {
+            throw AppError.network(description: "WebSocket disconnected")
+        }
+
+        let payload = OutgoingSendMessage(
+            chatID: chatID,
+            clientMessageId: clientMessageID,
+            kind: kind,
+            text: text,
+            mediaID: mediaID
+        )
+
+        return try await withCheckedThrowingContinuation { continuation in
+            stateQueue.async { [weak self] in
+                guard let self else {
+                    continuation.resume(throwing: AppError.unknown)
+                    return
+                }
+
+                self.pendingSends[clientMessageID] = continuation
+                guard let socket = self.socket else {
+                    self.pendingSends.removeValue(forKey: clientMessageID)
+                    continuation.resume(
+                        throwing: AppError.network(description: "WebSocket disconnected")
+                    )
+                    return
+                }
+
+                Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        try await self.send(
+                            event: "message.send",
+                            payload: payload,
+                            over: socket
+                        )
+                    } catch {
+                        self.failPendingSend(
+                            clientMessageID: clientMessageID,
+                            error: error
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    public func setTyping(chatID: UUID, isTyping: Bool) async {
+        let payload = OutgoingChatTarget(chatID: chatID)
+        let event = isTyping ? "typing.started" : "typing.stopped"
+        await sendFireAndForget(event: event, payload: payload)
+    }
+
+    public func markRead(chatID: UUID, messageID: UUID) async {
+        await sendFireAndForget(
+            event: "message.read",
+            payload: OutgoingRead(chatID: chatID, messageID: messageID)
+        )
+    }
+
+    private func startConnectionIfNeeded(retry: Int) {
+        guard connectionTask == nil else { return }
+        setState(retry == 0 ? .connecting(retry: retry) : .reconnecting(retry: retry))
+        connectionTask = Task { [weak self] in
+            await self?.runConnectionLoop(retry: retry)
+        }
+    }
+
     private func runConnectionLoop(retry: Int) async {
         guard let token = await authTokenProvider() else {
-            broadcast(event: .disconnected(AppError.unauthorized))
-            clearConnection()
+            stateQueue.async { [weak self] in
+                self?.connectionTask = nil
+                self?.setState(.failed(reason: AppError.unauthorized.localizedDescription))
+            }
             return
         }
 
-        if !reachability.isReachable {
-            try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
-            await runConnectionLoop(retry: retry + 1)
+        guard reachability.isReachable else {
+            stateQueue.async { [weak self] in
+                self?.setState(.reconnecting(retry: retry + 1))
+            }
+            await scheduleReconnect(after: retry)
             return
         }
 
         do {
-            var request = URLRequest(url: baseURL.appendingPathComponent("realtime/events"))
+            var request = URLRequest(url: websocketURL)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
-                throw AppError.network(description: "Не удалось подключиться к SSE")
+            let currentSocket = socketFactory(request)
+            stateQueue.async { [weak self] in
+                self?.socket = currentSocket
             }
+            currentSocket.resume()
 
-            updateState(.connected)
-            broadcast(event: .connected)
-
-            var currentType = "message"
-            var currentData: [String] = []
-            for try await line in bytes.lines {
-                if Task.isCancelled { break }
-                if line.isEmpty {
-                    try handleEvent(type: currentType, data: currentData.joined(separator: "\n"))
-                    currentType = "message"
-                    currentData = []
-                    continue
-                }
-                if line.hasPrefix("event:") {
-                    currentType = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                    continue
-                }
-                if line.hasPrefix("data:") {
-                    currentData.append(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
-                }
+            while !Task.isCancelled {
+                let message = try await currentSocket.receive()
+                try await handle(message: message)
             }
         } catch {
-            analytics.track(error: error, context: "sse_connect")
-            broadcast(event: .disconnected(error))
-            updateState(.reconnecting(retry: retry + 1))
-            try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
             guard !Task.isCancelled else {
                 clearConnection()
                 return
             }
-            await runConnectionLoop(retry: retry + 1)
+
+            analytics.track(error: error, context: "websocket_connect")
+            broadcast(event: .disconnected(error))
+            failAllPendingSends(with: error)
+            stateQueue.async { [weak self] in
+                self?.setState(.reconnecting(retry: retry + 1))
+            }
+            await scheduleReconnect(after: retry)
             return
         }
 
-        guard !Task.isCancelled else {
-            clearConnection()
-            return
-        }
-        broadcast(event: .disconnected(nil))
-        updateState(.reconnecting(retry: retry + 1))
-        try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
-        guard shouldReconnect else {
-            clearConnection()
-            return
-        }
-        await runConnectionLoop(retry: retry + 1)
+        clearConnection()
     }
 
-    private func handleEvent(type: String, data: String) throws {
-        guard !data.isEmpty, type != "keepalive" else { return }
-        switch type {
+    private func handle(message: URLSessionWebSocketTask.Message) async throws {
+        switch message {
+        case .string(let text):
+            try handle(text: text)
+        case .data(let data):
+            guard let text = String(data: data, encoding: .utf8) else { return }
+            try handle(text: text)
+        @unknown default:
+            break
+        }
+    }
+
+    private func handle(text: String) throws {
+        guard let data = text.data(using: .utf8),
+              let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let event = payload["event"] as? String else {
+            return
+        }
+
+        let eventDataObject = payload["data"] ?? [:]
+        let eventData = try JSONSerialization.data(withJSONObject: normalizedJSONObject(eventDataObject))
+
+        switch event {
+        case "connection.ready":
+            stateQueue.async { [weak self] in
+                self?.setState(.connected)
+            }
+            broadcast(event: .connected)
         case "message.created":
-            let payload = try decoder.decode(MessageCreatedEvent.self, from: Data(data.utf8))
+            let payload = try decoder.decode(MessageCreatedEvent.self, from: eventData)
             deliver(chatID: payload.chatID, event: .message(payload.message.asDomainMessage()))
         case "message.read":
-            let payload = try decoder.decode(MessageReadEvent.self, from: Data(data.utf8))
+            let payload = try decoder.decode(MessageReadEvent.self, from: eventData)
             deliver(chatID: payload.chatID, event: .messageRead(messageID: payload.messageID))
-        case "typing.changed":
-            let payload = try decoder.decode(TypingEvent.self, from: Data(data.utf8))
+        case "typing.started", "typing.stopped":
+            let payload = try decoder.decode(TypingEvent.self, from: eventData)
             deliver(chatID: payload.chatID, event: .typing(participants: payload.typingParticipants))
+        case "message.send.ack":
+            let payload = try decoder.decode(MessageAckEvent.self, from: eventData)
+            resolvePendingSend(clientMessageID: payload.clientMessageId, message: payload.message)
+        case "message.failed":
+            let payload = try decoder.decode(MessageFailedEvent.self, from: eventData)
+            failPendingSend(
+                clientMessageID: payload.clientMessageId,
+                error: AppError.network(description: payload.reason)
+            )
         default:
             break
         }
+    }
+
+    private func normalizedJSONObject(_ value: Any) -> Any {
+        if value is NSNull {
+            return [:]
+        }
+        return value
     }
 
     private func deliver(chatID: UUID, event: ChatRealtimeEvent) {
@@ -231,31 +376,133 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         }
     }
 
+    private func sendFireAndForget<Payload: Encodable>(event: String, payload: Payload) async {
+        guard await currentState() == .connected else { return }
+        guard let currentSocket = stateQueue.sync(execute: { socket }) else { return }
+
+        do {
+            try await send(event: event, payload: payload, over: currentSocket)
+        } catch {
+            analytics.track(error: error, context: "websocket_send_\(event)")
+        }
+    }
+
+    private func send<Payload: Encodable>(
+        event: String,
+        payload: Payload,
+        over socket: RealtimeSocketTask
+    ) async throws {
+        let data = try encoder.encode(SocketEnvelope(event: event, data: payload))
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw AppError.network(description: "Invalid websocket payload")
+        }
+        try await socket.send(.string(string))
+    }
+
+    private func scheduleReconnect(after retry: Int) async {
+        clearSocketReference()
+        let delay = UInt64(backoff(for: retry) * 1_000_000_000)
+        await sleep(delay)
+        guard shouldReconnect else {
+            clearConnection()
+            return
+        }
+        await runConnectionLoop(retry: retry + 1)
+    }
+
+    private func stopConnection(manual: Bool, reason: Error?) {
+        reconnectAllowed = false
+        shouldMaintainConnection = false
+        socket?.cancel(with: .normalClosure, reason: nil)
+        socket = nil
+        connectionTask?.cancel()
+        connectionTask = nil
+        failAllPendingSends(with: reason ?? AppError.network(description: "WebSocket disconnected"))
+        broadcast(event: .disconnected(reason))
+        if manual {
+            setState(.disconnected)
+        }
+    }
+
     private func clearConnection() {
         stateQueue.async { [weak self] in
+            self?.socket = nil
             self?.connectionTask = nil
-            self?.updateState(.disconnected)
+            self?.setState(.disconnected)
+        }
+    }
+
+    private func clearSocketReference() {
+        stateQueue.async { [weak self] in
+            self?.socket = nil
+        }
+    }
+
+    private func resolvePendingSend(clientMessageID: UUID, message: ServerMessage) {
+        stateQueue.async { [weak self] in
+            guard let continuation = self?.pendingSends.removeValue(forKey: clientMessageID) else { return }
+            continuation.resume(returning: message.asDomainMessage(localID: clientMessageID))
+        }
+    }
+
+    private func failPendingSend(clientMessageID: UUID, error: Error) {
+        stateQueue.async { [weak self] in
+            guard let continuation = self?.pendingSends.removeValue(forKey: clientMessageID) else { return }
+            continuation.resume(throwing: error)
+        }
+    }
+
+    private func failAllPendingSends(with error: Error) {
+        stateQueue.async { [weak self] in
+            guard let self else { return }
+            let continuations = pendingSends.values
+            pendingSends.removeAll()
+            continuations.forEach { $0.resume(throwing: error) }
         }
     }
 
     private var shouldReconnect: Bool {
         stateQueue.sync {
-            shouldMaintainConnection
+            shouldMaintainConnection && reconnectAllowed
         }
     }
 
-    private func updateState(_ newState: ChatRealtimeConnectionState) {
-        stateQueue.async { [weak self] in
-            self?.state = newState
-            self?.stateContinuations.values.forEach { continuation in
-                continuation.yield(newState)
-            }
+    private func currentState() async -> ChatRealtimeConnectionState {
+        stateQueue.sync { state }
+    }
+
+    private func setState(_ newState: ChatRealtimeConnectionState) {
+        state = newState
+        stateContinuations.values.forEach { continuation in
+            continuation.yield(newState)
         }
     }
 
     private func backoff(for retry: Int) -> Double {
-        min(pow(2.0, Double(retry)), 15)
+        min(pow(2.0, Double(retry)), maxReconnectDelay)
     }
+}
+
+private struct SocketEnvelope<Payload: Encodable>: Encodable {
+    let event: String
+    let data: Payload
+}
+
+private struct OutgoingSendMessage: Encodable {
+    let chatID: UUID
+    let clientMessageId: UUID
+    let kind: Message.Kind
+    let text: String?
+    let mediaID: UUID?
+}
+
+private struct OutgoingChatTarget: Encodable {
+    let chatID: UUID
+}
+
+private struct OutgoingRead: Encodable {
+    let chatID: UUID
+    let messageID: UUID
 }
 
 private struct MessageCreatedEvent: Decodable {
@@ -271,4 +518,16 @@ private struct MessageReadEvent: Decodable {
 private struct TypingEvent: Decodable {
     let chatID: UUID
     let typingParticipants: [String]
+}
+
+private struct MessageAckEvent: Decodable {
+    let chatID: UUID
+    let clientMessageId: UUID
+    let message: ServerMessage
+}
+
+private struct MessageFailedEvent: Decodable {
+    let chatID: UUID
+    let clientMessageId: UUID
+    let reason: String
 }

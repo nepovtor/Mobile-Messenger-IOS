@@ -8,10 +8,12 @@ import {
   NotFoundException,
   ValidationPipe,
 } from "@nestjs/common";
+import { WsAdapter } from "@nestjs/platform-ws";
 import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { DataType, newDb } from "pg-mem";
 import request from "supertest";
+import { WebSocket } from "ws";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
 import { MediaEntity, MediaStatus } from "../src/entities/media.entity";
@@ -152,6 +154,7 @@ async function createTestApp(
     .compile();
 
   const app = moduleRef.createNestApplication();
+  app.useWebSocketAdapter(new WsAdapter(app));
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
     new ValidationPipe({
@@ -161,7 +164,101 @@ async function createTestApp(
     }),
   );
   await app.init();
+  await app.listen(0);
   return app;
+}
+
+function realtimeURL(app: INestApplication): string {
+  const address = app.getHttpServer().address();
+  const port = typeof address === "string" ? 80 : address?.port;
+  return `ws://127.0.0.1:${port}/realtime`;
+}
+
+async function openRealtimeSocket(
+  app: INestApplication,
+  token: string,
+): Promise<{
+  socket: WebSocket;
+  nextEvent: (eventName: string) => Promise<{ event: string; data: any }>;
+}> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(realtimeURL(app), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const queue: Array<{ event: string; data: any }> = [];
+    const waiters = new Map<
+      string,
+      Array<(event: { event: string; data: any }) => void>
+    >();
+
+    socket.on("message", (raw: Buffer) => {
+      const parsed = JSON.parse(raw.toString()) as { event: string; data: any };
+      const waiting = waiters.get(parsed.event);
+      if (waiting?.length) {
+        const resolveNext = waiting.shift();
+        if (resolveNext) {
+          resolveNext(parsed);
+        }
+        if (waiting.length === 0) {
+          waiters.delete(parsed.event);
+        }
+        return;
+      }
+      queue.push(parsed);
+    });
+
+    const cleanup = () => {
+      socket.removeAllListeners("open");
+      socket.removeAllListeners("error");
+    };
+
+    socket.once("open", () => {
+      cleanup();
+      resolve({
+        socket,
+        nextEvent: async (eventName: string) => {
+          const queuedIndex = queue.findIndex((item) => item.event === eventName);
+          if (queuedIndex >= 0) {
+            return queue.splice(queuedIndex, 1)[0];
+          }
+
+          return new Promise((resolveEvent, rejectEvent) => {
+            const timeout = setTimeout(() => {
+              const pending = waiters.get(eventName) ?? [];
+              waiters.set(
+                eventName,
+                pending.filter((callback) => callback !== wrappedResolve),
+              );
+              rejectEvent(new Error(`Timed out waiting for ${eventName}`));
+            }, 2000);
+
+            const wrappedResolve = (event: { event: string; data: any }) => {
+              clearTimeout(timeout);
+              resolveEvent(event);
+            };
+
+            const pending = waiters.get(eventName) ?? [];
+            pending.push(wrappedResolve);
+            waiters.set(eventName, pending);
+          });
+        },
+      });
+    });
+    socket.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+  });
+}
+
+function sendRealtimeEvent(
+  socket: WebSocket,
+  event: string,
+  data: Record<string, unknown>,
+): void {
+  socket.send(JSON.stringify({ event, data }));
 }
 
 async function authenticateByCode(
@@ -416,4 +513,181 @@ test("chat unread counters drop after mark-read and paginated history stays orde
   assert.equal(updatedMessages.body.length, 2);
   assert.equal(updatedMessages.body[0].status, "read");
   assert.equal(updatedMessages.body[1].status, "read");
+});
+
+test("valid token can connect to realtime websocket", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const client = await openRealtimeSocket(app, anna.token);
+  t.after(() => {
+    client.socket.close();
+  });
+
+  const ready = await client.nextEvent("connection.ready");
+  assert.equal(ready.data.userID, anna.userID);
+});
+
+test("invalid token is rejected by realtime websocket", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const closeCode = await new Promise<number>((resolve, reject) => {
+    const socket = new WebSocket(realtimeURL(app), {
+      headers: {
+        Authorization: "Bearer invalid-token",
+      },
+    });
+
+    socket.once("close", (code) => resolve(code));
+    socket.once("error", () => {
+      // close event is the assertion source here
+    });
+    setTimeout(() => reject(new Error("Socket was not closed")), 2000);
+  });
+
+  assert.equal(closeCode, 4001);
+});
+
+test("participant can send message and receive ack plus broadcast", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const clientMessageId = randomUUID();
+  const annaClient = await openRealtimeSocket(app, anna.token);
+  const borisClient = await openRealtimeSocket(app, boris.token);
+  t.after(() => {
+    annaClient.socket.close();
+    borisClient.socket.close();
+  });
+
+  await annaClient.nextEvent("connection.ready");
+  await borisClient.nextEvent("connection.ready");
+
+  sendRealtimeEvent(annaClient.socket, "message.send", {
+    chatID,
+    clientMessageId,
+    kind: "text",
+    text: "Привет по ws",
+  });
+
+  const ack = await annaClient.nextEvent("message.send.ack");
+  const broadcast = await borisClient.nextEvent("message.created");
+
+  assert.equal(ack.data.clientMessageId, clientMessageId);
+  assert.equal(ack.data.message.text, "Привет по ws");
+  assert.equal(broadcast.data.message.text, "Привет по ws");
+  assert.equal(broadcast.data.chatID, chatID);
+});
+
+test("non-participant cannot send message over realtime websocket", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+  const vera = await authenticateByCode(app, "+15551230013");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const veraClient = await openRealtimeSocket(app, vera.token);
+  t.after(() => {
+    veraClient.socket.close();
+  });
+
+  await veraClient.nextEvent("connection.ready");
+
+  sendRealtimeEvent(veraClient.socket, "message.send", {
+    chatID,
+    clientMessageId: randomUUID(),
+    kind: "text",
+    text: "Я не участник",
+  });
+
+  const failed = await veraClient.nextEvent("message.failed");
+  assert.match(String(failed.data.reason), /Chat not found for current user/);
+});
+
+test("duplicate clientMessageId does not create duplicate message", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const clientMessageId = randomUUID();
+  const annaClient = await openRealtimeSocket(app, anna.token);
+  t.after(() => {
+    annaClient.socket.close();
+  });
+
+  await annaClient.nextEvent("connection.ready");
+
+  sendRealtimeEvent(annaClient.socket, "message.send", {
+    chatID,
+    clientMessageId,
+    kind: "text",
+    text: "Дубликат",
+  });
+  const firstAck = await annaClient.nextEvent("message.send.ack");
+
+  sendRealtimeEvent(annaClient.socket, "message.send", {
+    chatID,
+    clientMessageId,
+    kind: "text",
+    text: "Дубликат",
+  });
+  const secondAck = await annaClient.nextEvent("message.send.ack");
+
+  assert.equal(firstAck.data.message.id, secondAck.data.message.id);
+
+  const messagesResponse = await request(app.getHttpServer())
+    .get(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(messagesResponse.body.length, 1);
+  assert.equal(messagesResponse.body[0].messageID, clientMessageId);
 });

@@ -1,5 +1,10 @@
 # macOS
 .DS_Store
+.vscode/
+Makefile.bak*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Xcode
 build/
@@ -7,6 +12,7 @@ build-ios/
 build-ios-device/
 build-ios-sim/
 DerivedData/
+*.build/
 *.xcuserstate
 *.xcuserdatad/
 *.xcworkspace/xcuserdata/
@@ -21,6 +27,10 @@ DerivedData/
 MobileMessengerIOS/Configurations/Debug.public.xcconfig
 
 # Backend
+node_modules/
+dist/
+.env
+.env.*
 server/node_modules/
 server/dist/
 server/.env

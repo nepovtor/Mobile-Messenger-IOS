@@ -47,6 +47,13 @@ export interface MessageResponse {
   createdAt: Date;
 }
 
+interface RealtimeSendMessageDto {
+  clientMessageId: string;
+  kind: MessageKind;
+  text?: string;
+  mediaID?: string;
+}
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -201,6 +208,35 @@ export class ChatService {
     dto: SendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
+    return this.createMessage(chatID, {
+      clientMessageId: dto.messageID,
+      kind: dto.kind,
+      text: dto.text,
+      mediaID: dto.mediaID,
+    }, user);
+  }
+
+  async addRealtimeMessage(
+    chatID: string,
+    dto: RealtimeSendMessageDto,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
+    return this.createMessage(chatID, dto, user);
+  }
+
+  async setRealtimeTyping(
+    chatID: string,
+    dto: SetTypingDto,
+    user: AuthenticatedUser,
+  ): Promise<{ chatID: string; userID: string; isTyping: boolean; typingParticipants: string[] }> {
+    return this.setTyping(chatID, dto, user);
+  }
+
+  private async createMessage(
+    chatID: string,
+    dto: RealtimeSendMessageDto,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
     const participant = await this.getParticipantOrFail(chatID, user.sub);
     const participants = await this.participantsRepository.find({
       where: { chatId: chatID },
@@ -208,6 +244,18 @@ export class ChatService {
 
     const trimmedText = dto.text?.trim();
     let media: MediaEntity | null = null;
+
+    const existingMessage = await this.messagesRepository.findOne({
+      where: {
+        chatId: chatID,
+        authorId: user.sub,
+        clientMessageId: dto.clientMessageId,
+      },
+      relations: { author: true, media: true },
+    });
+    if (existingMessage) {
+      return this.mapMessage(existingMessage);
+    }
 
     if (dto.kind === MessageKind.TEXT) {
       if (!trimmedText) {
@@ -229,7 +277,7 @@ export class ChatService {
       this.messagesRepository.create({
         chatId: chatID,
         authorId: user.sub,
-        clientMessageId: dto.messageID,
+        clientMessageId: dto.clientMessageId,
         kind: dto.kind,
         text:
           dto.kind === MessageKind.TEXT
@@ -267,16 +315,13 @@ export class ChatService {
     }
 
     const payload = await this.mapMessage(hydratedMessage);
-    this.realtimeService.publishToUsers(
-      participants.map((item) => item.userId),
-      {
-        type: "message.created",
-        payload: {
-          chatID,
-          message: payload,
-        },
+    this.realtimeService.broadcastToChatParticipants(participants, {
+      event: "message.created",
+      data: {
+        chatID,
+        message: payload,
       },
-    );
+    });
     return payload;
   }
 
@@ -331,7 +376,12 @@ export class ChatService {
     chatID: string,
     dto: SetTypingDto,
     user: AuthenticatedUser,
-  ): Promise<{ typingParticipants: string[] }> {
+  ): Promise<{
+    chatID: string;
+    userID: string;
+    isTyping: boolean;
+    typingParticipants: string[];
+  }> {
     await this.getParticipantOrFail(chatID, user.sub);
     const participants = await this.participantsRepository.find({
       where: { chatId: chatID },
@@ -343,21 +393,21 @@ export class ChatService {
       dto.isTyping,
     );
 
-    this.realtimeService.publishToUsers(
-      participants.map((item) => item.userId),
-      {
-        type: "typing.changed",
-        payload: {
-          chatID,
-          userID: user.sub,
-          displayName: user.displayName,
-          isTyping: dto.isTyping,
-          typingParticipants,
-        },
+    this.realtimeService.broadcastToChatParticipants(participants, {
+      event: dto.isTyping ? "typing.started" : "typing.stopped",
+      data: {
+        chatID,
+        userID: user.sub,
+        displayName: user.displayName,
+        isTyping: dto.isTyping,
+        typingParticipants,
       },
-    );
+    });
 
     return {
+      chatID,
+      userID: user.sub,
+      isTyping: dto.isTyping,
       typingParticipants,
     };
   }

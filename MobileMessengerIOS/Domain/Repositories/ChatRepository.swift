@@ -14,4 +14,5 @@ public protocol ChatRepository {
     func retryPendingMessages(for chatID: UUID) async
     func refreshForForeground() async
     func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws
+    func resetLocalState() async
 }
