@@ -1,10 +1,4 @@
-import {
-  Controller,
-  MessageEvent,
-  Req,
-  Sse,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, MessageEvent, Req, Sse, UseGuards } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { AuthenticatedRequest } from "../../auth.types";
 import { JwtAuthGuard } from "../../jwt-auth.guard";

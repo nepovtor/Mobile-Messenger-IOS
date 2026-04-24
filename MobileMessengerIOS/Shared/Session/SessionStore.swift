@@ -13,7 +13,6 @@ public final class SessionStore: ObservableObject {
         public static let defaultUserDisplayName = "Вы"
         public static var currentUserID = defaultUserID
         public static var currentUserDisplayName = defaultUserDisplayName
-        static let tokenKey = "auth.token"
         static let userIDKey = "auth.user_id"
         static let displayNameKey = "auth.display_name"
     }
@@ -26,7 +25,7 @@ public final class SessionStore: ObservableObject {
         self.tokenStore = tokenStore
         self.defaults = defaults
 
-        if let token = tokenStore.retrieveToken(),
+        if let token = tokenStore.getAccessToken(),
            let storedUserID = defaults.string(forKey: Constants.userIDKey),
            let userID = UUID(uuidString: storedUserID),
            let displayName = defaults.string(forKey: Constants.displayNameKey) {
@@ -39,15 +38,23 @@ public final class SessionStore: ObservableObject {
     }
 
     public func authenticate(with token: String, userID: UUID, displayName: String) {
-        tokenStore.store(token: token)
+        tokenStore.saveAccessToken(token)
         defaults.set(userID.uuidString, forKey: Constants.userIDKey)
         defaults.set(displayName, forKey: Constants.displayNameKey)
         updateCurrentUser(userID: userID, displayName: displayName)
         state = .authenticated(token: token, userID: userID, displayName: displayName)
     }
 
+    public func authenticate(with session: AuthenticatedSession) {
+        authenticate(
+            with: session.accessToken,
+            userID: session.userID,
+            displayName: session.displayName
+        )
+    }
+
     public func logout() {
-        tokenStore.clear()
+        tokenStore.clearAccessToken()
         defaults.removeObject(forKey: Constants.userIDKey)
         defaults.removeObject(forKey: Constants.displayNameKey)
         resetCurrentUser()
@@ -71,7 +78,19 @@ public final class SessionStore: ObservableObject {
 }
 
 public protocol TokenStore {
-    func store(token: String)
-    func retrieveToken() -> String?
-    func clear()
+    func saveAccessToken(_ token: String)
+    func getAccessToken() -> String?
+    func clearAccessToken()
+}
+
+public struct AuthenticatedSession: Equatable, Sendable {
+    public let accessToken: String
+    public let userID: UUID
+    public let displayName: String
+
+    public init(accessToken: String, userID: UUID, displayName: String) {
+        self.accessToken = accessToken
+        self.userID = userID
+        self.displayName = displayName
+    }
 }

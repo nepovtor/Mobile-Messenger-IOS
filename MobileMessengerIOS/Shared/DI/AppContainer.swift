@@ -222,7 +222,7 @@ public final class AppContainer: ObservableObject {
                     Task { await self.refreshApplicationState() }
                 }
             case .unauthenticated:
-                realtimeService?.deactivate()
+                realtimeService?.handleLogout()
                 connectionStatus = .offline
             }
         }
@@ -272,6 +272,8 @@ public final class AppContainer: ObservableObject {
         case .connecting:
             connectionStatus = .connecting
         case .reconnecting, .disconnected:
+            connectionStatus = .reconnecting
+        case .failed:
             connectionStatus = .reconnecting
         }
     }

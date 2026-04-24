@@ -44,20 +44,19 @@ public final class DefaultAnalyticsService: AnalyticsService, @unchecked Sendabl
     public func track(event: AppAnalyticsEvent) {
         queue.async { [weak self] in
             self?.events.append(event)
-            #if DEBUG
-            print("[Analytics] \(event.kind.rawValue): \(event.metadata)")
-            #endif
         }
     }
 
     public func track(error: Error, context: String) {
         queue.async { [weak self] in
-            let event = AppAnalyticsEvent(kind: .networkError, metadata: ["context": context, "description": String(describing: error)])
+            let event = AppAnalyticsEvent(
+                kind: .networkError,
+                metadata: [
+                    "context": context,
+                    "errorType": String(reflecting: type(of: error))
+                ]
+            )
             self?.events.append(event)
-            #if DEBUG
-            print("[Analytics][Error] \(context): \(error.localizedDescription)")
-            #endif
         }
     }
 }
-

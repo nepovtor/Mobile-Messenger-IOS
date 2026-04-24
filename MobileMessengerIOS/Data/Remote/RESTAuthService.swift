@@ -142,6 +142,14 @@ public struct AuthVerifyResponse: Codable {
     public let token: String
     public let userID: UUID
     public let displayName: String
+
+    public func asAuthenticatedSession() -> AuthenticatedSession {
+        AuthenticatedSession(
+            accessToken: token,
+            userID: userID,
+            displayName: displayName
+        )
+    }
 }
 
 public protocol ContactsNetworking: Sendable {
@@ -173,13 +181,11 @@ public struct RESTContactsService: ContactsNetworking {
     }
 
     public func listContacts() async throws -> [ContactDTO] {
-        var request = URLRequest(url: baseURL.appendingPathComponent("auth/contacts"))
-        request.httpMethod = "GET"
-        if let token = await authTokenProvider() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        } else {
-            throw AppError.unauthorized
-        }
+        let request = try await AuthorizedRequestFactory.makeRequest(
+            url: baseURL.appendingPathComponent("auth/contacts"),
+            method: "GET",
+            authTokenProvider: authTokenProvider
+        )
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -194,5 +200,26 @@ public struct RESTContactsService: ContactsNetworking {
         }
 
         return try JSONDecoder().decode([ContactDTO].self, from: data)
+    }
+}
+
+enum AuthorizedRequestFactory {
+    static func makeRequest(
+        url: URL,
+        method: String = "GET",
+        authTokenProvider: (@Sendable () async -> String?)? = nil
+    ) async throws -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let authTokenProvider {
+            guard let token = await authTokenProvider() else {
+                throw AppError.unauthorized
+            }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        return request
     }
 }

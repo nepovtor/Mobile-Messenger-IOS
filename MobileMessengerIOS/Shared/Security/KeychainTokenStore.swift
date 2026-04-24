@@ -7,7 +7,7 @@ public final class KeychainTokenStore: TokenStore {
 
     public init() {}
 
-    public func store(token: String) {
+    public func saveAccessToken(_ token: String) {
         guard let data = token.data(using: .utf8) else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -19,7 +19,7 @@ public final class KeychainTokenStore: TokenStore {
         SecItemAdd(attributes as CFDictionary, nil)
     }
 
-    public func retrieveToken() -> String? {
+    public func getAccessToken() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -37,7 +37,7 @@ public final class KeychainTokenStore: TokenStore {
         return token
     }
 
-    public func clear() {
+    public func clearAccessToken() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -55,15 +55,15 @@ public final class InMemoryTokenStore: TokenStore {
         self.token = token
     }
 
-    public func store(token: String) {
+    public func saveAccessToken(_ token: String) {
         self.token = token
     }
 
-    public func retrieveToken() -> String? {
+    public func getAccessToken() -> String? {
         token
     }
 
-    public func clear() {
+    public func clearAccessToken() {
         token = nil
     }
 }

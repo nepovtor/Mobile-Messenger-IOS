@@ -144,7 +144,9 @@ export class ChatService implements OnModuleInit {
 
     if (kind === "image") {
       if (!data.mediaID) {
-        throw new BadRequestException("Media ID is required for image messages");
+        throw new BadRequestException(
+          "Media ID is required for image messages",
+        );
       }
       const media = this.mediaStorageService.resolveConfirmedMedia(
         data.mediaID.toLowerCase(),

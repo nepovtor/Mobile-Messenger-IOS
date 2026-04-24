@@ -33,12 +33,7 @@ function resolveJwtSecret(): string {
     }),
   ],
   controllers: [ChatController, RealtimeController, MediaController],
-  providers: [
-    ChatService,
-    ChatGateway,
-    ChatEventsService,
-    MediaStorageService,
-  ],
+  providers: [ChatService, ChatGateway, ChatEventsService, MediaStorageService],
   exports: [ChatService, ChatEventsService, MediaStorageService],
 })
 export class ChatModule {}

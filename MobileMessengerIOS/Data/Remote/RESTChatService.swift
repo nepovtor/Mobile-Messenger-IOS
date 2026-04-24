@@ -181,7 +181,7 @@ public struct RESTChatService: ChatNetworking {
         guard let url = components?.url else {
             throw AppError.network(description: "Некорректный URL списка чатов")
         }
-        return try await perform(request: authenticatedRequest(url: url))
+        return try await perform(request: authorizedRequest(url: url))
     }
 
     public func createChat(title: String, participantContacts: [String]) async throws -> ServerChat {
@@ -207,7 +207,7 @@ public struct RESTChatService: ChatNetworking {
         guard let url = components?.url else {
             throw AppError.network(description: "Некорректный URL истории сообщений")
         }
-        return try await perform(request: authenticatedRequest(url: url))
+        return try await perform(request: authorizedRequest(url: url))
     }
 
     public func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage {
@@ -282,28 +282,15 @@ public struct RESTChatService: ChatNetworking {
     }
 
     private func authorizedRequest(path: String, method: String = "GET") async throws -> URLRequest {
-        authorizedRequest(url: baseURL.appendingPathComponent(path), method: method, token: try await requireToken())
+        try await authorizedRequest(url: baseURL.appendingPathComponent(path), method: method)
     }
 
-    private func authenticatedRequest(url: URL, method: String = "GET") async throws -> URLRequest {
-        authorizedRequest(url: url, method: method, token: try await requireToken())
-    }
-
-    private func authorizedRequest(url: URL, method: String = "GET", token: String? = nil) -> URLRequest {
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        return request
-    }
-
-    private func requireToken() async throws -> String {
-        guard let token = await authTokenProvider() else {
-            throw AppError.unauthorized
-        }
-        return token
+    private func authorizedRequest(url: URL, method: String = "GET") async throws -> URLRequest {
+        try await AuthorizedRequestFactory.makeRequest(
+            url: url,
+            method: method,
+            authTokenProvider: authTokenProvider
+        )
     }
 
     private func encode(_ payload: [String: Any?]) throws -> Data {
@@ -313,5 +300,20 @@ public struct RESTChatService: ChatNetworking {
             }
         }
         return try JSONSerialization.data(withJSONObject: filtered, options: [])
+    }
+}
+
+extension ServerChat {
+    func asDomainChat() throws -> Chat {
+        Chat(
+            id: id,
+            title: title,
+            lastMessagePreview: lastMessagePreview,
+            lastActivity: lastActivity,
+            unreadCount: unreadCount,
+            typingParticipants: typingParticipants,
+            participantNames: participantNames,
+            participantCount: participantCount
+        )
     }
 }

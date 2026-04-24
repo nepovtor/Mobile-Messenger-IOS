@@ -1,18 +1,23 @@
 .DS_Store
 
 # Xcode
-.derivedData/
 DerivedData/
+.derivedData/
 build/
 *.xcuserstate
+xcuserdata/
 *.xcworkspace/xcuserdata/
-MobileMessengerIOS.xcodeproj/xcuserdata/
+*.xcodeproj/xcuserdata/
 
-# Backend artifacts
-server/node_modules/
-server/dist/
+# Backend
+node_modules/
+dist/
+server/uploads/
 server/database.sqlite
-server/*.tsbuildinfo
+*.tsbuildinfo
 
 # Environment
-server/.env
+.env
+.env.*
+!.env.example
+!server/.env.example

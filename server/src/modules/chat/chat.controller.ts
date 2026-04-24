@@ -97,11 +97,7 @@ export class ChatController {
     @Param("messageID") messageID: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.chatService.markChatRead(
-      chatId,
-      request.user.sub,
-      messageID,
-    );
+    return this.chatService.markChatRead(chatId, request.user.sub, messageID);
   }
 
   @Post(":chatId/typing")

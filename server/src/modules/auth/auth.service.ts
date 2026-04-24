@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -50,22 +49,16 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly jwtService: JwtService,
   ) {}
 
-  async requestCode({ method, contact }: RequestCodeDto) {
+  async requestCode({ method }: RequestCodeDto) {
     if (method !== "phone") {
       throw new BadRequestException("Only phone method supported");
     }
-
-    const code = "123456";
-    this.logger.log(`Verification code generated for ${contact}`);
-    this.logger.debug(`Verification code for ${contact}: ${code}`);
 
     return { expiresIn: 300 };
   }
@@ -114,8 +107,7 @@ export class AuthService {
 
     const demoAccount = DEMO_ACCOUNTS.find(
       (account) =>
-        account.contact === contact &&
-        account.password === password.trim(),
+        account.contact === contact && account.password === password.trim(),
     );
 
     if (!demoAccount) {
@@ -134,7 +126,7 @@ export class AuthService {
     const user = await this.requireUser(userID);
 
     return {
-      userID: String((user as any).id),
+      userID: user.id,
       displayName: user.displayName,
       phone: user.phone,
     };
@@ -175,7 +167,7 @@ export class AuthService {
         return left.displayName.localeCompare(right.displayName);
       })
       .map((user) => ({
-        userID: String((user as any).id),
+        userID: user.id,
         displayName: user.displayName,
         contact: user.phone,
         isCurrentUser: user.id === currentUser.id,
@@ -196,7 +188,7 @@ export class AuthService {
     }
 
     return {
-      userID: String((user as any).id),
+      userID: user.id,
       displayName: user.displayName,
       phone: user.phone,
     };
@@ -218,7 +210,7 @@ export class AuthService {
 
   private async requireUser(userID: string): Promise<User> {
     const user = await this.userRepository.findOne({
-      where: { id: userID as never },
+      where: { id: userID },
     });
 
     if (!user) {
@@ -229,7 +221,7 @@ export class AuthService {
   }
 
   private createSessionResponse(user: User) {
-    const userID = String((user as any).id);
+    const userID = user.id;
 
     const token = this.jwtService.sign({
       sub: userID,

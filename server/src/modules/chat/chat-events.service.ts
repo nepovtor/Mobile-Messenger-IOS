@@ -1,6 +1,6 @@
 import { Injectable, MessageEvent } from "@nestjs/common";
-import { Observable, Subject } from "rxjs";
-import { finalize } from "rxjs/operators";
+import { Observable, Subject, interval, merge } from "rxjs";
+import { finalize, map, startWith } from "rxjs/operators";
 import type { Chat, Message } from "./chat.service";
 
 type Subscriber = {
@@ -30,9 +30,7 @@ export class ChatEventsService {
     });
     this.subscribers.set(chatID, chatSubscribers);
 
-    subject.next(
-      this.makeMessageEvent("connected", initialChat),
-    );
+    subject.next(this.makeMessageEvent("connected", initialChat));
 
     return subject.asObservable().pipe(
       finalize(() => {
@@ -56,12 +54,15 @@ export class ChatEventsService {
       subject,
     });
 
-    subject.next({
-      type: "keepalive",
-      data: { ok: true },
-    });
+    const keepalive$ = interval(15_000).pipe(
+      startWith(0),
+      map(() => ({
+        type: "keepalive",
+        data: { ok: true, ts: new Date().toISOString() },
+      })),
+    );
 
-    return subject.asObservable().pipe(
+    return merge(subject.asObservable(), keepalive$).pipe(
       finalize(() => {
         this.globalSubscribers.delete(subscriptionID);
       }),
@@ -101,9 +102,7 @@ export class ChatEventsService {
     await Promise.all(
       Array.from(subscribers.values()).map(async (subscriber) => {
         const chat = await resolveChatForUser(subscriber.userID);
-        subscriber.subject.next(
-          this.makeMessageEvent("chatUpdated", chat),
-        );
+        subscriber.subject.next(this.makeMessageEvent("chatUpdated", chat));
       }),
     );
   }

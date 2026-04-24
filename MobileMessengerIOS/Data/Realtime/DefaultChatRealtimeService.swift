@@ -2,36 +2,73 @@ import Foundation
 
 public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked Sendable {
     private let baseURL: URL
-    private let session: URLSession
     private let authTokenProvider: @Sendable () async -> String?
     private let analytics: AnalyticsService
     private let reachability: ReachabilityService
     private let featureFlags: FeatureFlags
     private let decoder: JSONDecoder
+    private let streamProvider: @Sendable (URLRequest) async throws -> RealtimeEventStream
+    private let sleep: @Sendable (UInt64) async -> Void
+    private let maxReconnectDelay: TimeInterval
+    private let heartbeatTimeout: TimeInterval
+
+    private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var state: ChatRealtimeConnectionState = .disconnected
     private var shouldMaintainConnection = false
+    private var reconnectAllowed = true
     private var isRealtimeTemporarilyDisabled = false
+    private var lastHeartbeatAt = Date.distantPast
     private var subscribedChats: Set<UUID> = []
     private var eventContinuations: [UUID: [UUID: AsyncStream<ChatRealtimeEvent>.Continuation]] = [:]
     private var globalEventContinuations: [UUID: AsyncStream<ChatRealtimeEnvelope>.Continuation] = [:]
     private var stateContinuations: [UUID: AsyncStream<ChatRealtimeConnectionState>.Continuation] = [:]
-    private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var connectionTask: Task<Void, Never>?
+    private var heartbeatMonitorTask: Task<Void, Never>?
 
-    public init(
+    init(
         baseURL: URL,
         session: URLSession = .shared,
         authTokenProvider: @escaping @Sendable () async -> String?,
         analytics: AnalyticsService,
         reachability: ReachabilityService,
-        featureFlags: FeatureFlags
+        featureFlags: FeatureFlags,
+        maxReconnectDelay: TimeInterval = 15,
+        heartbeatTimeout: TimeInterval = 45,
+        sleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        },
+        streamProvider: (@Sendable (URLRequest) async throws -> RealtimeEventStream)? = nil
     ) {
         self.baseURL = baseURL
-        self.session = session
         self.authTokenProvider = authTokenProvider
         self.analytics = analytics
         self.reachability = reachability
         self.featureFlags = featureFlags
+        self.maxReconnectDelay = maxReconnectDelay
+        self.heartbeatTimeout = heartbeatTimeout
+        self.sleep = sleep
+        self.streamProvider = streamProvider ?? { request in
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AppError.network(description: "Некорректный ответ realtime")
+            }
+
+            return RealtimeEventStream(
+                response: httpResponse,
+                lines: AsyncThrowingStream { continuation in
+                    Task {
+                        do {
+                            for try await line in bytes.lines {
+                                continuation.yield(line)
+                            }
+                            continuation.finish()
+                        } catch {
+                            continuation.finish(throwing: error)
+                        }
+                    }
+                }
+            )
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -68,23 +105,21 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         stateQueue.async { [weak self] in
             guard let self else { return }
             isRealtimeTemporarilyDisabled = false
+            reconnectAllowed = true
             shouldMaintainConnection = true
-            guard connectionTask == nil else { return }
-            updateState(.connecting(retry: 0))
-            connectionTask = Task { [weak self] in
-                await self?.runConnectionLoop(retry: 0)
-            }
+            startConnectionIfNeeded(retry: 0)
         }
     }
 
     public func deactivate() {
         stateQueue.async { [weak self] in
-            guard let self else { return }
-            shouldMaintainConnection = false
-            connectionTask?.cancel()
-            connectionTask = nil
-            updateState(.disconnected)
-            broadcast(event: .disconnected(nil))
+            self?.stopConnection(manual: true, reconnectAllowed: false, broadcastDisconnection: true)
+        }
+    }
+
+    public func handleLogout() {
+        stateQueue.async { [weak self] in
+            self?.stopConnection(manual: true, reconnectAllowed: false, broadcastDisconnection: true)
         }
     }
 
@@ -93,6 +128,9 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         stateQueue.async { [weak self] in
             guard let self else { return }
             subscribedChats.insert(chatID)
+            if shouldMaintainConnection {
+                startConnectionIfNeeded(retry: 0)
+            }
         }
     }
 
@@ -104,9 +142,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             eventContinuations[chatID] = nil
 
             guard subscribedChats.isEmpty, !shouldMaintainConnection else { return }
-            connectionTask?.cancel()
-            connectionTask = nil
-            updateState(.disconnected)
+            stopConnection(manual: true, reconnectAllowed: false, broadcastDisconnection: false)
         }
     }
 
@@ -157,54 +193,82 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         }
     }
 
+    private func startConnectionIfNeeded(retry: Int) {
+        guard connectionTask == nil else { return }
+        setState(.connecting(retry: retry))
+        connectionTask = Task { [weak self] in
+            await self?.runConnectionLoop(retry: retry)
+        }
+    }
+
     private func runConnectionLoop(retry: Int) async {
         guard let token = await authTokenProvider() else {
             broadcast(event: .disconnected(AppError.unauthorized))
-            clearConnection()
+            stateQueue.async { [weak self] in
+                self?.connectionTask = nil
+                self?.setState(.failed(reason: AppError.unauthorized.localizedDescription))
+            }
             return
         }
 
         if !reachability.isReachable {
-            try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
-            await runConnectionLoop(retry: retry + 1)
+            stateQueue.async { [weak self] in
+                self?.setState(.reconnecting(retry: retry + 1))
+            }
+            await scheduleReconnect(after: retry)
             return
         }
 
         do {
-            var request = URLRequest(url: baseURL.appendingPathComponent("realtime/events"))
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            var request = try await AuthorizedRequestFactory.makeRequest(
+                url: baseURL.appendingPathComponent("realtime/events"),
+                method: "GET",
+                authTokenProvider: { token }
+            )
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw AppError.network(description: "Некорректный ответ realtime")
-            }
-            if [404, 405, 501].contains(httpResponse.statusCode) {
-                analytics.track(error: AppError.network(description: "Realtime temporarily unavailable"), context: "sse_unsupported")
-                disableRealtimeLoop()
+            let stream = try await streamProvider(request)
+            if [404, 405, 501].contains(stream.response.statusCode) {
+                analytics.track(
+                    error: AppError.network(description: "Realtime temporarily unavailable"),
+                    context: "sse_unsupported"
+                )
+                stateQueue.async { [weak self] in
+                    self?.disableRealtimeLoop()
+                }
                 return
             }
-            guard 200..<300 ~= httpResponse.statusCode else {
+            guard 200..<300 ~= stream.response.statusCode else {
                 throw AppError.network(description: "Не удалось подключиться к SSE")
             }
 
-            updateState(.connected)
+            stateQueue.async { [weak self] in
+                guard let self else { return }
+                lastHeartbeatAt = Date()
+                setState(.connected)
+                restartHeartbeatMonitor()
+            }
             broadcast(event: .connected)
 
             var currentType = "message"
             var currentData: [String] = []
-            for try await line in bytes.lines {
+
+            for try await line in stream.lines {
                 if Task.isCancelled { break }
+                recordHeartbeat()
+
                 if line.isEmpty {
                     try handleEvent(type: currentType, data: currentData.joined(separator: "\n"))
                     currentType = "message"
                     currentData = []
                     continue
                 }
+
                 if line.hasPrefix("event:") {
                     currentType = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
                     continue
                 }
+
                 if line.hasPrefix("data:") {
                     currentData.append(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
                 }
@@ -212,13 +276,10 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         } catch {
             analytics.track(error: error, context: "sse_connect")
             broadcast(event: .disconnected(error))
-            updateState(.reconnecting(retry: retry + 1))
-            try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
-            guard !Task.isCancelled else {
-                clearConnection()
-                return
+            stateQueue.async { [weak self] in
+                self?.setState(.reconnecting(retry: retry + 1))
             }
-            await runConnectionLoop(retry: retry + 1)
+            await scheduleReconnect(after: retry)
             return
         }
 
@@ -226,10 +287,18 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             clearConnection()
             return
         }
+
         broadcast(event: .disconnected(nil))
-        updateState(.reconnecting(retry: retry + 1))
-        try? await Task.sleep(nanoseconds: UInt64(backoff(for: retry) * 1_000_000_000))
-        guard shouldReconnect else {
+        stateQueue.async { [weak self] in
+            self?.setState(.reconnecting(retry: retry + 1))
+        }
+        await scheduleReconnect(after: retry)
+    }
+
+    private func scheduleReconnect(after retry: Int) async {
+        let delay = UInt64(backoff(for: retry) * 1_000_000_000)
+        await sleep(delay)
+        guard !Task.isCancelled, shouldReconnect else {
             clearConnection()
             return
         }
@@ -238,6 +307,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     private func handleEvent(type: String, data: String) throws {
         guard !data.isEmpty, type != "keepalive" else { return }
+
         switch type {
         case "message.created":
             let payload = try decoder.decode(MessageCreatedEvent.self, from: Data(data.utf8))
@@ -276,40 +346,97 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     private func clearConnection() {
         stateQueue.async { [weak self] in
-            self?.connectionTask = nil
-            self?.updateState(.disconnected)
+            guard let self else { return }
+            connectionTask = nil
+            cancelHeartbeatMonitor()
+            setState(.disconnected)
+        }
+    }
+
+    private func stopConnection(manual: Bool, reconnectAllowed: Bool, broadcastDisconnection: Bool) {
+        self.reconnectAllowed = reconnectAllowed
+        shouldMaintainConnection = false
+        connectionTask?.cancel()
+        connectionTask = nil
+        cancelHeartbeatMonitor()
+        if broadcastDisconnection {
+            broadcast(event: .disconnected(nil))
+        }
+        if manual {
+            setState(.disconnected)
         }
     }
 
     private func disableRealtimeLoop() {
-        stateQueue.async { [weak self] in
-            guard let self else { return }
-            isRealtimeTemporarilyDisabled = true
-            shouldMaintainConnection = false
-            connectionTask?.cancel()
-            connectionTask = nil
-            updateState(.connected)
-        }
+        isRealtimeTemporarilyDisabled = true
+        stopConnection(manual: true, reconnectAllowed: false, broadcastDisconnection: false)
+        setState(.failed(reason: "Realtime temporarily unavailable"))
     }
 
     private var shouldReconnect: Bool {
         stateQueue.sync {
-            shouldMaintainConnection && !isRealtimeTemporarilyDisabled
+            shouldMaintainConnection && reconnectAllowed && !isRealtimeTemporarilyDisabled
         }
     }
 
-    private func updateState(_ newState: ChatRealtimeConnectionState) {
-        stateQueue.async { [weak self] in
-            self?.state = newState
-            self?.stateContinuations.values.forEach { continuation in
-                continuation.yield(newState)
+    private func restartHeartbeatMonitor() {
+        cancelHeartbeatMonitor()
+        guard heartbeatTimeout > 0 else { return }
+
+        heartbeatMonitorTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await sleep(UInt64((heartbeatTimeout / 2) * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+
+                let shouldFail = stateQueue.sync { [self] in
+                    self.state == .connected && Date().timeIntervalSince(self.lastHeartbeatAt) > self.heartbeatTimeout
+                }
+
+                if shouldFail {
+                    analytics.track(
+                        error: AppError.network(description: "Realtime heartbeat timeout"),
+                        context: "sse_heartbeat_timeout"
+                    )
+                    stateQueue.async { [weak self] in
+                        guard let self else { return }
+                        connectionTask?.cancel()
+                        connectionTask = nil
+                        setState(.reconnecting(retry: 1))
+                    }
+                    await scheduleReconnect(after: 0)
+                    return
+                }
             }
         }
     }
 
-    private func backoff(for retry: Int) -> Double {
-        min(pow(2.0, Double(retry)), 15)
+    private func cancelHeartbeatMonitor() {
+        heartbeatMonitorTask?.cancel()
+        heartbeatMonitorTask = nil
     }
+
+    private func recordHeartbeat() {
+        stateQueue.async { [weak self] in
+            self?.lastHeartbeatAt = Date()
+        }
+    }
+
+    private func setState(_ newState: ChatRealtimeConnectionState) {
+        state = newState
+        stateContinuations.values.forEach { continuation in
+            continuation.yield(newState)
+        }
+    }
+
+    private func backoff(for retry: Int) -> Double {
+        min(pow(2.0, Double(retry)), maxReconnectDelay)
+    }
+}
+
+struct RealtimeEventStream {
+    let response: HTTPURLResponse
+    let lines: AsyncThrowingStream<String, Error>
 }
 
 private struct MessageCreatedEvent: Decodable {

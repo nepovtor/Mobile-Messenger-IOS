@@ -5,6 +5,7 @@ public enum ChatRealtimeConnectionState: Equatable, Sendable {
     case connecting(retry: Int)
     case connected
     case reconnecting(retry: Int)
+    case failed(reason: String)
 }
 
 public enum ChatRealtimeEvent: Sendable {
@@ -28,6 +29,7 @@ public struct ChatRealtimeEnvelope: Sendable {
 public protocol ChatRealtimeService: Sendable {
     func activate()
     func deactivate()
+    func handleLogout()
     func connect(to chatID: UUID)
     func disconnect(from chatID: UUID)
     func observeEvents(for chatID: UUID) -> AsyncStream<ChatRealtimeEvent>

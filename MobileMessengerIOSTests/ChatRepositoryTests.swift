@@ -2,6 +2,43 @@ import XCTest
 @testable import MobileMessengerIOS
 
 final class ChatRepositoryTests: XCTestCase {
+    func testCreateChatUseCaseCallsRepositoryMethod() async throws {
+        let repository = MockChatRepository()
+        let useCase = CreateChatUseCase(repository: repository)
+
+        let chat = try await useCase(title: "Portfolio Chat", participantContacts: ["+15551230011"])
+
+        XCTAssertEqual(repository.createChatCalls.count, 1)
+        XCTAssertEqual(repository.createChatCalls.first?.title, "Portfolio Chat")
+        XCTAssertEqual(repository.createChatCalls.first?.participantContacts, ["+15551230011"])
+        XCTAssertEqual(chat.title, "Portfolio Chat")
+    }
+
+    func testSendMessageUseCasePassesChatIDAndTextToRepository() async throws {
+        let repository = MockChatRepository()
+        let useCase = SendMessageUseCase(repository: repository)
+        let chatID = UUID()
+
+        _ = try await useCase(chatID: chatID, text: "Hello")
+
+        XCTAssertEqual(repository.sendMessageCalls.count, 1)
+        XCTAssertEqual(repository.sendMessageCalls.first?.chatID, chatID)
+        XCTAssertEqual(repository.sendMessageCalls.first?.text, "Hello")
+    }
+
+    func testUseCaseReturnsReadableRepositoryError() async {
+        let repository = MockChatRepository()
+        repository.setSendMessageError(AppError.network(description: "Repository send failed"))
+        let useCase = SendMessageUseCase(repository: repository)
+
+        do {
+            _ = try await useCase(chatID: UUID(), text: "Hello")
+            XCTFail("Expected repository error")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Repository send failed")
+        }
+    }
+
     func testSendMessagePersistsOptimisticMessageThenReplacesItWithDeliveredVersion() async throws {
         let chatID = UUID()
         let localID = UUID()
@@ -204,6 +241,7 @@ private final class FakeRealtimeService: ChatRealtimeService, @unchecked Sendabl
 
     func activate() {}
     func deactivate() {}
+    func handleLogout() {}
     func connect(to chatID: UUID) {}
     func disconnect(from chatID: UUID) {}
 
@@ -250,4 +288,88 @@ private final class FakeReachabilityService: ReachabilityService, @unchecked Sen
 private struct FakeAnalyticsService: AnalyticsService {
     func track(event: AppAnalyticsEvent) {}
     func track(error: Error, context: String) {}
+}
+
+private final class MockChatRepository: ChatRepository, @unchecked Sendable {
+    struct CreateChatCall: Equatable {
+        let title: String
+        let participantContacts: [String]
+    }
+
+    struct SendMessageCall: Equatable {
+        let chatID: UUID
+        let text: String
+    }
+
+    private let lock = NSLock()
+    private(set) var createChatCalls: [CreateChatCall] = []
+    private(set) var sendMessageCalls: [SendMessageCall] = []
+    private var sendMessageError: Error?
+
+    func setSendMessageError(_ error: Error) {
+        lock.lock()
+        sendMessageError = error
+        lock.unlock()
+    }
+
+    func createChat(title: String, participantContacts: [String]) async throws -> Chat {
+        lock.lock()
+        createChatCalls.append(CreateChatCall(title: title, participantContacts: participantContacts))
+        lock.unlock()
+        return Chat(
+            id: UUID(),
+            title: title,
+            lastMessagePreview: nil,
+            lastActivity: Date(),
+            unreadCount: 0,
+            participantNames: participantContacts,
+            participantCount: max(participantContacts.count + 1, 1)
+        )
+    }
+
+    func cachedChats(searchQuery: String?) async -> [Chat] { [] }
+    func listChats(searchQuery: String?) async throws -> [Chat] { [] }
+    func observeChats() -> AsyncStream<[Chat]> { AsyncStream { _ in } }
+    func observeMessages(for chatID: UUID) -> AsyncStream<Message> { AsyncStream { _ in } }
+    func cachedHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async -> [Message] { [] }
+    func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] { [] }
+
+    func sendMessage(chatID: UUID, text: String, localID: UUID?, repliedTo: Message.Identifier?) async throws -> Message {
+        lock.lock()
+        sendMessageCalls.append(SendMessageCall(chatID: chatID, text: text))
+        let currentError = sendMessageError
+        lock.unlock()
+        if let currentError {
+            throw currentError
+        }
+        return Message(
+            id: Message.Identifier(chatID: chatID, messageID: UUID()),
+            localID: localID ?? UUID(),
+            authorID: SessionStore.Constants.currentUserID,
+            authorName: SessionStore.Constants.currentUserDisplayName,
+            text: text,
+            createdAt: Date(),
+            status: .delivered,
+            repliedTo: repliedTo
+        )
+    }
+
+    func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?, repliedTo: Message.Identifier?) async throws -> Message {
+        Message(
+            id: Message.Identifier(chatID: chatID, messageID: UUID()),
+            localID: localID ?? UUID(),
+            authorID: SessionStore.Constants.currentUserID,
+            authorName: SessionStore.Constants.currentUserDisplayName,
+            kind: .image,
+            text: caption ?? "",
+            createdAt: Date(),
+            status: .delivered,
+            repliedTo: repliedTo
+        )
+    }
+
+    func setTyping(chatID: UUID, isTyping: Bool) async {}
+    func retryPendingMessages(for chatID: UUID) async {}
+    func refreshForForeground() async {}
+    func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws {}
 }

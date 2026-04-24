@@ -300,21 +300,6 @@ public final class DefaultChatRepository: ChatRepository {
     }
 }
 
-private extension ServerChat {
-    func asDomainChat() throws -> Chat {
-        Chat(
-            id: id,
-            title: title,
-            lastMessagePreview: lastMessagePreview,
-            lastActivity: lastActivity,
-            unreadCount: unreadCount,
-            typingParticipants: typingParticipants,
-            participantNames: participantNames,
-            participantCount: participantCount
-        )
-    }
-}
-
 private actor PendingSendCoordinator {
     private var inFlight: Set<UUID> = []
 

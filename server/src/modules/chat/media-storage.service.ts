@@ -125,7 +125,8 @@ export class MediaStorageService {
   }
 
   private requireUpload(mediaID: string): MediaUploadRecord {
-    const record = this.uploads.get(mediaID.toLowerCase()) ?? this.uploads.get(mediaID);
+    const record =
+      this.uploads.get(mediaID.toLowerCase()) ?? this.uploads.get(mediaID);
     if (!record) {
       throw new NotFoundException("Media upload not found");
     }
