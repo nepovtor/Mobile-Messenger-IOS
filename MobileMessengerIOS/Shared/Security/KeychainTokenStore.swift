@@ -15,7 +15,10 @@ public final class KeychainTokenStore: TokenStore {
             kSecAttrAccount as String: account
         ]
         SecItemDelete(query as CFDictionary)
-        let attributes: [String: Any] = query.merging([kSecValueData as String: data]) { $1 }
+        let attributes: [String: Any] = query.merging([
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]) { $1 }
         SecItemAdd(attributes as CFDictionary, nil)
     }
 

@@ -43,7 +43,9 @@ type ReadPayload = {
   cors: false,
 })
 export class RealtimeGateway
-  implements OnGatewayConnection<RealtimeSocket>, OnGatewayDisconnect<RealtimeSocket>
+  implements
+    OnGatewayConnection<RealtimeSocket>,
+    OnGatewayDisconnect<RealtimeSocket>
 {
   private readonly logger = new Logger(RealtimeGateway.name);
 
@@ -89,7 +91,11 @@ export class RealtimeGateway
     const user = this.requireUser(client);
 
     try {
-      const message = await this.chatService.addRealtimeMessage(body.chatID, body, user);
+      const message = await this.chatService.addRealtimeMessage(
+        body.chatID,
+        body,
+        user,
+      );
       return {
         event: "message.send.ack",
         data: {

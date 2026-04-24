@@ -292,6 +292,38 @@ final class RealtimeServiceTests: XCTestCase {
         XCTAssertEqual(message.text, "Привет")
     }
 
+    func testMessageAckMarksPendingMessageSent() async throws {
+        let socket = FakeRealtimeSocketTask()
+        let service = makeRealtimeService(socket: socket)
+        let chatID = UUID()
+        let serverID = UUID()
+        let clientMessageID = UUID()
+
+        socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        service.activate()
+        _ = await nextState(from: service.observeConnectionState(), matching: { state in
+            if case .connected = state { return true }
+            return false
+        })
+
+        let sendTask = Task {
+            try await service.sendMessage(
+                chatID: chatID,
+                kind: .text,
+                text: "Привет",
+                mediaID: nil,
+                clientMessageID: clientMessageID
+            )
+        }
+
+        socket.enqueue(text: #"{"event":"message.send.ack","data":{"chatID":"\#(chatID.uuidString)","clientMessageId":"\#(clientMessageID.uuidString)","message":{"id":"\#(serverID.uuidString)","messageID":"\#(clientMessageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"Привет","mediaID":null,"mediaURL":null,"status":"delivered","createdAt":"2026-04-24T12:00:00Z"}}}"#)
+
+        let message = try await sendTask.value
+        XCTAssertEqual(message.id.messageID, serverID)
+        XCTAssertEqual(message.localID, clientMessageID)
+        XCTAssertEqual(message.status, .sent)
+    }
+
     func testLogoutClosesRealtimeConnection() async throws {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
@@ -328,6 +360,49 @@ final class RealtimeServiceTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 200_000_000)
 
         XCTAssertEqual(factoryCalls, 1)
+    }
+
+    func testPingFailureTriggersReconnect() async throws {
+        let firstSocket = FakeRealtimeSocketTask()
+        firstSocket.pingError = AppError.network(description: "Ping failed")
+        let secondSocket = FakeRealtimeSocketTask()
+        secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+
+        var factoryCalls = 0
+        let service = DefaultChatRealtimeService(
+            websocketURL: URL(string: "ws://localhost/realtime")!,
+            authTokenProvider: { "test-token" },
+            analytics: AnalyticsServiceSpy(),
+            reachability: ReachabilityServiceStub(isReachable: true),
+            featureFlags: FeatureFlags(
+                isRealtimeEnabled: true,
+                isPushEnabled: true,
+                isMediaEnabled: true,
+                isLoggingVerbose: false
+            ),
+            maxReconnectDelay: 0.01,
+            heartbeatInterval: 0.01,
+            sleep: { nanoseconds in
+                try? await Task.sleep(nanoseconds: min(nanoseconds, 20_000_000))
+            },
+            socketFactory: { _ in
+                defer { factoryCalls += 1 }
+                return factoryCalls == 0 ? firstSocket : secondSocket
+            }
+        )
+
+        firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+
+        service.activate()
+        let reconnectedState = await nextState(from: service.observeConnectionState(), matching: { state in
+            if case .connected = state, factoryCalls >= 2 {
+                return true
+            }
+            return false
+        })
+
+        XCTAssertNotNil(reconnectedState)
+        XCTAssertGreaterThanOrEqual(factoryCalls, 2)
     }
 
     private func makeRealtimeService(
@@ -554,6 +629,7 @@ private final class FakeRealtimeSocketTask: RealtimeSocketTask {
         var queued: [Result<URLSessionWebSocketTask.Message, Error>] = []
         var waiters: [CheckedContinuation<Result<URLSessionWebSocketTask.Message, Error>, Never>] = []
         var cancelCount = 0
+        var pingCount = 0
 
         func enqueue(_ item: Result<URLSessionWebSocketTask.Message, Error>) {
             if let waiter = waiters.first {
@@ -578,12 +654,21 @@ private final class FakeRealtimeSocketTask: RealtimeSocketTask {
             cancelCount += 1
             enqueue(.failure(CancellationError()))
         }
+
+        func recordPing() {
+            pingCount += 1
+        }
     }
 
     private let state = State()
+    var pingError: Error?
 
     var cancelCount: Int {
         get async { await state.cancelCount }
+    }
+
+    var pingCount: Int {
+        get async { await state.pingCount }
     }
 
     func enqueue(text: String) {
@@ -610,6 +695,13 @@ private final class FakeRealtimeSocketTask: RealtimeSocketTask {
             return message
         case .failure(let error):
             throw error
+        }
+    }
+
+    func sendPing() async throws {
+        await state.recordPing()
+        if let pingError {
+            throw pingError
         }
     }
 }

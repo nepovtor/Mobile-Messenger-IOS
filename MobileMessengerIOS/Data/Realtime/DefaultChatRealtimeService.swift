@@ -5,6 +5,7 @@ protocol RealtimeSocketTask: AnyObject, Sendable {
     func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?)
     func send(_ message: URLSessionWebSocketTask.Message) async throws
     func receive() async throws -> URLSessionWebSocketTask.Message
+    func sendPing() async throws
 }
 
 final class URLSessionRealtimeSocketTask: RealtimeSocketTask, @unchecked Sendable {
@@ -29,6 +30,18 @@ final class URLSessionRealtimeSocketTask: RealtimeSocketTask, @unchecked Sendabl
     func receive() async throws -> URLSessionWebSocketTask.Message {
         try await task.receive()
     }
+
+    func sendPing() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            task.sendPing { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
 }
 
 public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked Sendable {
@@ -42,6 +55,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private let socketFactory: @Sendable (URLRequest) -> RealtimeSocketTask
     private let sleep: @Sendable (UInt64) async -> Void
     private let maxReconnectDelay: TimeInterval
+    private let heartbeatInterval: TimeInterval
 
     private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var state: ChatRealtimeConnectionState = .disconnected
@@ -52,6 +66,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private var globalEventContinuations: [UUID: AsyncStream<ChatRealtimeEnvelope>.Continuation] = [:]
     private var stateContinuations: [UUID: AsyncStream<ChatRealtimeConnectionState>.Continuation] = [:]
     private var connectionTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
     private var socket: RealtimeSocketTask?
     private var pendingSends: [UUID: CheckedContinuation<Message, Error>] = [:]
 
@@ -63,6 +78,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         reachability: ReachabilityService,
         featureFlags: FeatureFlags,
         maxReconnectDelay: TimeInterval = 15,
+        heartbeatInterval: TimeInterval = 15,
         sleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
             try? await Task.sleep(nanoseconds: nanoseconds)
         },
@@ -74,6 +90,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         self.reachability = reachability
         self.featureFlags = featureFlags
         self.maxReconnectDelay = maxReconnectDelay
+        self.heartbeatInterval = heartbeatInterval
         self.sleep = sleep
         self.socketFactory = socketFactory ?? { request in
             URLSessionRealtimeSocketTask(task: session.webSocketTask(with: request))
@@ -328,6 +345,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             stateQueue.async { [weak self] in
                 self?.setState(.connected)
             }
+            startHeartbeat()
             broadcast(event: .connected)
         case "message.created":
             let payload = try decoder.decode(MessageCreatedEvent.self, from: eventData)
@@ -413,6 +431,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private func stopConnection(manual: Bool, reason: Error?) {
         reconnectAllowed = false
         shouldMaintainConnection = false
+        cancelHeartbeat()
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
         connectionTask?.cancel()
@@ -426,6 +445,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     private func clearConnection() {
         stateQueue.async { [weak self] in
+            self?.cancelHeartbeat()
             self?.socket = nil
             self?.connectionTask = nil
             self?.setState(.disconnected)
@@ -434,6 +454,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     private func clearSocketReference() {
         stateQueue.async { [weak self] in
+            self?.cancelHeartbeat()
             self?.socket = nil
         }
     }
@@ -441,7 +462,11 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private func resolvePendingSend(clientMessageID: UUID, message: ServerMessage) {
         stateQueue.async { [weak self] in
             guard let continuation = self?.pendingSends.removeValue(forKey: clientMessageID) else { return }
-            continuation.resume(returning: message.asDomainMessage(localID: clientMessageID))
+            continuation.resume(
+                returning: message
+                    .asDomainMessage(localID: clientMessageID)
+                    .updatingStatus(.sent)
+            )
         }
     }
 
@@ -480,6 +505,40 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
     private func backoff(for retry: Int) -> Double {
         min(pow(2.0, Double(retry)), maxReconnectDelay)
+    }
+
+    private func startHeartbeat() {
+        stateQueue.async { [weak self] in
+            guard let self else { return }
+            heartbeatTask?.cancel()
+            heartbeatTask = Task { [weak self] in
+                await self?.runHeartbeatLoop()
+            }
+        }
+    }
+
+    private func cancelHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+    }
+
+    private func runHeartbeatLoop() async {
+        while !Task.isCancelled {
+            let delay = UInt64(heartbeatInterval * 1_000_000_000)
+            await sleep(delay)
+            guard !Task.isCancelled else { return }
+
+            guard await currentState() == .connected else { continue }
+            guard let currentSocket = stateQueue.sync(execute: { socket }) else { continue }
+
+            do {
+                try await currentSocket.sendPing()
+            } catch {
+                analytics.track(error: error, context: "websocket_ping")
+                currentSocket.cancel(with: .goingAway, reason: nil)
+                break
+            }
+        }
     }
 }
 

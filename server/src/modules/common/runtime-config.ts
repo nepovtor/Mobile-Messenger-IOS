@@ -54,3 +54,27 @@ export function getCorsOrigins(): string[] {
 
   return ["http://localhost:3000", "http://127.0.0.1:3000"];
 }
+
+export function getAuthRateLimitWindowMs(): number {
+  const value = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || "60000");
+  return Number.isFinite(value) && value > 0 ? value : 60000;
+}
+
+export function getAuthRateLimitMaxRequests(): number {
+  const value = Number(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || "20");
+  return Number.isFinite(value) && value > 0 ? value : 20;
+}
+
+export function isDemoChatSeedingEnabled(): boolean {
+  return readBooleanEnv("CHAT_ENABLE_DEMO_SEEDING", !isProductionEnv());
+}
+
+export function getRealtimeHeartbeatIntervalMs(): number {
+  const value = Number(process.env.REALTIME_HEARTBEAT_INTERVAL_MS || "15000");
+  return Number.isFinite(value) && value > 0 ? value : 15000;
+}
+
+export function getRealtimeHeartbeatTimeoutMs(): number {
+  const value = Number(process.env.REALTIME_HEARTBEAT_TIMEOUT_MS || "45000");
+  return Number.isFinite(value) && value > 0 ? value : 45000;
+}

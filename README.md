@@ -1,54 +1,93 @@
 # Mobile Messenger iOS
 
-Минимальный рабочий репозиторий с двумя частями:
+[![CI](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/workflows/swift.yml/badge.svg)](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/workflows/swift.yml)
 
-- `MobileMessengerIOS/` и `MobileMessengerIOS.xcodeproj/` — iOS-клиент на SwiftUI.
-- `server/` — локальный backend на NestJS + PostgreSQL + MinIO.
+Portfolio-ready messenger MVP with a SwiftUI iOS client and a NestJS backend. REST is used for auth, chat list/history, and media upload. Native WebSocket is used for realtime delivery, typing, read events, and message send acknowledgements.
 
-В репозитории сейчас нет Tailwind, web-фронтенда и CocoaPods. README ниже описывает только то, что реально существует и запускается.
+## Architecture
 
-## Структура
+Text diagram:
 
 ```text
-Mobile-Messenger-IOS/
-├── .github/workflows/swift.yml
-├── MobileMessengerIOS/
-├── MobileMessengerIOS.xcodeproj/
-├── server/
-│   ├── docker-compose.dev.yml
-│   ├── package.json
-│   └── src/
-└── README.md
+SwiftUI Views
+  -> ViewModels / UseCases
+    -> ChatRepository
+      -> RESTChatService (auth, chats, history, media)
+      -> DefaultChatRealtimeService (URLSessionWebSocketTask)
+        -> NestJS REST Controllers
+        -> NestJS WebSocketGateway (/realtime, native ws)
+          -> ChatService / RealtimeService / AuthService
+            -> PostgreSQL
+            -> MinIO
 ```
 
-## Требования
+## Implemented
 
-- macOS с установленным Xcode
-- Node.js 20+
-- Docker Desktop
+- Native WebSocket realtime on `/realtime` with JWT handshake and connection registry.
+- Heartbeat ping/pong, dead connection cleanup, reconnect with exponential backoff.
+- Stable message lifecycle: `sending`, `sent`, `delivered`, `read`, `failed`, retry for failed local messages.
+- REST auth, chat list, history, media upload, read receipts, typing.
+- Demo accounts with seeded chats for predictable demo flow.
+- Backend e2e tests, backend heartbeat unit test, iOS unit tests, GitHub Actions CI.
+
+## Planned
+
+- Push notification delivery from backend.
+- Real media thumbnails and richer attachment previews.
+- Presence / online indicators and stronger delivery semantics.
+- Snapshot screenshots for App Store style presentation.
+
+## Screenshots
+
+Screenshots placeholder:
+
+- `docs/screenshots/chat-list.png`
+- `docs/screenshots/chat-thread.png`
+- `docs/screenshots/auth.png`
+
+## Demo Accounts
+
+Backend seeds 5 demo users and 4 deterministic chats in development.
+
+- `+15551230011` / `demo1111` — Анна Demo
+  sees: `Анна и Борис`, `Анна и Вера`, `Demo Team`
+  does not see: `Борис и Глеб`
+- `+15551230012` / `demo2222` — Борис Demo
+  sees: `Анна и Борис`, `Борис и Глеб`, `Demo Team`
+  does not see: `Анна и Вера`
+- `+15551230013` / `demo3333` — Вера Demo
+  sees: `Анна и Вера`
+  does not see: `Анна и Борис`, `Борис и Глеб`, `Demo Team`
+- `+15551230014` / `demo4444` — Глеб Demo
+  sees: `Борис и Глеб`, `Demo Team`
+  does not see: `Анна и Вера`
+- `+15551230015` / `demo5555` — Даша Demo
+  sees: `Demo Team`
+  does not see: `Анна и Борис`, `Анна и Вера`, `Борис и Глеб`
+
+## Demo Flow
+
+1. Start backend and open the iOS app.
+2. Login as Анна Demo with `+15551230011` / `demo1111`.
+3. Open `Анна и Борис` or `Demo Team`.
+4. Send a message and watch it move from `sending` to `sent`.
+5. Login as Борис Demo with `+15551230012` / `demo2222`.
+6. Open the shared chat and verify realtime `message.created` without refresh.
 
 ## Backend
 
-Локальная инфраструктура:
+Requirements:
 
-- PostgreSQL: `localhost:5432`
-- MinIO API: `http://localhost:9000`
-- MinIO Console: `http://localhost:9001`
+- Node.js 20+
+- Docker Desktop
 
-Запуск:
+Run local backend:
 
 ```bash
 make server
 ```
 
-Команда из корня репозитория сама:
-
-- поднимет PostgreSQL и MinIO через Docker Compose;
-- создаст `server/.env` из `server/.env.example`, если файла ещё нет;
-- установит зависимости `server/`, если они ещё не установлены;
-- запустит backend в dev-режиме.
-
-Ручной эквивалент:
+Manual flow:
 
 ```bash
 docker compose -f server/docker-compose.dev.yml up -d
@@ -58,34 +97,17 @@ npm install
 npm run start:dev
 ```
 
-Проверка:
+Key endpoints:
 
-- `GET http://localhost:8080/api/health`
-- `GET http://localhost:8080/api/version`
-- realtime: native WebSocket `ws://localhost:8080/realtime`
+- REST base: `http://localhost:8080/api`
+- WebSocket realtime: `ws://localhost:8080/realtime`
+- Legacy SSE fallback: `GET /api/realtime/events`
 
-Realtime now uses native WebSocket:
+## iOS
 
-- REST остается для auth, списка чатов, истории сообщений и media upload.
-- Native WebSocket используется для `connection.ready`, `message.send` с ack, `message.created`, typing и read events.
-- Legacy SSE endpoint `/api/realtime/events` можно держать только для обратной совместимости, но основным realtime больше не считается.
+Open `MobileMessengerIOS.xcodeproj`, choose the `MobileMessengerIOS` scheme, and run on a simulator.
 
-## iOS-приложение
-
-Debug-конфигурация по умолчанию смотрит в публичный backend, а не в `localhost`.
-
-- Базовый debug endpoint задается в `MobileMessengerIOS/Configurations/Debug.xcconfig`.
-- Локальная разработка через публичный tunnel генерирует файл `MobileMessengerIOS/Configurations/Debug.public.xcconfig`, который переопределяет debug endpoint.
-- После `make up` приложение будет использовать публичный Cloudflare tunnel URL вида `https://...trycloudflare.com/api`.
-
-Запуск из Xcode:
-
-1. Откройте `MobileMessengerIOS.xcodeproj`.
-2. Выберите схему `MobileMessengerIOS`.
-3. Выберите любой iPhone Simulator.
-4. Нажмите `Run`.
-
-Проверка сборки из терминала:
+Build from terminal:
 
 ```bash
 xcodebuild \
@@ -96,80 +118,33 @@ xcodebuild \
   build
 ```
 
-Полный локальный flow с публичным endpoint:
-
-```bash
-make up
-```
-
-Команда:
-
-- поднимет backend и инфраструктуру;
-- откроет публичный Cloudflare tunnel;
-- сгенерирует `Debug.public.xcconfig` для iOS, чтобы debug-сборка использовала публичный URL вместо локального.
-
-## Демо-авторизация
-
-Локальный backend в development-режиме автоматически подготавливает демо-аккаунты:
-
-- `+15551230011` / `demo1111` — Анна Demo
-- `+15551230012` / `demo2222` — Борис Demo
-
-Для входа по коду подтверждения backend теперь генерирует одноразовый debug-код и, если в `.env` включен `AUTH_EXPOSE_DEBUG_CODE=true`, возвращает его в ответе `POST /api/auth/request`.
-
-Безопасные флаги окружения для backend:
-
-- `JWT_SECRET` обязателен и больше не имеет fail-open fallback.
-- `DB_SYNCHRONIZE` управляет авто-синхронизацией схемы и по умолчанию предназначен только для локальной разработки.
-- `AUTH_ENABLE_DEMO_ACCOUNTS`, `AUTH_ALLOW_PASSWORD_LOGIN`, `AUTH_EXPOSE_DEBUG_CODE` позволяют держать демо-поведение только в local/dev.
-- `CORS_ORIGINS` ограничивает список разрешенных браузерных origin вместо полностью открытого CORS.
-
-## Тесты
-
-iOS unit-тесты:
-
-```bash
-xcodebuild \
-  -project MobileMessengerIOS.xcodeproj \
-  -scheme MobileMessengerIOS \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  CODE_SIGNING_ALLOWED=NO \
-  test
-```
-
-Backend e2e:
-
-```bash
-cd server
-npm install
-npm test
-npm run build
-```
-
-## Demo Flow
-
-1. Login as user A (`+15551230011` / `demo1111`).
-2. Open a chat with user B.
-3. Send a message from iOS over native WebSocket.
-4. Login as user B (`+15551230012` / `demo2222`).
-5. See `message.created` arrive in realtime without manual refresh.
-
 ## Testing Commands
 
 ```bash
+cd server && npm ci
+cd server && npm run lint
 cd server && npm test
 cd server && npm run build
 xcodebuild \
   -project MobileMessengerIOS.xcodeproj \
   -scheme MobileMessengerIOS \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1' \
+  -destination 'platform=iOS Simulator,id=5B35CA4E-0218-4562-98CD-22DDBFD7E68D' \
   CODE_SIGNING_ALLOWED=NO \
   test
 ```
 
-## GitHub / CI
+## Security Notes
 
-- В git должны храниться только исходники и нужные проектные файлы.
-- Пользовательские Xcode-артефакты, `.DS_Store`, локальные `.env`, `build/`, `server/dist/` и `server/node_modules/` игнорируются.
-- Сгенерированный `MobileMessengerIOS/Configurations/Debug.public.xcconfig` не хранится в git и пересоздается через `make configure-ios` / `make up`.
-- GitHub Actions теперь запускает iOS unit-тесты и backend pipeline: `lint` + `e2e` + `build`.
+- JWT is required for REST and WebSocket handshake; invalid or expired tokens are rejected.
+- Auth endpoints are rate limited.
+- iOS auth token is stored in Keychain with `ThisDeviceOnly` accessibility.
+- Logout clears token, current user session, local chats/messages, and closes realtime connection.
+- Reconnect is disabled for explicit logout or manual disconnect.
+- Sensitive auth values are not written to analytics/logging.
+
+## CI
+
+GitHub Actions runs:
+
+- backend: `npm ci`, `npm run lint`, `npm test`, `npm run build`
+- iOS: `xcodebuild test`

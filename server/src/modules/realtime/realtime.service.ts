@@ -1,6 +1,15 @@
-import { Injectable, MessageEvent } from "@nestjs/common";
+import {
+  Injectable,
+  MessageEvent,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import { Observable, Subject, interval, map, merge } from "rxjs";
 import { WebSocket } from "ws";
+import {
+  getRealtimeHeartbeatIntervalMs,
+  getRealtimeHeartbeatTimeoutMs,
+} from "../common/runtime-config";
 
 export interface RealtimeEventEnvelope<T = unknown> {
   event: string;
@@ -12,14 +21,38 @@ interface RealtimePayload {
   payload: unknown;
 }
 
+type ConnectionMeta = {
+  userID: string;
+  lastPongAt: number;
+  pongListener: () => void;
+  closeListener: () => void;
+};
+
 @Injectable()
-export class RealtimeService {
+export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly userStreams = new Map<string, Subject<MessageEvent>>();
   private readonly userConnections = new Map<string, Set<WebSocket>>();
+  private readonly connectionMeta = new Map<WebSocket, ConnectionMeta>();
   private readonly typingState = new Map<
     string,
     Map<string, { userID: string; displayName: string }>
   >();
+  private readonly heartbeatIntervalMs = getRealtimeHeartbeatIntervalMs();
+  private readonly heartbeatTimeoutMs = getRealtimeHeartbeatTimeoutMs();
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+
+  onModuleInit(): void {
+    this.heartbeatTimer = setInterval(() => {
+      this.flushHeartbeat();
+    }, this.heartbeatIntervalMs);
+  }
+
+  onModuleDestroy(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
 
   subscribe(userID: string): Observable<MessageEvent> {
     const stream = this.getStream(userID);
@@ -40,6 +73,26 @@ export class RealtimeService {
     const sockets = this.userConnections.get(userID) ?? new Set<WebSocket>();
     sockets.add(socket);
     this.userConnections.set(userID, sockets);
+
+    const pongListener = () => {
+      const meta = this.connectionMeta.get(socket);
+      if (meta) {
+        meta.lastPongAt = Date.now();
+        this.connectionMeta.set(socket, meta);
+      }
+    };
+    const closeListener = () => {
+      this.unregisterConnection(userID, socket);
+    };
+
+    socket.on("pong", pongListener);
+    socket.on("close", closeListener);
+    this.connectionMeta.set(socket, {
+      userID,
+      lastPongAt: Date.now(),
+      pongListener,
+      closeListener,
+    });
   }
 
   unregisterConnection(userID: string, socket: WebSocket): void {
@@ -52,6 +105,13 @@ export class RealtimeService {
     if (sockets.size === 0) {
       this.userConnections.delete(userID);
     }
+
+    const meta = this.connectionMeta.get(socket);
+    if (meta) {
+      socket.off("pong", meta.pongListener);
+      socket.off("close", meta.closeListener);
+      this.connectionMeta.delete(socket);
+    }
   }
 
   sendToUser<T>(userID: string, event: RealtimeEventEnvelope<T>): void {
@@ -62,12 +122,15 @@ export class RealtimeService {
         event.data === null
           ? {}
           : typeof event.data === "string" || typeof event.data === "object"
-          ? event.data
-          : { value: event.data },
+            ? event.data
+            : { value: event.data },
     });
   }
 
-  broadcastToUsers<T>(userIDs: string[], event: RealtimeEventEnvelope<T>): void {
+  broadcastToUsers<T>(
+    userIDs: string[],
+    event: RealtimeEventEnvelope<T>,
+  ): void {
     const uniqueUserIDs = new Set(userIDs);
     for (const userID of uniqueUserIDs) {
       this.sendToUser(userID, event);
@@ -126,7 +189,10 @@ export class RealtimeService {
     );
   }
 
-  private sendEnvelope<T>(userID: string, event: RealtimeEventEnvelope<T>): void {
+  private sendEnvelope<T>(
+    userID: string,
+    event: RealtimeEventEnvelope<T>,
+  ): void {
     const sockets = this.userConnections.get(userID);
     if (!sockets?.size) {
       return;
@@ -137,6 +203,25 @@ export class RealtimeService {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(payload);
       }
+    }
+  }
+
+  private flushHeartbeat(): void {
+    const now = Date.now();
+
+    for (const [socket, meta] of this.connectionMeta.entries()) {
+      if (socket.readyState !== WebSocket.OPEN) {
+        this.unregisterConnection(meta.userID, socket);
+        continue;
+      }
+
+      if (now - meta.lastPongAt > this.heartbeatTimeoutMs) {
+        socket.terminate();
+        this.unregisterConnection(meta.userID, socket);
+        continue;
+      }
+
+      socket.ping();
     }
   }
 

@@ -8,6 +8,7 @@ import {
   NotFoundException,
   ValidationPipe,
 } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { WsAdapter } from "@nestjs/platform-ws";
 import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -95,6 +96,7 @@ class FakeMediaService {
 
 type TestAppOptions = {
   allowPasswordLogin?: boolean;
+  authRateLimitMaxRequests?: number;
 };
 
 async function createTestApp(
@@ -108,6 +110,11 @@ async function createTestApp(
     ? "true"
     : "false";
   process.env.AUTH_EXPOSE_DEBUG_CODE = "true";
+  process.env.CHAT_ENABLE_DEMO_SEEDING = "false";
+  process.env.AUTH_RATE_LIMIT_WINDOW_MS = "60000";
+  process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = String(
+    options.authRateLimitMaxRequests ?? 20,
+  );
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -174,12 +181,19 @@ function realtimeURL(app: INestApplication): string {
   return `ws://127.0.0.1:${port}/realtime`;
 }
 
+type SocketEvent<TData = unknown> = {
+  event: string;
+  data: TData;
+};
+
 async function openRealtimeSocket(
   app: INestApplication,
   token: string,
 ): Promise<{
   socket: WebSocket;
-  nextEvent: (eventName: string) => Promise<{ event: string; data: any }>;
+  nextEvent: <TData = unknown>(
+    eventName: string,
+  ) => Promise<SocketEvent<TData>>;
 }> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(realtimeURL(app), {
@@ -187,14 +201,11 @@ async function openRealtimeSocket(
         Authorization: `Bearer ${token}`,
       },
     });
-    const queue: Array<{ event: string; data: any }> = [];
-    const waiters = new Map<
-      string,
-      Array<(event: { event: string; data: any }) => void>
-    >();
+    const queue: SocketEvent[] = [];
+    const waiters = new Map<string, Array<(event: SocketEvent) => void>>();
 
     socket.on("message", (raw: Buffer) => {
-      const parsed = JSON.parse(raw.toString()) as { event: string; data: any };
+      const parsed = JSON.parse(raw.toString()) as SocketEvent;
       const waiting = waiters.get(parsed.event);
       if (waiting?.length) {
         const resolveNext = waiting.shift();
@@ -218,31 +229,35 @@ async function openRealtimeSocket(
       cleanup();
       resolve({
         socket,
-        nextEvent: async (eventName: string) => {
-          const queuedIndex = queue.findIndex((item) => item.event === eventName);
+        nextEvent: async <TData = unknown>(eventName: string) => {
+          const queuedIndex = queue.findIndex(
+            (item) => item.event === eventName,
+          );
           if (queuedIndex >= 0) {
-            return queue.splice(queuedIndex, 1)[0];
+            return queue.splice(queuedIndex, 1)[0] as SocketEvent<TData>;
           }
 
-          return new Promise((resolveEvent, rejectEvent) => {
-            const timeout = setTimeout(() => {
+          return new Promise<SocketEvent<TData>>(
+            (resolveEvent, rejectEvent) => {
+              const timeout = setTimeout(() => {
+                const pending = waiters.get(eventName) ?? [];
+                waiters.set(
+                  eventName,
+                  pending.filter((callback) => callback !== wrappedResolve),
+                );
+                rejectEvent(new Error(`Timed out waiting for ${eventName}`));
+              }, 2000);
+
+              const wrappedResolve = (event: SocketEvent) => {
+                clearTimeout(timeout);
+                resolveEvent(event as SocketEvent<TData>);
+              };
+
               const pending = waiters.get(eventName) ?? [];
-              waiters.set(
-                eventName,
-                pending.filter((callback) => callback !== wrappedResolve),
-              );
-              rejectEvent(new Error(`Timed out waiting for ${eventName}`));
-            }, 2000);
-
-            const wrappedResolve = (event: { event: string; data: any }) => {
-              clearTimeout(timeout);
-              resolveEvent(event);
-            };
-
-            const pending = waiters.get(eventName) ?? [];
-            pending.push(wrappedResolve);
-            waiters.set(eventName, pending);
-          });
+              pending.push(wrappedResolve);
+              waiters.set(eventName, pending);
+            },
+          );
         },
       });
     });
@@ -527,7 +542,7 @@ test("valid token can connect to realtime websocket", async (t) => {
     client.socket.close();
   });
 
-  const ready = await client.nextEvent("connection.ready");
+  const ready = await client.nextEvent<{ userID: string }>("connection.ready");
   assert.equal(ready.data.userID, anna.userID);
 });
 
@@ -541,6 +556,47 @@ test("invalid token is rejected by realtime websocket", async (t) => {
     const socket = new WebSocket(realtimeURL(app), {
       headers: {
         Authorization: "Bearer invalid-token",
+      },
+    });
+
+    socket.once("close", (code) => resolve(code));
+    socket.once("error", () => {
+      // close event is the assertion source here
+    });
+    setTimeout(() => reject(new Error("Socket was not closed")), 2000);
+  });
+
+  assert.equal(closeCode, 4001);
+});
+
+test("expired token is rejected by REST and realtime websocket", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const jwtService = app.get(JwtService);
+  const expiredToken = await jwtService.signAsync(
+    {
+      sub: anna.userID,
+      displayName: anna.displayName,
+    },
+    {
+      secret: process.env.JWT_SECRET,
+      expiresIn: -1,
+    },
+  );
+
+  await request(app.getHttpServer())
+    .get("/api/auth/me")
+    .set("Authorization", `Bearer ${expiredToken}`)
+    .expect(401);
+
+  const closeCode = await new Promise<number>((resolve, reject) => {
+    const socket = new WebSocket(realtimeURL(app), {
+      headers: {
+        Authorization: `Bearer ${expiredToken}`,
       },
     });
 
@@ -591,8 +647,14 @@ test("participant can send message and receive ack plus broadcast", async (t) =>
     text: "Привет по ws",
   });
 
-  const ack = await annaClient.nextEvent("message.send.ack");
-  const broadcast = await borisClient.nextEvent("message.created");
+  const ack = await annaClient.nextEvent<{
+    clientMessageId: string;
+    message: { text: string };
+  }>("message.send.ack");
+  const broadcast = await borisClient.nextEvent<{
+    chatID: string;
+    message: { text: string };
+  }>("message.created");
 
   assert.equal(ack.data.clientMessageId, clientMessageId);
   assert.equal(ack.data.message.text, "Привет по ws");
@@ -607,7 +669,7 @@ test("non-participant cannot send message over realtime websocket", async (t) =>
   });
 
   const anna = await authenticateByCode(app, "+15551230011");
-  const boris = await authenticateByCode(app, "+15551230012");
+  await authenticateByCode(app, "+15551230012");
   const vera = await authenticateByCode(app, "+15551230013");
 
   const createChatResponse = await request(app.getHttpServer())
@@ -634,8 +696,64 @@ test("non-participant cannot send message over realtime websocket", async (t) =>
     text: "Я не участник",
   });
 
-  const failed = await veraClient.nextEvent("message.failed");
+  const failed = await veraClient.nextEvent<{ reason: string }>(
+    "message.failed",
+  );
   assert.match(String(failed.data.reason), /Chat not found for current user/);
+});
+
+test("non-participant cannot read messages or send REST messages", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+  const vera = await authenticateByCode(app, "+15551230013");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+
+  await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Только для участников",
+    })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .get(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${vera.token}`)
+    .expect(404);
+
+  await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${vera.token}`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Чужое сообщение",
+    })
+    .expect(404);
+
+  const participantMessages = await request(app.getHttpServer())
+    .get(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(participantMessages.body.length, 1);
 });
 
 test("duplicate clientMessageId does not create duplicate message", async (t) => {
@@ -671,7 +789,9 @@ test("duplicate clientMessageId does not create duplicate message", async (t) =>
     kind: "text",
     text: "Дубликат",
   });
-  const firstAck = await annaClient.nextEvent("message.send.ack");
+  const firstAck = await annaClient.nextEvent<{ message: { id: string } }>(
+    "message.send.ack",
+  );
 
   sendRealtimeEvent(annaClient.socket, "message.send", {
     chatID,
@@ -679,7 +799,9 @@ test("duplicate clientMessageId does not create duplicate message", async (t) =>
     kind: "text",
     text: "Дубликат",
   });
-  const secondAck = await annaClient.nextEvent("message.send.ack");
+  const secondAck = await annaClient.nextEvent<{ message: { id: string } }>(
+    "message.send.ack",
+  );
 
   assert.equal(firstAck.data.message.id, secondAck.data.message.id);
 
@@ -690,4 +812,29 @@ test("duplicate clientMessageId does not create duplicate message", async (t) =>
 
   assert.equal(messagesResponse.body.length, 1);
   assert.equal(messagesResponse.body[0].messageID, clientMessageId);
+});
+
+test("auth endpoints are rate limited", async (t) => {
+  const app = await createTestApp({
+    allowPasswordLogin: true,
+    authRateLimitMaxRequests: 2,
+  });
+  t.after(async () => {
+    await app.close();
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ method: "phone", contact: "+15551230011" })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ method: "phone", contact: "+15551230011" })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ method: "phone", contact: "+15551230011" })
+    .expect(429);
 });
