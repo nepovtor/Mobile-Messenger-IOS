@@ -14,6 +14,9 @@ export declare class ChatController {
         ok: true;
     }>;
     setTyping(chatID: string, dto: SetTypingDto, user: AuthenticatedUser): Promise<{
+        chatID: string;
+        userID: string;
+        isTyping: boolean;
         typingParticipants: string[];
     }>;
 }

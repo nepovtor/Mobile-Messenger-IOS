@@ -75,8 +75,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const message = await this.chatService.addMessage(
         data.chatId,
-        data,
-        user.sub,
+        {
+          messageID: data.messageID,
+          kind: data.kind,
+          text: data.text,
+          mediaID: data.mediaID,
+        },
+        user,
       );
       client.to(data.chatId).emit("newMessage", message);
       client.emit("messageSent", message);

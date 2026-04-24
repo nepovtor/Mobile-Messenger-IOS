@@ -9,6 +9,11 @@ exports.areDemoAccountsEnabled = areDemoAccountsEnabled;
 exports.isPasswordLoginEnabled = isPasswordLoginEnabled;
 exports.shouldExposeDebugAuthCode = shouldExposeDebugAuthCode;
 exports.getCorsOrigins = getCorsOrigins;
+exports.getAuthRateLimitWindowMs = getAuthRateLimitWindowMs;
+exports.getAuthRateLimitMaxRequests = getAuthRateLimitMaxRequests;
+exports.isDemoChatSeedingEnabled = isDemoChatSeedingEnabled;
+exports.getRealtimeHeartbeatIntervalMs = getRealtimeHeartbeatIntervalMs;
+exports.getRealtimeHeartbeatTimeoutMs = getRealtimeHeartbeatTimeoutMs;
 function getNodeEnv() {
     return process.env.NODE_ENV?.trim() || "development";
 }
@@ -52,5 +57,24 @@ function getCorsOrigins() {
         return [];
     }
     return ["http://localhost:3000", "http://127.0.0.1:3000"];
+}
+function getAuthRateLimitWindowMs() {
+    const value = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || "60000");
+    return Number.isFinite(value) && value > 0 ? value : 60000;
+}
+function getAuthRateLimitMaxRequests() {
+    const value = Number(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || "20");
+    return Number.isFinite(value) && value > 0 ? value : 20;
+}
+function isDemoChatSeedingEnabled() {
+    return readBooleanEnv("CHAT_ENABLE_DEMO_SEEDING", !isProductionEnv());
+}
+function getRealtimeHeartbeatIntervalMs() {
+    const value = Number(process.env.REALTIME_HEARTBEAT_INTERVAL_MS || "15000");
+    return Number.isFinite(value) && value > 0 ? value : 15000;
+}
+function getRealtimeHeartbeatTimeoutMs() {
+    const value = Number(process.env.REALTIME_HEARTBEAT_TIMEOUT_MS || "45000");
+    return Number.isFinite(value) && value > 0 ? value : 45000;
 }
 //# sourceMappingURL=runtime-config.js.map

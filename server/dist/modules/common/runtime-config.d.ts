@@ -7,3 +7,8 @@ export declare function areDemoAccountsEnabled(): boolean;
 export declare function isPasswordLoginEnabled(): boolean;
 export declare function shouldExposeDebugAuthCode(): boolean;
 export declare function getCorsOrigins(): string[];
+export declare function getAuthRateLimitWindowMs(): number;
+export declare function getAuthRateLimitMaxRequests(): number;
+export declare function isDemoChatSeedingEnabled(): boolean;
+export declare function getRealtimeHeartbeatIntervalMs(): number;
+export declare function getRealtimeHeartbeatTimeoutMs(): number;

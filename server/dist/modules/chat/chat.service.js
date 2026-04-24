@@ -22,6 +22,7 @@ const media_entity_1 = require("../../entities/media.entity");
 const message_entity_1 = require("../../entities/message.entity");
 const user_entity_1 = require("../../entities/user.entity");
 const contact_utils_1 = require("../common/contact.utils");
+const runtime_config_1 = require("../common/runtime-config");
 const media_service_1 = require("../media/media.service");
 const realtime_service_1 = require("../realtime/realtime.service");
 let ChatService = class ChatService {
@@ -33,6 +34,12 @@ let ChatService = class ChatService {
         this.mediaRepository = mediaRepository;
         this.realtimeService = realtimeService;
         this.mediaService = mediaService;
+    }
+    async onModuleInit() {
+        if (!(0, runtime_config_1.isDemoChatSeedingEnabled)()) {
+            return;
+        }
+        await this.seedDemoChats();
     }
     async createChat(dto, user) {
         const title = dto.title.trim();
@@ -127,12 +134,37 @@ let ChatService = class ChatService {
         return Promise.all(ascending.map((message) => this.mapMessage(message)));
     }
     async addMessage(chatID, dto, user) {
+        return this.createMessage(chatID, {
+            clientMessageId: dto.messageID,
+            kind: dto.kind,
+            text: dto.text,
+            mediaID: dto.mediaID,
+        }, user);
+    }
+    async addRealtimeMessage(chatID, dto, user) {
+        return this.createMessage(chatID, dto, user);
+    }
+    async setRealtimeTyping(chatID, dto, user) {
+        return this.setTyping(chatID, dto, user);
+    }
+    async createMessage(chatID, dto, user) {
         const participant = await this.getParticipantOrFail(chatID, user.sub);
         const participants = await this.participantsRepository.find({
             where: { chatId: chatID },
         });
         const trimmedText = dto.text?.trim();
         let media = null;
+        const existingMessage = await this.messagesRepository.findOne({
+            where: {
+                chatId: chatID,
+                authorId: user.sub,
+                clientMessageId: dto.clientMessageId,
+            },
+            relations: { author: true, media: true },
+        });
+        if (existingMessage) {
+            return this.mapMessage(existingMessage);
+        }
         if (dto.kind === message_entity_1.MessageKind.TEXT) {
             if (!trimmedText) {
                 throw new common_1.BadRequestException("Text message must contain text");
@@ -153,7 +185,7 @@ let ChatService = class ChatService {
         const message = await this.messagesRepository.save(this.messagesRepository.create({
             chatId: chatID,
             authorId: user.sub,
-            clientMessageId: dto.messageID,
+            clientMessageId: dto.clientMessageId,
             kind: dto.kind,
             text: dto.kind === message_entity_1.MessageKind.TEXT
                 ? trimmedText || null
@@ -184,9 +216,9 @@ let ChatService = class ChatService {
             throw new common_1.NotFoundException("Message not found after save");
         }
         const payload = await this.mapMessage(hydratedMessage);
-        this.realtimeService.publishToUsers(participants.map((item) => item.userId), {
-            type: "message.created",
-            payload: {
+        this.realtimeService.broadcastToChatParticipants(participants, {
+            event: "message.created",
+            data: {
                 chatID,
                 message: payload,
             },
@@ -231,9 +263,9 @@ let ChatService = class ChatService {
             where: { chatId: chatID },
         });
         const typingParticipants = this.realtimeService.setTyping(chatID, user.sub, user.displayName, dto.isTyping);
-        this.realtimeService.publishToUsers(participants.map((item) => item.userId), {
-            type: "typing.changed",
-            payload: {
+        this.realtimeService.broadcastToChatParticipants(participants, {
+            event: dto.isTyping ? "typing.started" : "typing.stopped",
+            data: {
                 chatID,
                 userID: user.sub,
                 displayName: user.displayName,
@@ -242,6 +274,9 @@ let ChatService = class ChatService {
             },
         });
         return {
+            chatID,
+            userID: user.sub,
+            isTyping: dto.isTyping,
             typingParticipants,
         };
     }
@@ -395,6 +430,144 @@ let ChatService = class ChatService {
             .map(([, entry]) => entry.chat)
             .sort((left, right) => right.lastActivity.getTime() - left.lastActivity.getTime());
         return matchedChats[0] ?? null;
+    }
+    async seedDemoChats() {
+        const demoUsers = new Map();
+        for (const account of [
+            ["+15551230011", "Анна Demo"],
+            ["+15551230012", "Борис Demo"],
+            ["+15551230013", "Вера Demo"],
+            ["+15551230014", "Глеб Demo"],
+            ["+15551230015", "Даша Demo"],
+        ]) {
+            const [contact, displayName] = account;
+            let user = await this.usersRepository.findOne({
+                where: { contact },
+            });
+            if (!user) {
+                user = await this.usersRepository.save(this.usersRepository.create({
+                    method: user_entity_1.AuthMethod.PHONE,
+                    contact,
+                    displayName,
+                }));
+            }
+            demoUsers.set(contact, user);
+        }
+        const seeds = [
+            {
+                id: "10000000-0000-0000-0000-000000000001",
+                title: "Анна и Борис",
+                participants: ["+15551230011", "+15551230012"],
+                messages: [
+                    {
+                        id: "20000000-0000-0000-0000-000000000001",
+                        author: "+15551230011",
+                        text: "Привет, Борис!",
+                    },
+                ],
+            },
+            {
+                id: "10000000-0000-0000-0000-000000000002",
+                title: "Анна и Вера",
+                participants: ["+15551230011", "+15551230013"],
+                messages: [
+                    {
+                        id: "20000000-0000-0000-0000-000000000002",
+                        author: "+15551230013",
+                        text: "Я собрала идеи для фото.",
+                    },
+                ],
+            },
+            {
+                id: "10000000-0000-0000-0000-000000000003",
+                title: "Борис и Глеб",
+                participants: ["+15551230012", "+15551230014"],
+                messages: [
+                    {
+                        id: "20000000-0000-0000-0000-000000000003",
+                        author: "+15551230014",
+                        text: "Соберу билд сегодня вечером.",
+                    },
+                ],
+            },
+            {
+                id: "10000000-0000-0000-0000-000000000004",
+                title: "Demo Team",
+                participants: [
+                    "+15551230011",
+                    "+15551230012",
+                    "+15551230014",
+                    "+15551230015",
+                ],
+                messages: [
+                    {
+                        id: "20000000-0000-0000-0000-000000000004",
+                        author: "+15551230015",
+                        text: "Проверила demo flow перед ревью.",
+                    },
+                ],
+            },
+        ];
+        for (const seed of seeds) {
+            let chat = await this.chatsRepository.findOneBy({
+                id: seed.id,
+            });
+            if (!chat) {
+                const seededChat = this.chatsRepository.create({
+                    id: seed.id,
+                    title: seed.title,
+                    lastActivity: new Date("2026-04-24T12:00:00.000Z"),
+                    lastMessagePreview: null,
+                });
+                chat = await this.chatsRepository.save(seededChat);
+            }
+            if (!chat) {
+                continue;
+            }
+            const existingParticipants = await this.participantsRepository.find({
+                where: { chatId: chat.id },
+            });
+            if (existingParticipants.length === 0) {
+                await this.participantsRepository.save(seed.participants.map((contact) => {
+                    const user = demoUsers.get(contact);
+                    if (!user) {
+                        throw new Error(`Missing demo user ${contact}`);
+                    }
+                    return this.participantsRepository.create({
+                        chatId: chat.id,
+                        userId: user.id,
+                        lastReadAt: null,
+                        lastReadMessageId: null,
+                    });
+                }));
+            }
+            for (const seedMessage of seed.messages) {
+                const exists = await this.messagesRepository.findOneBy({
+                    id: seedMessage.id,
+                });
+                if (exists) {
+                    continue;
+                }
+                const author = demoUsers.get(seedMessage.author);
+                if (!author) {
+                    continue;
+                }
+                const seededMessage = this.messagesRepository.create({
+                    id: seedMessage.id,
+                    chatId: chat.id,
+                    authorId: author.id,
+                    clientMessageId: seedMessage.id,
+                    kind: message_entity_1.MessageKind.TEXT,
+                    text: seedMessage.text,
+                    mediaId: null,
+                    status: message_entity_1.MessageStatus.READ,
+                });
+                await this.messagesRepository.save(seededMessage);
+                chat.lastMessagePreview = seedMessage.text;
+                chat.lastActivity = new Date("2026-04-24T12:00:00.000Z");
+                await this.chatsRepository.save(chat);
+            }
+        }
     }
 };
 exports.ChatService = ChatService;

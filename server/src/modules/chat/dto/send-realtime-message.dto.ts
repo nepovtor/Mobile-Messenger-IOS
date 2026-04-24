@@ -9,6 +9,9 @@ import { MessageKind } from "../../../entities/message.entity";
 
 export class SendRealtimeMessageDto {
   @IsUUID()
+  chatId!: string;
+
+  @IsUUID()
   messageID!: string;
 
   @IsEnum(MessageKind)

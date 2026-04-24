@@ -14,6 +14,7 @@ const user_entity_1 = require("../../entities/user.entity");
 const runtime_config_1 = require("../common/runtime-config");
 const auth_controller_1 = require("./auth.controller");
 const auth_guard_1 = require("./auth.guard");
+const auth_rate_limit_service_1 = require("./auth-rate-limit.service");
 const auth_service_1 = require("./auth.service");
 let AuthModule = class AuthModule {
 };
@@ -29,8 +30,14 @@ exports.AuthModule = AuthModule = __decorate([
             }),
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, auth_guard_1.AuthGuard],
-        exports: [auth_service_1.AuthService, auth_guard_1.AuthGuard, jwt_1.JwtModule, typeorm_1.TypeOrmModule],
+        providers: [auth_service_1.AuthService, auth_guard_1.AuthGuard, auth_rate_limit_service_1.AuthRateLimitService],
+        exports: [
+            auth_service_1.AuthService,
+            auth_guard_1.AuthGuard,
+            auth_rate_limit_service_1.AuthRateLimitService,
+            jwt_1.JwtModule,
+            typeorm_1.TypeOrmModule,
+        ],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

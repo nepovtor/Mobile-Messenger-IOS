@@ -24,6 +24,9 @@ import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { SetTypingDto } from "./dto/set-typing.dto";
 
+export type Chat = ChatSummary;
+export type Message = MessageResponse;
+
 export interface ChatSummary {
   id: string;
   title: string;

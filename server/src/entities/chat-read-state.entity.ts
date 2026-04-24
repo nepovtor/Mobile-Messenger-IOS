@@ -7,8 +7,8 @@ import {
   Unique,
   UpdateDateColumn,
 } from "typeorm";
-import { Chat } from "./chat.entity";
-import { User } from "./user.entity";
+import { ChatEntity } from "./chat.entity";
+import { UserEntity } from "./user.entity";
 
 @Entity()
 @Unique(["chat", "user"])
@@ -16,13 +16,13 @@ export class ChatReadState {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @ManyToOne(() => Chat, { onDelete: "CASCADE" })
+  @ManyToOne(() => ChatEntity, { onDelete: "CASCADE" })
   @JoinColumn()
-  chat!: Chat;
+  chat!: ChatEntity;
 
-  @ManyToOne(() => User, { onDelete: "CASCADE" })
+  @ManyToOne(() => UserEntity, { onDelete: "CASCADE" })
   @JoinColumn()
-  user!: User;
+  user!: UserEntity;
 
   @Column({ type: "datetime", nullable: true })
   lastReadAt!: Date | null;

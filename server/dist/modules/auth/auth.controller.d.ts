@@ -1,21 +1,24 @@
+import type { Request } from "express";
 import { AuthenticatedUser } from "../common/authenticated-user";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AuthService } from "./auth.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
 export declare class AuthController {
     private readonly authService;
-    constructor(authService: AuthService);
-    requestCode(dto: RequestAuthDto): Promise<{
+    private readonly authRateLimitService;
+    constructor(authService: AuthService, authRateLimitService: AuthRateLimitService);
+    requestCode(request: Request, dto: RequestAuthDto): Promise<{
         expiresIn: number;
         debugCode?: string;
     }>;
-    verifyCode(dto: VerifyAuthDto): Promise<{
+    verifyCode(request: Request, dto: VerifyAuthDto): Promise<{
         token: string;
         userID: string;
         displayName: string;
     }>;
-    login(dto: LoginAuthDto): Promise<{
+    login(request: Request, dto: LoginAuthDto): Promise<{
         token: string;
         userID: string;
         displayName: string;
@@ -33,4 +36,5 @@ export declare class AuthController {
         method: import("../../entities/user.entity").AuthMethod;
         isCurrentUser: boolean;
     }[]>;
+    private getRequestIP;
 }

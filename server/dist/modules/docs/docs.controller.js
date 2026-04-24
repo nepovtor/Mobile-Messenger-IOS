@@ -157,9 +157,15 @@ function buildLandingPage(input) {
             auth: "bearer",
         },
         {
+            method: "WS",
+            path: "/realtime",
+            description: "Основной native WebSocket realtime для connection.ready, message.send, message.created, typing и read.",
+            auth: "bearer",
+        },
+        {
             method: "GET",
             path: "/realtime/events",
-            description: "SSE-подписка на новые сообщения, typing и read-ивенты.",
+            description: "Legacy SSE-поток для обратной совместимости. Не является основным realtime.",
             auth: "bearer",
         },
         {

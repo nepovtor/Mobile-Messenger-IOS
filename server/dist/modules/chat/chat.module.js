@@ -33,7 +33,7 @@ exports.ChatModule = ChatModule = __decorate([
                 media_entity_1.MediaEntity,
             ]),
             auth_module_1.AuthModule,
-            realtime_module_1.RealtimeModule,
+            (0, common_1.forwardRef)(() => realtime_module_1.RealtimeModule),
             media_module_1.MediaModule,
         ],
         controllers: [chat_controller_1.ChatController],

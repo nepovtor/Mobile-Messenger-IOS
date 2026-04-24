@@ -18,6 +18,10 @@ exports.SendRealtimeMessageDto = SendRealtimeMessageDto;
 __decorate([
     (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
+], SendRealtimeMessageDto.prototype, "chatId", void 0);
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    __metadata("design:type", String)
 ], SendRealtimeMessageDto.prototype, "messageID", void 0);
 __decorate([
     (0, class_validator_1.IsEnum)(message_entity_1.MessageKind),
