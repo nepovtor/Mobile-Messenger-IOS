@@ -9,12 +9,15 @@
     "target": "es2021",
     "sourceMap": true,
     "outDir": "dist",
+    "rootDir": "./src",
     "baseUrl": "./",
     "incremental": true,
     "strict": true,
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "ignoreDeprecations": "6.0"
   },
   "exclude": ["node_modules", "dist", "test"]
 }
