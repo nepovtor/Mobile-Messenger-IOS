@@ -183,8 +183,33 @@ public struct RESTChatService: ChatNetworking {
     }
 
     private func perform<Response: Decodable>(request: URLRequest) async throws -> Response {
-        let data = try await performRaw(request: request)
-        return try decoder.decode(Response.self, from: data)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(description: "Некорректный ответ сервера")
+        }
+        if httpResponse.statusCode == 401 {
+            throw AppError.unauthorized
+        }
+        guard 200..<300 ~= httpResponse.statusCode else {
+            let errorMessage = APIResponseParser.buildErrorMessage(
+                from: data,
+                statusCode: httpResponse.statusCode,
+                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type")
+            )
+            throw AppError.network(description: errorMessage)
+        }
+        
+        do {
+            return try APIResponseParser.parseJSON(
+                data: data,
+                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type"),
+                statusCode: httpResponse.statusCode,
+                decoder: decoder
+            )
+        } catch let parseError as APIResponseParser.ParseError {
+            APIResponseParser.logDebugInfo(parseError)
+            throw AppError.network(description: parseError.userMessage)
+        }
     }
 
     private func performRaw(request: URLRequest) async throws -> Data {
@@ -196,7 +221,11 @@ public struct RESTChatService: ChatNetworking {
             throw AppError.unauthorized
         }
         guard 200..<300 ~= httpResponse.statusCode else {
-            let message = String(data: data, encoding: .utf8) ?? "Ошибка \(httpResponse.statusCode)"
+            let message = APIResponseParser.buildErrorMessage(
+                from: data,
+                statusCode: httpResponse.statusCode,
+                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type")
+            )
             throw AppError.network(description: message)
         }
         return data

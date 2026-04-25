@@ -55,12 +55,28 @@ public struct RESTAuthService: AuthNetworking {
                     throw RequestError(description: "Некорректный ответ сервера", isRetryable: true)
                 }
                 guard 200..<300 ~= httpResponse.statusCode else {
+                    let errorDescription = APIResponseParser.buildErrorMessage(
+                        from: data,
+                        statusCode: httpResponse.statusCode,
+                        contentType: httpResponse.value(forHTTPHeaderField: "Content-Type")
+                    )
                     throw RequestError(
-                        description: makeErrorDescription(from: data, statusCode: httpResponse.statusCode),
+                        description: errorDescription,
                         isRetryable: httpResponse.statusCode >= 500
                     )
                 }
-                return try JSONDecoder().decode(Response.self, from: data)
+                
+                do {
+                    return try APIResponseParser.parseJSON(
+                        data: data,
+                        contentType: httpResponse.value(forHTTPHeaderField: "Content-Type"),
+                        statusCode: httpResponse.statusCode,
+                        decoder: JSONDecoder()
+                    )
+                } catch let parseError as APIResponseParser.ParseError {
+                    APIResponseParser.logDebugInfo(parseError)
+                    throw RequestError(description: parseError.userMessage, isRetryable: parseError.isRetryable)
+                }
             } catch {
                 lastError = error
                 if !shouldRetry(after: error) {
@@ -98,26 +114,6 @@ public struct RESTAuthService: AuthNetworking {
             return false
         }
     }
-
-    private func makeErrorDescription(from data: Data, statusCode: Int) -> String {
-        if let payload = try? JSONDecoder().decode(ServerErrorPayload.self, from: data),
-           let message = payload.message,
-           !message.isEmpty {
-            return message
-        }
-
-        if let rawMessage = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !rawMessage.isEmpty {
-            return rawMessage
-        }
-
-        return "Ошибка сервера \(statusCode)"
-    }
-}
-
-private struct ServerErrorPayload: Decodable {
-    let message: String?
 }
 
 private struct RequestError: LocalizedError {
@@ -189,10 +185,24 @@ public struct RESTContactsService: ContactsNetworking {
             throw AppError.unauthorized
         }
         guard 200..<300 ~= httpResponse.statusCode else {
-            let message = String(data: data, encoding: .utf8) ?? "Ошибка сервера \(httpResponse.statusCode)"
+            let message = APIResponseParser.buildErrorMessage(
+                from: data,
+                statusCode: httpResponse.statusCode,
+                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type")
+            )
             throw AppError.network(description: message)
         }
 
-        return try JSONDecoder().decode([ContactDTO].self, from: data)
+        do {
+            return try APIResponseParser.parseJSON(
+                data: data,
+                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type"),
+                statusCode: httpResponse.statusCode,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError {
+            APIResponseParser.logDebugInfo(parseError)
+            throw AppError.network(description: parseError.userMessage)
+        }
     }
 }
