@@ -128,7 +128,7 @@ public final class AuthViewModel: ObservableObject {
             isCodeSent = true
             codeExpirationSeconds = response?.expiresIn
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppError.presentableMessage(for: error)
         }
     }
 
@@ -145,7 +145,7 @@ public final class AuthViewModel: ObservableObject {
             let response = try await authService.verifyCode(method: method, contact: sanitizedContact, code: sanitizedCode)
             sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppError.presentableMessage(for: error)
         }
     }
 
@@ -166,7 +166,7 @@ public final class AuthViewModel: ObservableObject {
             )
             sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppError.presentableMessage(for: error)
         }
     }
 

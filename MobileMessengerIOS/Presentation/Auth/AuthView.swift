@@ -459,7 +459,7 @@ struct AuthView: View {
         do {
             try container.updateRESTBaseURL(serverURLDraft)
         } catch {
-            viewModel.errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            viewModel.errorMessage = AppError.presentableMessage(for: error)
         }
     }
 

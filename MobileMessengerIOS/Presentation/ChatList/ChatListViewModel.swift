@@ -169,7 +169,7 @@ public final class ChatListViewModel: ObservableObject {
             createContactsError = nil
             hasLoadedCreateContacts = true
         } catch {
-            createContactsError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            createContactsError = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "group_contacts_load")
         }
     }

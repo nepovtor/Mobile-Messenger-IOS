@@ -44,7 +44,7 @@ final class ContactsViewModel: ObservableObject {
             contacts = try await contactsService.listContacts()
             errorMessage = nil
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "contacts_load")
         }
     }
@@ -76,7 +76,7 @@ final class ContactsViewModel: ObservableObject {
                 participantCount: chat.participantCount
             )
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "contacts_open_chat")
             return nil
         }

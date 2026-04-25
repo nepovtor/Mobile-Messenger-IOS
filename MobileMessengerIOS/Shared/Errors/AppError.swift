@@ -18,4 +18,73 @@ public enum AppError: LocalizedError, Sendable {
             return "Что-то пошло не так. Попробуйте позже."
         }
     }
+
+    public static func presentableMessage(for error: Error) -> String {
+        if let appError = error as? AppError, let description = appError.errorDescription {
+            return description
+        }
+
+        if let configError = error as? ConfigError, let description = configError.errorDescription {
+            return description
+        }
+
+        let rawMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        let trimmed = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let friendlyMessages = [
+            "Server returned an invalid response.",
+            "Backend is unavailable. Please try again later.",
+            "Request failed. Please check API configuration."
+        ]
+        if friendlyMessages.contains(trimmed) {
+            return trimmed
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .badURL, .unsupportedURL, .cannotFindHost, .dnsLookupFailed:
+                return "Request failed. Please check API configuration."
+            case .timedOut,
+                 .cannotConnectToHost,
+                 .networkConnectionLost,
+                 .notConnectedToInternet,
+                 .resourceUnavailable,
+                 .secureConnectionFailed,
+                 .serverCertificateHasBadDate,
+                 .serverCertificateUntrusted,
+                 .serverCertificateHasUnknownRoot,
+                 .serverCertificateNotYetValid:
+                return "Backend is unavailable. Please try again later."
+            default:
+                return "Server returned an invalid response."
+            }
+        }
+
+        let technicalFragments = [
+            "the data couldn",
+            "the data could not",
+            "correct format",
+            "json",
+            "decoding",
+            "unexpected token",
+            "html",
+            "doctype",
+            "nsurl",
+            "nscocoaerrordomain"
+        ]
+        let lowercase = trimmed.lowercased()
+        if technicalFragments.contains(where: { lowercase.contains($0) }) {
+            return "Server returned an invalid response."
+        }
+
+        return trimmed.isEmpty ? "Server returned an invalid response." : trimmed
+    }
+
+    public static func wrapped(_ error: Error) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+
+        return .network(description: presentableMessage(for: error))
+    }
 }

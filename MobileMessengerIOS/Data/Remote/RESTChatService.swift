@@ -95,7 +95,7 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func listChats(searchQuery: String?) async throws -> [ServerChat] {
-        var components = URLComponents(url: baseURL.appendingPathComponent("chats"), resolvingAgainstBaseURL: false)
+        var components = URLComponents(url: baseURL.appendingAPIPath("chats"), resolvingAgainstBaseURL: false)
         if let searchQuery, !searchQuery.isEmpty {
             components?.queryItems = [URLQueryItem(name: "search", value: searchQuery)]
         }
@@ -118,7 +118,7 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage] {
-        var components = URLComponents(url: baseURL.appendingPathComponent("chats/\(chatID.uuidString)/messages"), resolvingAgainstBaseURL: false)
+        var components = URLComponents(url: baseURL.appendingAPIPath("chats/\(chatID.uuidString)/messages"), resolvingAgainstBaseURL: false)
         components?.queryItems = [
             URLQueryItem(name: "limit", value: String(limit))
         ]
@@ -169,11 +169,16 @@ public struct RESTChatService: ChatNetworking {
         request.httpMethod = "PUT"
         request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
 
-        let (_, response) = try await session.upload(for: request, from: data)
-        guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
-            throw AppError.network(description: "Не удалось загрузить изображение")
+        do {
+            let response = try await APIResponseParser.uploadData(
+                data,
+                with: request,
+                using: session
+            )
+            return response.value(forHTTPHeaderField: "ETag")
+        } catch {
+            throw AppError.wrapped(error)
         }
-        return httpResponse.value(forHTTPHeaderField: "ETag")
     }
 
     public func confirmUpload(mediaID: UUID, etag: String?) async throws {
@@ -183,56 +188,35 @@ public struct RESTChatService: ChatNetworking {
     }
 
     private func perform<Response: Decodable>(request: URLRequest) async throws -> Response {
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.network(description: "Некорректный ответ сервера")
-        }
-        if httpResponse.statusCode == 401 {
-            throw AppError.unauthorized
-        }
-        guard 200..<300 ~= httpResponse.statusCode else {
-            let errorMessage = APIResponseParser.buildErrorMessage(
-                from: data,
-                statusCode: httpResponse.statusCode,
-                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type")
-            )
-            throw AppError.network(description: errorMessage)
-        }
-        
         do {
-            return try APIResponseParser.parseJSON(
-                data: data,
-                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type"),
-                statusCode: httpResponse.statusCode,
+            return try await APIResponseParser.requestJSON(
+                request,
+                using: session,
                 decoder: decoder
             )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            throw AppError.unauthorized
         } catch let parseError as APIResponseParser.ParseError {
-            APIResponseParser.logDebugInfo(parseError)
-            throw AppError.network(description: parseError.userMessage)
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
         }
     }
 
     private func performRaw(request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.network(description: "Некорректный ответ сервера")
-        }
-        if httpResponse.statusCode == 401 {
+        do {
+            return try await APIResponseParser.requestData(request, using: session)
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
             throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
         }
-        guard 200..<300 ~= httpResponse.statusCode else {
-            let message = APIResponseParser.buildErrorMessage(
-                from: data,
-                statusCode: httpResponse.statusCode,
-                contentType: httpResponse.value(forHTTPHeaderField: "Content-Type")
-            )
-            throw AppError.network(description: message)
-        }
-        return data
     }
 
     private func authorizedRequest(path: String, method: String = "GET") async throws -> URLRequest {
-        authorizedRequest(url: baseURL.appendingPathComponent(path), method: method, token: try await requireToken())
+        authorizedRequest(url: baseURL.appendingAPIPath(path), method: method, token: try await requireToken())
     }
 
     private func authenticatedRequest(url: URL, method: String = "GET") async throws -> URLRequest {
