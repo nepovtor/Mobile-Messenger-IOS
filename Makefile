@@ -125,6 +125,7 @@ build-ios:
 		-configuration $(CONFIGURATION) \
 		-destination 'id=$(DEVICE_ID)' \
 		-derivedDataPath "$(BUILD_DIR)" \
+		-allowProvisioningUpdates \
 		build
 
 install-ios:
