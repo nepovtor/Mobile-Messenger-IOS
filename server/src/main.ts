@@ -2,6 +2,7 @@ import "dotenv/config";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { WsAdapter } from "@nestjs/platform-ws";
+import type { CustomOrigin } from "@nestjs/common/interfaces/external/cors-options.interface";
 import { AppModule } from "./modules/app.module";
 import { getCorsOrigins } from "./modules/common/runtime-config";
 
@@ -10,14 +11,23 @@ async function bootstrap() {
   app.useWebSocketAdapter(new WsAdapter(app));
   const corsOrigins = getCorsOrigins();
   if (corsOrigins.length > 0) {
+    const originValidator: CustomOrigin = (
+      ...args: [
+        origin: string | undefined,
+        callback: Parameters<CustomOrigin>[1],
+      ]
+    ) => {
+      const [origin, callback] = args;
+      if (!origin || corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("CORS origin is not allowed"), false);
+    };
+
     app.enableCors({
-      origin: (origin, callback) => {
-        if (!origin || corsOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error("CORS origin is not allowed"), false);
-      },
+      origin: originValidator,
       credentials: true,
     });
   }

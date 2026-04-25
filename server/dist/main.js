@@ -11,14 +11,16 @@ async function bootstrap() {
     app.useWebSocketAdapter(new platform_ws_1.WsAdapter(app));
     const corsOrigins = (0, runtime_config_1.getCorsOrigins)();
     if (corsOrigins.length > 0) {
+        const originValidator = (...args) => {
+            const [origin, callback] = args;
+            if (!origin || corsOrigins.includes(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error("CORS origin is not allowed"), false);
+        };
         app.enableCors({
-            origin: (origin, callback) => {
-                if (!origin || corsOrigins.includes(origin)) {
-                    callback(null, true);
-                    return;
-                }
-                callback(new Error("CORS origin is not allowed"), false);
-            },
+            origin: originValidator,
             credentials: true,
         });
     }

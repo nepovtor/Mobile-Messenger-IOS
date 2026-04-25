@@ -66,14 +66,11 @@ describe("Mobile Messenger backend", () => {
       };
     };
 
-    const createAuthedRequest = (token: string) => (
-      method: "get" | "post",
-      path: string,
-    ) =>
-      request(app.getHttpServer())[method](path).set(
-        "Authorization",
-        `Bearer ${token}`,
-      );
+    const createAuthedRequest =
+      (token: string) => (method: "get" | "post", path: string) =>
+        request(app.getHttpServer())
+          [method](path)
+          .set("Authorization", `Bearer ${token}`);
 
     const primaryUser = await authenticate("+15551230001", "README Smoke");
     const secondaryUser = await authenticate("+15551230002", "README Reader");
@@ -92,10 +89,12 @@ describe("Mobile Messenger backend", () => {
       ]),
     );
 
-    const createChatResponse = await withPrimaryAuth("post", "/api/chats").send({
-      title: "README Test Chat",
-      participantIds: [secondaryUser.userID],
-    });
+    const createChatResponse = await withPrimaryAuth("post", "/api/chats").send(
+      {
+        title: "README Test Chat",
+        participantIds: [secondaryUser.userID],
+      },
+    );
 
     expect(createChatResponse.status).toBe(201);
     expect(createChatResponse.body.title).toBe("README Test Chat");
@@ -108,11 +107,10 @@ describe("Mobile Messenger backend", () => {
     const sendMessageResponse = await withPrimaryAuth(
       "post",
       `/api/chats/${chatID}/messages`,
-    )
-      .send({
-        text: "Hello from automated README smoke test",
-        messageID,
-      });
+    ).send({
+      text: "Hello from automated README smoke test",
+      messageID,
+    });
 
     expect(sendMessageResponse.status).toBe(201);
     expect(sendMessageResponse.body.messageID).toBe(messageID);
@@ -123,11 +121,10 @@ describe("Mobile Messenger backend", () => {
     const duplicateSendResponse = await withPrimaryAuth(
       "post",
       `/api/chats/${chatID}/messages`,
-    )
-      .send({
-        text: "Hello from automated README smoke test",
-        messageID,
-      });
+    ).send({
+      text: "Hello from automated README smoke test",
+      messageID,
+    });
 
     expect(duplicateSendResponse.status).toBe(201);
     expect(duplicateSendResponse.body.id).toBe(sendMessageResponse.body.id);
