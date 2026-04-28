@@ -9,6 +9,7 @@ import {
   WebSocketGateway,
 } from "@nestjs/websockets";
 import { IncomingMessage } from "node:http";
+import { URL } from "node:url";
 import { WebSocket } from "ws";
 import { MessageKind } from "../../entities/message.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
@@ -187,15 +188,32 @@ export class RealtimeGateway
     const header = Array.isArray(authorizationHeader)
       ? authorizationHeader[0]
       : authorizationHeader;
+    const tokenFromQuery = this.extractTokenFromQuery(request);
+    const bearerToken = header?.startsWith("Bearer ")
+      ? header.slice(7)
+      : tokenFromQuery;
 
-    if (!header?.startsWith("Bearer ")) {
+    if (!bearerToken) {
       return null;
     }
 
     try {
-      return this.jwtService.verify<AuthenticatedUser>(header.slice(7), {
+      return this.jwtService.verify<AuthenticatedUser>(bearerToken, {
         secret: getJwtSecret(),
       });
+    } catch {
+      return null;
+    }
+  }
+
+  private extractTokenFromQuery(request: IncomingMessage): string | null {
+    if (!request.url) {
+      return null;
+    }
+
+    try {
+      const url = new URL(request.url, "http://localhost");
+      return url.searchParams.get("token");
     } catch {
       return null;
     }

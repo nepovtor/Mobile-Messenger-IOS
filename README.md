@@ -4,6 +4,24 @@
 
 Portfolio-ready messenger MVP with a SwiftUI iOS client and a NestJS backend. REST is used for auth, chat list/history, and media upload. Native WebSocket is used for realtime delivery, typing, read events, and message send acknowledgements.
 
+## Web Client
+
+A full React + TypeScript web client now lives in [web/](./web). It is preconfigured for the production backend and supports demo login, per-user chat lists, message history, realtime delivery, reconnect states, and logout cleanup.
+
+Run it with:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Build it with:
+
+```bash
+npm run build
+```
+
 ## Architecture
 
 Text diagram:

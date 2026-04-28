@@ -546,6 +546,40 @@ test("valid token can connect to realtime websocket", async (t) => {
   assert.equal(ready.data.userID, anna.userID);
 });
 
+test("valid token can connect to realtime websocket via query token", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+
+  const ready = await new Promise<{ userID: string }>((resolve, reject) => {
+    const url = new URL(realtimeURL(app));
+    url.searchParams.set("token", anna.token);
+
+    const socket = new WebSocket(url);
+    t.after(() => {
+      socket.close();
+    });
+
+    const timeout = setTimeout(
+      () => reject(new Error("Timed out waiting for connection.ready")),
+      2000,
+    );
+
+    socket.once("message", (raw: Buffer) => {
+      clearTimeout(timeout);
+      const event = JSON.parse(raw.toString()) as SocketEvent<{ userID: string }>;
+      resolve(event.data);
+    });
+
+    socket.once("error", reject);
+  });
+
+  assert.equal(ready.userID, anna.userID);
+});
+
 test("invalid token is rejected by realtime websocket", async (t) => {
   const app = await createTestApp({ allowPasswordLogin: true });
   t.after(async () => {
