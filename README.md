@@ -136,7 +136,7 @@ Build from terminal:
 xcodebuild \
   -project MobileMessengerIOS.xcodeproj \
   -scheme MobileMessengerIOS \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1' \
+  -destination 'platform=iOS,name=iPhone S' \
   CODE_SIGNING_ALLOWED=NO \
   build
 ```
