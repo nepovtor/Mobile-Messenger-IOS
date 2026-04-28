@@ -22,6 +22,7 @@ public final class ChatViewModel: ObservableObject {
     @Published public var inputText: String = ""
     @Published public var isTyping = false
     @Published public private(set) var isSendingMedia = false
+    @Published public private(set) var isNetworkReachable = true
     @Published public var banner: Banner?
     @Published public var isLoadingHistory = true
 
@@ -40,7 +41,6 @@ public final class ChatViewModel: ObservableObject {
     private var observeTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var reachabilityTask: Task<Void, Never>?
-    private var isReachable = true
     init(
         chatID: UUID,
         title: String,
@@ -114,7 +114,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     public func retryFailedMessages() {
-        banner = isReachable ? nil : .offline
+        banner = isNetworkReachable ? nil : .offline
         Task { await retryPending(chatID: chatID) }
     }
 
@@ -215,13 +215,13 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func observeReachability() async {
-        isReachable = reachability.isReachable
+        isNetworkReachable = reachability.isReachable
         await MainActor.run {
             updateBannerState()
         }
         for await reachable in reachability.observe() {
             await MainActor.run {
-                isReachable = reachable
+                isNetworkReachable = reachable
                 updateBannerState()
             }
         }
@@ -232,7 +232,7 @@ public final class ChatViewModel: ObservableObject {
             banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
             return
         }
-        if !isReachable {
+        if !isNetworkReachable {
             banner = .offline
             return
         }

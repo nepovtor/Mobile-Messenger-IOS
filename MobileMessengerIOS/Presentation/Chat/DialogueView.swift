@@ -61,7 +61,7 @@ struct DialogueView: View {
             messageInput
         }
         .overlay(alignment: .top) {
-            if let banner = viewModel.banner {
+            if case .error = viewModel.banner, let banner = viewModel.banner {
                 bannerView(for: banner)
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
@@ -71,6 +71,10 @@ struct DialogueView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 ChatHeaderView(chat: chat)
+            }
+
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NetworkStatusIndicator(isOnline: viewModel.isNetworkReachable)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -200,15 +204,7 @@ struct DialogueView: View {
             .background(Color.red.opacity(0.94))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         case .offline:
-            HStack {
-                Image(systemName: "wifi.slash")
-                Text("Нет сети. Сообщения будут отправлены при появлении связи.")
-                Spacer()
-            }
-            .padding()
-            .background(Color.orange.opacity(0.94))
-            .foregroundColor(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            EmptyView()
         }
     }
 
@@ -222,6 +218,23 @@ struct DialogueView: View {
         } else {
             proxy.scrollTo(last.id.messageID, anchor: .bottom)
         }
+    }
+}
+
+private struct NetworkStatusIndicator: View {
+    let isOnline: Bool
+
+    var body: some View {
+        Circle()
+            .fill(isOnline ? Color.green : Color.orange)
+            .frame(width: 10, height: 10)
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.9), lineWidth: 1)
+            }
+            .shadow(color: (isOnline ? Color.green : Color.orange).opacity(0.35), radius: 4, x: 0, y: 0)
+            .accessibilityLabel(isOnline ? "Сеть доступна" : "Нет сети")
+            .accessibilityHint("Индикатор состояния сети")
     }
 }
 
