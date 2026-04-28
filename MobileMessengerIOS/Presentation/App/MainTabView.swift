@@ -258,10 +258,14 @@ struct MainTabView: View {
                     Label("Профиль", systemImage: "person.crop.circle")
                 }
         }
-        .overlay(alignment: .top) {
-            ConnectionStatusBanner(status: container.connectionStatus)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack {
+                Spacer()
+                ConnectionStatusBadge(status: container.connectionStatus)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
         }
         .task {
             await PushNotificationManager.shared.registerForNotifications()
@@ -269,58 +273,56 @@ struct MainTabView: View {
     }
 }
 
-private struct ConnectionStatusBanner: View {
+private struct ConnectionStatusBadge: View {
     let status: AppContainer.ConnectionStatus
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: status.systemImage)
-                .font(.headline)
+        HStack(spacing: 8) {
+            Circle()
+                .fill(accentColor)
+                .frame(width: 8, height: 8)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(status.title)
-                    .font(.subheadline.weight(.semibold))
-                Text(status.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.black.opacity(0.78))
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(strokeColor, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         }
-        .foregroundStyle(foregroundColor)
-        .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 8)
+        .foregroundStyle(.white)
+        .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
     }
 
-    private var strokeColor: Color {
+    private var accentColor: Color {
         switch status {
         case .online:
-            return Color.green.opacity(0.28)
+            return Color.green
         case .connecting:
-            return Color.blue.opacity(0.24)
+            return Color.blue
         case .reconnecting:
-            return Color.orange.opacity(0.28)
+            return Color.orange
         case .offline:
-            return Color.red.opacity(0.24)
+            return Color.red
         }
     }
 
-    private var foregroundColor: Color {
+    private var label: String {
         switch status {
         case .online:
-            return .green
+            return "Онлайн"
         case .connecting:
-            return .blue
+            return "Подключение"
         case .reconnecting:
-            return .orange
+            return "Переподключение"
         case .offline:
-            return .red
+            return "Оффлайн"
         }
     }
 }

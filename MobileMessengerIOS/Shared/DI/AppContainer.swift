@@ -4,6 +4,47 @@ import SwiftUI
 
 @MainActor
 public final class AppContainer: ObservableObject {
+    public enum AppearanceMode: String, CaseIterable, Identifiable {
+        case system
+        case light
+        case dark
+
+        public var id: String { rawValue }
+
+        public var title: String {
+            switch self {
+            case .system:
+                return "Системная"
+            case .light:
+                return "Светлая"
+            case .dark:
+                return "Тёмная"
+            }
+        }
+
+        public var systemImage: String {
+            switch self {
+            case .system:
+                return "gearshape.2.fill"
+            case .light:
+                return "sun.max.fill"
+            case .dark:
+                return "moon.fill"
+            }
+        }
+
+        public var colorScheme: ColorScheme? {
+            switch self {
+            case .system:
+                return nil
+            case .light:
+                return .light
+            case .dark:
+                return .dark
+            }
+        }
+    }
+
     public enum ConnectionStatus: Equatable {
         case offline
         case connecting
@@ -51,6 +92,9 @@ public final class AppContainer: ObservableObject {
     }
 
     public static let shared = AppContainer()
+    private enum DefaultsKeys {
+        static let appearanceMode = "ui.appearance_mode"
+    }
 
     private let configService: DefaultConfigService
     public let sessionStore: SessionStore
@@ -68,12 +112,18 @@ public final class AppContainer: ObservableObject {
     private var isSceneActive = false
     private var latestRealtimeState: ChatRealtimeConnectionState = .disconnected
     private var lastAuthenticatedUserID: UUID?
+    private let defaults: UserDefaults
     @Published public private(set) var connectionStatus: ConnectionStatus = .offline
+    @Published public private(set) var appearanceMode: AppearanceMode
 
     @Published public private(set) var configurationRevision: Int = 0
 
     private init() {
         let tokenStore = KeychainTokenStore()
+        defaults = .standard
+        appearanceMode = AppearanceMode(
+            rawValue: defaults.string(forKey: DefaultsKeys.appearanceMode) ?? ""
+        ) ?? .system
 
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
@@ -90,6 +140,11 @@ public final class AppContainer: ObservableObject {
         configureNetworkingServices()
         bindSessionState()
         bindConnectionState()
+    }
+
+    public func updateAppearanceMode(_ mode: AppearanceMode) {
+        appearanceMode = mode
+        defaults.set(mode.rawValue, forKey: DefaultsKeys.appearanceMode)
     }
 
     public var restBaseURLString: String {

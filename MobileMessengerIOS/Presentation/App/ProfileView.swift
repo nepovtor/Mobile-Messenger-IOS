@@ -34,6 +34,7 @@ final class ProfileViewModel: ObservableObject {
 }
 
 struct ProfileView: View {
+    @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var sessionStore: SessionStore
     @StateObject private var viewModel: ProfileViewModel
 
@@ -50,6 +51,7 @@ struct ProfileView: View {
                 VStack(spacing: 24) {
                     heroCard(for: profile)
                     infoSection(for: profile)
+                    appearanceSection
                     sessionSection
                 }
                 .padding(.horizontal, 16)
@@ -249,6 +251,55 @@ struct ProfileView: View {
                     .stroke(Color.white.opacity(0.55), lineWidth: 1)
             )
         }
+    }
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Оформление")
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 14) {
+                    iconBadge(
+                        systemImage: container.appearanceMode.systemImage,
+                        tint: Color(red: 0.40, green: 0.42, blue: 0.96)
+                    )
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Тема приложения")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("Выбери, как должен выглядеть интерфейс.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+
+                Picker("Тема приложения", selection: appearanceBinding) {
+                    ForEach(AppContainer.AppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.vertical, 18)
+            .padding(.horizontal, 18)
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(Color.white.opacity(0.55), lineWidth: 1)
+            )
+        }
+    }
+
+    private var appearanceBinding: Binding<AppContainer.AppearanceMode> {
+        Binding(
+            get: { container.appearanceMode },
+            set: { container.updateAppearanceMode($0) }
+        )
     }
 
     private func heroChip(title: String, systemImage: String) -> some View {

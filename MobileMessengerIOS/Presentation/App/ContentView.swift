@@ -25,6 +25,7 @@ struct ContentView: View {
         .id(container.configurationRevision)
         .environmentObject(sessionStore)
         .environmentObject(container)
+        .preferredColorScheme(container.appearanceMode.colorScheme)
         .task {
             container.handleScenePhase(scenePhase)
         }
