@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct ChatListView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
     @StateObject private var viewModel: ChatListViewModel
     @State private var isShowingCreateSheet = false
+    @State private var isShowingProfile = false
     @State private var createdChat: ChatListItem?
+    private let container: AppContainer
 
     @MainActor
     init() {
@@ -12,6 +15,7 @@ struct ChatListView: View {
 
     @MainActor
     init(container: AppContainer) {
+        self.container = container
         _viewModel = StateObject(wrappedValue: container.makeChatListViewModel())
     }
 
@@ -57,11 +61,32 @@ struct ChatListView: View {
                 .searchable(text: $viewModel.searchQuery, prompt: "Поиск чатов")
                 .navigationTitle("Чаты")
                 .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: { isShowingProfile = true }) {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.16))
+                                    .frame(width: 32, height: 32)
+                                    .overlay {
+                                        Text(profileInitials)
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.blue)
+                                    }
+
+                                Text("Profile")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                        }
+                    }
+
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { isShowingCreateSheet = true }) {
                             Image(systemName: "person.3.sequence.fill")
                         }
                     }
+                }
+                .sheet(isPresented: $isShowingProfile) {
+                    ProfileView(container: container)
                 }
                 .sheet(isPresented: $isShowingCreateSheet) {
                     CreateGroupChatSheet(
@@ -85,6 +110,11 @@ struct ChatListView: View {
                 .task { viewModel.onAppear() }
             }
         }
+    }
+
+    private var profileInitials: String {
+        let displayName = sessionStore.currentDisplayName ?? SessionStore.Constants.currentUserDisplayName
+        return ProfileViewModel.makeInitials(from: displayName)
     }
 }
 

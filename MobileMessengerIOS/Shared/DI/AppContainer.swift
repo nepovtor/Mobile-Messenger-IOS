@@ -114,6 +114,7 @@ public final class AppContainer: ObservableObject {
     private var lastAuthenticatedUserID: UUID?
     private let defaults: UserDefaults
     @Published public private(set) var connectionStatus: ConnectionStatus = .offline
+    @Published public private(set) var realtimeConnectionState: ChatRealtimeConnectionState = .disconnected
     @Published public private(set) var appearanceMode: AppearanceMode
 
     @Published public private(set) var configurationRevision: Int = 0
@@ -157,6 +158,32 @@ public final class AppContainer: ObservableObject {
 
     public var isUsingCustomRESTBaseURL: Bool {
         configService.hasCustomRESTBaseURL
+    }
+
+    var profileEnvironmentInfo: ProfileEnvironmentInfo {
+        let host = configService.restBaseURL.host?.lowercased() ?? ""
+
+        if host == "localhost" || host == "127.0.0.1" {
+            return ProfileEnvironmentInfo(
+                badgeTitle: "Local backend",
+                title: "Local environment",
+                detail: "Connected to a localhost backend configuration."
+            )
+        }
+
+        if configService.hasCustomRESTBaseURL {
+            return ProfileEnvironmentInfo(
+                badgeTitle: "Custom backend",
+                title: "Custom environment",
+                detail: "Using a custom backend selected in app configuration."
+            )
+        }
+
+        return ProfileEnvironmentInfo(
+            badgeTitle: "Configured backend",
+            title: "Default environment",
+            detail: "Using the default backend bundled with the app."
+        )
     }
 
     public func updateRESTBaseURL(_ rawValue: String) throws {
@@ -209,7 +236,12 @@ public final class AppContainer: ObservableObject {
 
     /// Creates and returns a new ProfileViewModel.
     func makeProfileViewModel() -> ProfileViewModel {
-        ProfileViewModel(contactsService: contactsService)
+        ProfileViewModel(
+            contactsService: contactsService,
+            logoutAction: { [sessionStore] in
+                sessionStore.logout()
+            }
+        )
     }
 
     /// Creates and returns a new AuthViewModel.
@@ -304,6 +336,7 @@ public final class AppContainer: ObservableObject {
             for await state in realtimeService.observeConnectionState() {
                 await MainActor.run {
                     self.latestRealtimeState = state
+                    self.realtimeConnectionState = state
                     self.updateConnectionStatus()
                 }
             }

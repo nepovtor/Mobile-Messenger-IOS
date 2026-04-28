@@ -54,6 +54,16 @@ public final class SessionStore: ObservableObject {
         state = .unauthenticated
     }
 
+    public var currentUserID: UUID? {
+        if case .authenticated(_, let userID, _) = state { return userID }
+        return nil
+    }
+
+    public var currentDisplayName: String? {
+        if case .authenticated(_, _, let displayName) = state { return displayName }
+        return nil
+    }
+
     public var authToken: String? {
         if case .authenticated(let token, _, _) = state { return token }
         return nil

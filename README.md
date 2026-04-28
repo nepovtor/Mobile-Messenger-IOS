@@ -45,6 +45,9 @@ SwiftUI Views
 - Heartbeat ping/pong, dead connection cleanup, reconnect with exponential backoff.
 - Stable message lifecycle: `sending`, `sent`, `delivered`, `read`, `failed`, retry for failed local messages.
 - REST auth, chat list, history, media upload, read receipts, typing.
+- Profile screen with account info, realtime status, and secure logout.
+- Account info card with display name, phone fallback, user ID, and environment summary.
+- Security card that confirms Keychain token storage and session cleanup on logout.
 - Demo accounts with seeded chats for predictable demo flow.
 - Backend e2e tests, backend heartbeat unit test, iOS unit tests, GitHub Actions CI.
 

@@ -21,7 +21,9 @@
 		CA58DA6A2F815CAE000D87A4 /* MarkMessageStatusUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA322F815CAE000D87A4 /* MarkMessageStatusUseCase.swift */; };
 		CA58DA6B2F815CAE000D87A4 /* LoadChatListUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA312F815CAE000D87A4 /* LoadChatListUseCase.swift */; };
 		CA58DA6C2F815CAE000D87A4 /* KeychainTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA562F815CAE000D87A4 /* KeychainTokenStore.swift */; };
-		CA58DA6D2F815CAE000D87A4 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA3B2F815CAE000D87A4 /* ProfileView.swift */; };
+		CA58DA952F815CAE000D87A4 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA962F815CAE000D87A4 /* ProfileView.swift */; };
+		CA58DA972F815CAE000D87A4 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */; };
+		CA58DA982F815CAE000D87A4 /* ProfileComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */; };
 		CA58DA6E2F815CAE000D87A4 /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA292F815CAE000D87A4 /* Chat.swift */; };
 		CA58DA6F2F815CAE000D87A4 /* DialogueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA412F815CAE000D87A4 /* DialogueView.swift */; };
 		CA58DA702F815CAE000D87A4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA382F815CAE000D87A4 /* ContentView.swift */; };
@@ -55,6 +57,7 @@
 		CA58DA8F2F815CAE000D87A4 /* SendImageMessageUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */; };
 		CA58DA902F815CAE000D87A4 /* SetTypingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */; };
 		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */; };
+		FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +75,7 @@
 		25ACC1AABD3AC5F12D308989 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		7B1BDB0D7A65535E6E00803C /* MobileMessengerIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MobileMessengerIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
+		A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -95,7 +99,6 @@
 		CA58DA382F815CAE000D87A4 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CA58DA392F815CAE000D87A4 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		CA58DA3A2F815CAE000D87A4 /* MobileMessengerIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSApp.swift; sourceTree = "<group>"; };
-		CA58DA3B2F815CAE000D87A4 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		CA58DA3D2F815CAE000D87A4 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		CA58DA3E2F815CAE000D87A4 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
 		CA58DA402F815CAE000D87A4 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
@@ -121,6 +124,9 @@
 		CA58DA922F815CAE000D87A4 /* CreateChatUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateChatUseCase.swift; sourceTree = "<group>"; };
 		CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendImageMessageUseCase.swift; sourceTree = "<group>"; };
 		CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetTypingUseCase.swift; sourceTree = "<group>"; };
+		CA58DA962F815CAE000D87A4 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileComponents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -165,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */,
+				A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */,
 			);
 			name = MobileMessengerIOSTests;
 			sourceTree = "<group>";
@@ -283,9 +290,18 @@
 				CA58DA382F815CAE000D87A4 /* ContentView.swift */,
 				CA58DA392F815CAE000D87A4 /* MainTabView.swift */,
 				CA58DA3A2F815CAE000D87A4 /* MobileMessengerIOSApp.swift */,
-				CA58DA3B2F815CAE000D87A4 /* ProfileView.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		CA58DA9B2F815CAE000D87A4 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				CA58DA962F815CAE000D87A4 /* ProfileView.swift */,
+				CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */,
+				CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */,
+			);
+			path = Profile;
 			sourceTree = "<group>";
 		};
 		CA58DA3F2F815CAE000D87A4 /* Auth */ = {
@@ -332,6 +348,7 @@
 				CA58DA422F815CAE000D87A4 /* Chat */,
 				CA58DA452F815CAE000D87A4 /* ChatList */,
 				CA58DA482F815CAE000D87A4 /* Common */,
+				CA58DA9B2F815CAE000D87A4 /* Profile */,
 			);
 			path = Presentation;
 			sourceTree = "<group>";
@@ -554,7 +571,9 @@
 				CA58DA6A2F815CAE000D87A4 /* MarkMessageStatusUseCase.swift in Sources */,
 				CA58DA6B2F815CAE000D87A4 /* LoadChatListUseCase.swift in Sources */,
 				CA58DA6C2F815CAE000D87A4 /* KeychainTokenStore.swift in Sources */,
-				CA58DA6D2F815CAE000D87A4 /* ProfileView.swift in Sources */,
+				CA58DA952F815CAE000D87A4 /* ProfileView.swift in Sources */,
+				CA58DA972F815CAE000D87A4 /* ProfileViewModel.swift in Sources */,
+				CA58DA982F815CAE000D87A4 /* ProfileComponents.swift in Sources */,
 				CA58DA6E2F815CAE000D87A4 /* Chat.swift in Sources */,
 				CA58DA6F2F815CAE000D87A4 /* DialogueView.swift in Sources */,
 				CA58DA702F815CAE000D87A4 /* ContentView.swift in Sources */,
@@ -592,6 +611,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */,
+				FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
