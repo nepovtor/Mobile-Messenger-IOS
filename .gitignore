@@ -36,3 +36,5 @@ server/dist/
 server/.env
 server/.env.*
 !server/.env.example
+web/tsconfig.tsbuildinfo
+*.tsbuildinfo

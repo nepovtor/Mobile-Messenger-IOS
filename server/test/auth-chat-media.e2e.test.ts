@@ -603,6 +603,28 @@ test("invalid token is rejected by realtime websocket", async (t) => {
   assert.equal(closeCode, 4001);
 });
 
+test("invalid query token is rejected by realtime websocket", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const closeCode = await new Promise<number>((resolve, reject) => {
+    const url = new URL(realtimeURL(app));
+    url.searchParams.set("token", "invalid-token");
+
+    const socket = new WebSocket(url);
+
+    socket.once("close", (code) => resolve(code));
+    socket.once("error", () => {
+      // close event is the assertion source here
+    });
+    setTimeout(() => reject(new Error("Socket was not closed")), 2000);
+  });
+
+  assert.equal(closeCode, 4001);
+});
+
 test("expired token is rejected by REST and realtime websocket", async (t) => {
   const app = await createTestApp({ allowPasswordLogin: true });
   t.after(async () => {
