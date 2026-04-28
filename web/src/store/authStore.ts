@@ -29,6 +29,10 @@ export const authStore = create<AuthStore>((set) => ({
     try {
       const result = await authApi.login(payload);
       storage.setToken(result.token);
+      set({
+        token: result.token,
+        isAuthenticated: true,
+      });
       const currentUser = await authApi.getMe();
       storage.setUser(currentUser);
       set({

@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { authApi } from "../api/authApi";
 import { authStore } from "./authStore";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
+
+vi.mock("../api/authApi", () => ({
+  authApi: {
+    login: vi.fn(),
+    getMe: vi.fn(),
+  },
+}));
 
 const storageMock = (() => {
   const store = new Map<string, string>();
@@ -69,5 +77,32 @@ describe("authStore", () => {
     expect(chatStore.getState().chats).toHaveLength(0);
     expect(chatStore.getState().selectedChatId).toBeNull();
     expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it("stores the token before requesting current user during login", async () => {
+    vi.mocked(authApi.login).mockResolvedValue({
+      token: "fresh-token",
+      userID: "user-2",
+      displayName: "Boris",
+    });
+    vi.mocked(authApi.getMe).mockImplementation(async () => {
+      expect(authStore.getState().token).toBe("fresh-token");
+
+      return {
+        userID: "user-2",
+        displayName: "Boris",
+        contact: "+15550002",
+        method: "phone",
+      };
+    });
+
+    await authStore.getState().login({
+      method: "phone",
+      contact: "+15550002",
+      password: "demo2222",
+    });
+
+    expect(authStore.getState().currentUser?.displayName).toBe("Boris");
+    expect(authStore.getState().token).toBe("fresh-token");
   });
 });
