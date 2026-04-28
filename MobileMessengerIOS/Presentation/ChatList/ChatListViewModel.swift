@@ -74,6 +74,7 @@ public final class ChatListViewModel: ObservableObject {
     }
     @Published public var isLoading = false
     @Published public var isShowingError = false
+    @Published public private(set) var errorMessage = "Не удалось загрузить список чатов"
     @Published public private(set) var isCreatingChat = false
     @Published public private(set) var isLoadingCreateContacts = false
     @Published public private(set) var createContactsError: String?
@@ -117,6 +118,7 @@ public final class ChatListViewModel: ObservableObject {
             applyChats(chats)
             isShowingError = false
         } catch {
+            errorMessage = AppError.presentableMessage(for: error)
             isShowingError = true
             analytics.track(error: error, context: "chat_list_load")
         }
@@ -148,6 +150,7 @@ public final class ChatListViewModel: ObservableObject {
             allChats.insert(chat, at: 0)
             return item
         } catch {
+            errorMessage = AppError.presentableMessage(for: error)
             isShowingError = true
             analytics.track(error: error, context: "chat_create")
             return nil

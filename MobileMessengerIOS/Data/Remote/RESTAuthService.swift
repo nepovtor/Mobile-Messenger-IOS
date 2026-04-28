@@ -447,15 +447,18 @@ public struct RESTContactsService: ContactsNetworking {
     private let baseURL: URL
     private let session: URLSession
     private let authTokenProvider: @Sendable () async -> String?
+    private let unauthorizedHandler: @Sendable () async -> Void
 
     public init(
         baseURL: URL,
         session: URLSession = .shared,
-        authTokenProvider: @escaping @Sendable () async -> String?
+        authTokenProvider: @escaping @Sendable () async -> String?,
+        unauthorizedHandler: @escaping @Sendable () async -> Void = {}
     ) {
         self.baseURL = baseURL
         self.session = session
         self.authTokenProvider = authTokenProvider
+        self.unauthorizedHandler = unauthorizedHandler
     }
 
     public func listContacts() async throws -> [ContactDTO] {
@@ -474,6 +477,7 @@ public struct RESTContactsService: ContactsNetworking {
                 decoder: JSONDecoder()
             )
         } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
             throw AppError.unauthorized
         } catch let parseError as APIResponseParser.ParseError {
             throw AppError.wrapped(parseError)

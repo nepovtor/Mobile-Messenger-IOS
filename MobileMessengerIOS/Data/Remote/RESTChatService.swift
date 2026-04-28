@@ -78,16 +78,19 @@ public struct RESTChatService: ChatNetworking {
     private let baseURL: URL
     private let session: URLSession
     private let authTokenProvider: @Sendable () async -> String?
+    private let unauthorizedHandler: @Sendable () async -> Void
     private let decoder: JSONDecoder
 
     public init(
         baseURL: URL,
         session: URLSession = .shared,
-        authTokenProvider: @escaping @Sendable () async -> String?
+        authTokenProvider: @escaping @Sendable () async -> String?,
+        unauthorizedHandler: @escaping @Sendable () async -> Void = {}
     ) {
         self.baseURL = baseURL
         self.session = session
         self.authTokenProvider = authTokenProvider
+        self.unauthorizedHandler = unauthorizedHandler
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -195,6 +198,7 @@ public struct RESTChatService: ChatNetworking {
                 decoder: decoder
             )
         } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
             throw AppError.unauthorized
         } catch let parseError as APIResponseParser.ParseError {
             throw AppError.wrapped(parseError)
@@ -207,6 +211,7 @@ public struct RESTChatService: ChatNetworking {
         do {
             return try await APIResponseParser.requestData(request, using: session)
         } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
             throw AppError.unauthorized
         } catch let parseError as APIResponseParser.ParseError {
             throw AppError.wrapped(parseError)

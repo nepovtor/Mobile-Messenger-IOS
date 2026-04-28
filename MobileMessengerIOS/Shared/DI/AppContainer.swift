@@ -165,11 +165,17 @@ public final class AppContainer: ObservableObject {
     private func configureNetworkingServices() {
         chatService = RESTChatService(
             baseURL: configService.restBaseURL,
-            authTokenProvider: authTokenProvider
+            authTokenProvider: authTokenProvider,
+            unauthorizedHandler: { [sessionStore] in
+                await MainActor.run { sessionStore.logout() }
+            }
         )
         contactsService = RESTContactsService(
             baseURL: configService.restBaseURL,
-            authTokenProvider: authTokenProvider
+            authTokenProvider: authTokenProvider,
+            unauthorizedHandler: { [sessionStore] in
+                await MainActor.run { sessionStore.logout() }
+            }
         )
         realtimeService = DefaultChatRealtimeService(
             websocketURL: configService.websocketURL,

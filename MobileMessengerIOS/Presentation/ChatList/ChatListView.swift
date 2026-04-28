@@ -76,7 +76,7 @@ struct ChatListView: View {
                 }
                 .overlay(alignment: .top) {
                     if viewModel.isShowingError {
-                        BannerView(message: "Не удалось загрузить список чатов")
+                        BannerView(message: viewModel.errorMessage)
                             .transition(.move(edge: .top).combined(with: .opacity))
                             .padding(.horizontal, 16)
                             .padding(.top, 8)
