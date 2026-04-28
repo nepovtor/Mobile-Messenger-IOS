@@ -125,6 +125,8 @@ Key endpoints:
 
 Open `MobileMessengerIOS.xcodeproj`, choose the `MobileMessengerIOS` scheme, and run on a simulator.
 
+When running tests from Terminal, pass an explicit iOS Simulator `-destination`. Without it, `xcodebuild test` may pick a Mac/Catalyst path and fail before the Swift tests even start.
+
 Build from terminal:
 
 ```bash
@@ -149,6 +151,12 @@ xcodebuild \
   -destination 'platform=iOS Simulator,id=5B35CA4E-0218-4562-98CD-22DDBFD7E68D' \
   CODE_SIGNING_ALLOWED=NO \
   test
+```
+
+Convenience target:
+
+```bash
+make test-ios
 ```
 
 ## Security Notes

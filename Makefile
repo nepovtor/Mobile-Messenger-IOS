@@ -9,6 +9,9 @@ PUBLIC_DEBUG_XCCONFIG := $(IOS_CONFIG_DIR)/Debug.public.xcconfig
 DEVICE_NAME := iPhone S
 DEVICE_ID := 00008101-000210163441001E
 BUNDLE_ID := com.mobilemessenger.app
+SIMULATOR_NAME ?= iPhone 17 Pro
+SIMULATOR_OS ?= 26.1
+IOS_TEST_DESTINATION := platform=iOS Simulator,name=$(SIMULATOR_NAME),OS=$(SIMULATOR_OS)
 
 PORT ?= 8080
 
@@ -20,7 +23,7 @@ TUNNEL_PID_FILE := $(PROJECT_DIR)/.cloudflared.pid
 TUNNEL_LOG := $(PROJECT_DIR)/.cloudflared.log
 TUNNEL_URL_FILE := $(PROJECT_DIR)/.tunnel_url
 
-.PHONY: help infra infra-stop server server-stop tunnel tunnel-stop tunnel-url configure-ios build-ios install-ios launch-ios reinstall-ios up all down status clean
+.PHONY: help infra infra-stop server server-stop tunnel tunnel-stop tunnel-url configure-ios build-ios test-ios install-ios launch-ios reinstall-ios up all down status clean
 
 help:
 	@echo "make infra          - start PostgreSQL and MinIO via Docker Compose"
@@ -30,6 +33,7 @@ help:
 	@echo "make tunnel-url     - print current tunnel URL"
 	@echo "make configure-ios  - generate Debug.public.xcconfig from tunnel URL"
 	@echo "make build-ios      - build app for $(DEVICE_NAME)"
+	@echo "make test-ios       - run iOS tests on $(SIMULATOR_NAME) ($(SIMULATOR_OS))"
 	@echo "make install-ios    - install app on $(DEVICE_NAME)"
 	@echo "make launch-ios     - launch app on $(DEVICE_NAME)"
 	@echo "make reinstall-ios  - uninstall, install, launch app"
@@ -127,6 +131,14 @@ build-ios:
 		-derivedDataPath "$(BUILD_DIR)" \
 		-allowProvisioningUpdates \
 		build
+
+test-ios:
+	@xcodebuild \
+		-project MobileMessengerIOS.xcodeproj \
+		-scheme MobileMessengerIOS \
+		-destination '$(IOS_TEST_DESTINATION)' \
+		CODE_SIGNING_ALLOWED=NO \
+		test
 
 install-ios:
 	@xcrun devicectl device install app \
