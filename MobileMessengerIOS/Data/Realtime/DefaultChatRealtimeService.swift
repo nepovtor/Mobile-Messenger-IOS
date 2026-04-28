@@ -96,9 +96,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             URLSessionRealtimeSocketTask(task: session.webSocketTask(with: request))
         }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        self.decoder = decoder
+        self.decoder = .mobileMessengerISO8601()
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

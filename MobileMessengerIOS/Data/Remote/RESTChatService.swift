@@ -92,9 +92,7 @@ public struct RESTChatService: ChatNetworking {
         self.authTokenProvider = authTokenProvider
         self.unauthorizedHandler = unauthorizedHandler
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        self.decoder = decoder
+        self.decoder = .mobileMessengerISO8601()
     }
 
     public func listChats(searchQuery: String?) async throws -> [ServerChat] {

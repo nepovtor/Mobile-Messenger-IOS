@@ -340,6 +340,33 @@ extension URL {
     }
 }
 
+extension JSONDecoder {
+    static func mobileMessengerISO8601() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+
+            for options in [
+                ISO8601DateFormatter.Options.withInternetDateTime,
+                [.withInternetDateTime, .withFractionalSeconds]
+            ] {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = options
+                if let date = formatter.date(from: value) {
+                    return date
+                }
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO-8601 date: \(value)"
+            )
+        }
+        return decoder
+    }
+}
+
 public protocol AuthNetworking: Sendable {
     func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse?
     func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse

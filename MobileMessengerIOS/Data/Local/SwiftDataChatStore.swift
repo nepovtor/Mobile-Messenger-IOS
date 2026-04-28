@@ -14,9 +14,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         encoder.outputFormatting = [.sortedKeys]
         self.encoder = encoder
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        self.decoder = decoder
+        self.decoder = .mobileMessengerISO8601()
 
         let defaultURL = Self.defaultStorageURL()
         self.storageURL = storageURL ?? defaultURL
