@@ -405,6 +405,13 @@ export class AuthService implements OnModuleInit {
       where: method === AuthMethod.PHONE ? { phone: contact } : { method, contact },
     });
 
+    // Fallback: find by contact for users created before the phone column existed
+    if (!user && method === AuthMethod.PHONE) {
+      user = await this.usersRepository.findOne({
+        where: { method, contact },
+      });
+    }
+
     const displayName =
       preferredDisplayName ?? buildDisplayName(method, contact);
 
@@ -419,6 +426,11 @@ export class AuthService implements OnModuleInit {
       });
 
       return this.usersRepository.save(user);
+    }
+
+    // Backfill phone column for legacy users
+    if (method === AuthMethod.PHONE && !user.phone) {
+      user.phone = contact;
     }
 
     let shouldSave = false;
