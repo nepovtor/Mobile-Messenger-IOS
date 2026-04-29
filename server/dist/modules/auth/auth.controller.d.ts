@@ -10,6 +10,9 @@ export declare class AuthController {
     private readonly authRateLimitService;
     constructor(authService: AuthService, authRateLimitService: AuthRateLimitService);
     requestCode(request: Request, dto: RequestAuthDto): Promise<{
+        status: "code_sent";
+        delivery: string;
+        resendAfterSeconds: number;
         expiresIn: number;
         debugCode?: string;
     }>;
@@ -17,24 +20,31 @@ export declare class AuthController {
         token: string;
         userID: string;
         displayName: string;
+        phone: string;
     }>;
     login(request: Request, dto: LoginAuthDto): Promise<{
         token: string;
         userID: string;
         displayName: string;
+        phone: string;
     }>;
     getMe(user: AuthenticatedUser): Promise<{
         userID: string;
         displayName: string;
         contact: string;
         method: string;
+        phone: string | null;
+        telegramChatId: string | null;
+        telegramUsername: string | null;
     }>;
     listContacts(user: AuthenticatedUser): Promise<{
         userID: string;
         displayName: string;
         contact: string;
         method: import("../../entities/user.entity").AuthMethod;
+        phone: string | null;
         isCurrentUser: boolean;
     }[]>;
     private getRequestIP;
+    private getUserAgent;
 }

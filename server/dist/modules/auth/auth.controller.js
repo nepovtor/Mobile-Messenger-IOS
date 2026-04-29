@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
+const contact_utils_1 = require("../common/contact.utils");
 const current_user_decorator_1 = require("./decorators/current-user.decorator");
 const auth_guard_1 = require("./auth.guard");
 const auth_rate_limit_service_1 = require("./auth-rate-limit.service");
@@ -27,15 +28,32 @@ let AuthController = class AuthController {
         this.authRateLimitService = authRateLimitService;
     }
     requestCode(request, dto) {
-        this.authRateLimitService.consume(`${this.getRequestIP(request)}:request:${dto.method}`);
-        return this.authService.requestCode(dto);
+        this.authRateLimitService.consume(`${this.getRequestIP(request)}:request`, {
+            message: "Too many auth requests",
+        });
+        return this.authService.requestCode(dto, {
+            requestIP: this.getRequestIP(request),
+            userAgent: this.getUserAgent(request),
+        });
     }
     verifyCode(request, dto) {
-        this.authRateLimitService.consume(`${this.getRequestIP(request)}:verify:${dto.method}`);
+        const phoneOrContact = dto.phone ?? dto.contact;
+        if (phoneOrContact) {
+            try {
+                const normalizedPhone = (0, contact_utils_1.normalizePhone)(phoneOrContact);
+                this.authRateLimitService.consume(`${this.getRequestIP(request)}:verify:${normalizedPhone}`, {
+                    maxRequests: 10,
+                    message: "Too many auth attempts",
+                });
+            }
+            catch {
+                this.authRateLimitService.consume(`${this.getRequestIP(request)}:verify`);
+            }
+        }
         return this.authService.verifyCode(dto);
     }
     login(request, dto) {
-        this.authRateLimitService.consume(`${this.getRequestIP(request)}:login:${dto.method}`);
+        this.authRateLimitService.consume(`${this.getRequestIP(request)}:login`);
         return this.authService.login(dto);
     }
     getMe(user) {
@@ -50,6 +68,10 @@ let AuthController = class AuthController {
             return forwardedFor.split(",")[0].trim();
         }
         return request.ip || "unknown";
+    }
+    getUserAgent(request) {
+        const userAgent = request.headers["user-agent"];
+        return typeof userAgent === "string" ? userAgent : null;
     }
 };
 exports.AuthController = AuthController;

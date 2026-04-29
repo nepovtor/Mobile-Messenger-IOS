@@ -9,6 +9,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
+const phone_verification_code_entity_1 = require("../entities/phone-verification-code.entity");
+const telegram_link_entity_1 = require("../entities/telegram-link.entity");
 const runtime_config_1 = require("./common/runtime-config");
 const auth_module_1 = require("./auth/auth.module");
 const chat_module_1 = require("./chat/chat.module");
@@ -34,6 +36,7 @@ exports.AppModule = AppModule = __decorate([
                 synchronize: (0, runtime_config_1.isDatabaseSynchronizationEnabled)(),
                 retryAttempts: 5,
                 retryDelay: 2000,
+                entities: [phone_verification_code_entity_1.PhoneVerificationCodeEntity, telegram_link_entity_1.TelegramLinkEntity],
             }),
             docs_module_1.DocsModule,
             health_module_1.HealthModule,

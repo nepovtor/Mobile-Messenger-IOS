@@ -39,6 +39,18 @@ __decorate([
     __metadata("design:type", String)
 ], UserEntity.prototype, "contact", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: "varchar", unique: true, nullable: true }),
+    __metadata("design:type", Object)
+], UserEntity.prototype, "phone", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "telegram_chat_id", type: "varchar", nullable: true }),
+    __metadata("design:type", Object)
+], UserEntity.prototype, "telegramChatId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "telegram_username", type: "varchar", nullable: true }),
+    __metadata("design:type", Object)
+], UserEntity.prototype, "telegramUsername", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: "display_name", type: "varchar" }),
     __metadata("design:type", String)
 ], UserEntity.prototype, "displayName", void 0);
@@ -46,6 +58,10 @@ __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: "created_at", type: "timestamptz" }),
     __metadata("design:type", Date)
 ], UserEntity.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ name: "updated_at", type: "timestamptz" }),
+    __metadata("design:type", Date)
+], UserEntity.prototype, "updatedAt", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => chat_participant_entity_1.ChatParticipantEntity, (participant) => participant.user),
     __metadata("design:type", Array)

@@ -9,8 +9,12 @@ export declare class UserEntity {
     id: `${string}-${string}-${string}-${string}-${string}`;
     method: AuthMethod;
     contact: string;
+    phone: string | null;
+    telegramChatId: string | null;
+    telegramUsername: string | null;
     displayName: string;
     createdAt: Date;
+    updatedAt: Date;
     chatParticipants?: ChatParticipantEntity[];
     messages?: MessageEntity[];
     uploadedMedia?: MediaEntity[];
