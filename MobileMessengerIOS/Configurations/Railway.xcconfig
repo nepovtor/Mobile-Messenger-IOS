@@ -1,6 +1,6 @@
 REST_BASE_URL = https://mobile-messenger-ios-production.up.railway.app/api
 WEBSOCKET_URL = wss://mobile-messenger-ios-production.up.railway.app/realtime
 FEATURE_REALTIME = YES
-FEATURE_PUSH = NO
 FEATURE_MEDIA = YES
 FEATURE_VERBOSE_LOGGING = NO
+FEATURE_PUSH = NO

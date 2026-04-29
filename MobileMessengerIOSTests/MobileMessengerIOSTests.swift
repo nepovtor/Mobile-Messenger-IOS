@@ -320,7 +320,10 @@ final class TransportDecodingTests: XCTestCase {
     }
 
     func testSharedDecoderSupportsISO8601WithoutFractionalSeconds() throws {
-        struct Payload: Decodable { let createdAt: Date }
+        struct Payload: Decodable {
+            let createdAt: Date
+        }
+
         let payload = #"{"createdAt":"2026-04-24T12:34:56Z"}"#
 
         let decoded = try JSONDecoder.mobileMessengerISO8601().decode(Payload.self, from: Data(payload.utf8))
@@ -330,7 +333,10 @@ final class TransportDecodingTests: XCTestCase {
     }
 
     func testSharedDecoderSupportsISO8601WithFractionalSeconds() throws {
-        struct Payload: Decodable { let createdAt: Date }
+        struct Payload: Decodable {
+            let createdAt: Date
+        }
+
         let payload = #"{"createdAt":"2026-04-24T12:34:56.789Z"}"#
 
         let decoded = try JSONDecoder.mobileMessengerISO8601().decode(Payload.self, from: Data(payload.utf8))

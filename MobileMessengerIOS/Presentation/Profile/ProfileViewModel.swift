@@ -167,7 +167,8 @@ final class ProfileViewModel: ObservableObject {
 
     static func makeInitials(from displayName: String) -> String {
         let words = displayName.split(whereSeparator: \.isWhitespace)
-        if let first = words.first, let second = words.dropFirst().first {
+        if let first = words.first,
+           let second = words.dropFirst().first {
             return (String(first.prefix(1)) + String(second.prefix(1))).uppercased()
         }
 

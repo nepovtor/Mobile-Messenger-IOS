@@ -309,7 +309,9 @@ struct ProfileView: View {
     }
 
     private var taskKey: String {
-        "\(sessionStore.authToken ?? "logged-out")-\(container.configurationRevision)-\(String(describing: container.realtimeConnectionState))"
+        let tokenPart = sessionStore.authToken ?? "logged-out"
+        let realtimePart = String(describing: container.realtimeConnectionState)
+        return "\(tokenPart)-\(container.configurationRevision)-\(realtimePart)"
     }
 
     private var backgroundView: some View {
