@@ -323,7 +323,7 @@ struct ProfileView: View {
                 colors: [
                     Color.blue.opacity(0.16),
                     Color.cyan.opacity(0.09),
-                    Color(uiColor: .systemGroupedBackground)
+                    Color(uiColor: .systemGroupedBackground),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -345,7 +345,6 @@ struct ProfileView: View {
         }
     }
 
-    @ViewBuilder
     private func actionRow(
         systemImage: String,
         title: String,

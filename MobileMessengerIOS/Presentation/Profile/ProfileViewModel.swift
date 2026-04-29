@@ -101,7 +101,7 @@ final class ProfileViewModel: ObservableObject {
         realtimeStatus = ProfileRealtimeStatus(state: realtimeState)
 
         switch sessionState {
-        case .authenticated(let token, let userID, let displayName):
+        case let .authenticated(token, userID, displayName):
             if currentUserID != userID {
                 phone = "Unknown phone"
                 lastLoadedUserID = nil
@@ -168,7 +168,8 @@ final class ProfileViewModel: ObservableObject {
     static func makeInitials(from displayName: String) -> String {
         let words = displayName.split(whereSeparator: \.isWhitespace)
         if let first = words.first,
-           let second = words.dropFirst().first {
+           let second = words.dropFirst().first
+        {
             return (String(first.prefix(1)) + String(second.prefix(1))).uppercased()
         }
 

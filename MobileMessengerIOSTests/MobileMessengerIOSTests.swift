@@ -1,5 +1,5 @@
-import XCTest
 @testable import MobileMessengerIOS
+import XCTest
 
 @MainActor
 final class ChatViewModelTests: XCTestCase {
@@ -117,7 +117,7 @@ final class ChatListViewModelTests: XCTestCase {
         let contactsService = ContactsServiceStub(contacts: [
             makeContact(displayName: "Глеб Demo", isCurrentUser: false),
             makeContact(displayName: "Анна Demo", isCurrentUser: false),
-            makeContact(displayName: "Вы", isCurrentUser: true)
+            makeContact(displayName: "Вы", isCurrentUser: true),
         ])
 
         let viewModel = ChatListViewModel(
@@ -157,7 +157,7 @@ final class ChatListViewModelTests: XCTestCase {
                 unreadCount: 0,
                 participantNames: ["Анна Demo"],
                 participantCount: 2
-            )
+            ),
         ]
 
         let viewModel = ChatListViewModel(
@@ -187,7 +187,7 @@ final class ChatListViewModelTests: XCTestCase {
 
 @MainActor
 final class AuthViewModelTests: XCTestCase {
-    func testRequestCodeSanitizesPhoneAndStoresExpiration() async throws {
+    func testRequestCodeSanitizesPhoneAndStoresExpiration() async {
         let authService = AuthServiceSpy()
         let sessionStore = makeSessionStore()
         let viewModel = AuthViewModel(authService: authService, sessionStore: sessionStore)
@@ -232,7 +232,7 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertEqual(signIn?.contact, account.contact)
         XCTAssertEqual(signIn?.password, account.password)
 
-        guard case .authenticated(let token, let userID, let displayName) = sessionStore.state else {
+        guard case let .authenticated(token, userID, displayName) = sessionStore.state else {
             return XCTFail("Expected authenticated state")
         }
 
@@ -248,7 +248,7 @@ final class AuthViewModelTests: XCTestCase {
 
 final class TransportDecodingTests: XCTestCase {
     func testAuthVerifyResponseDecodesVerifyPayload() throws {
-        let userID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let userID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
         let payload = """
         {
           "token": "demo-token",
@@ -267,7 +267,7 @@ final class TransportDecodingTests: XCTestCase {
     }
 
     func testServerChatDecodesProductionDTOFields() throws {
-        let chatID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE01")!
+        let chatID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE01"))
         let payload = """
         {
           "id": "\(chatID.uuidString)",
@@ -290,10 +290,10 @@ final class TransportDecodingTests: XCTestCase {
     }
 
     func testServerMessageDecodesProductionDTOFields() throws {
-        let messageID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE02")!
-        let chatID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE03")!
-        let senderID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE04")!
-        let clientMessageID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE05")!
+        let messageID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE02"))
+        let chatID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE03"))
+        let senderID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE04"))
+        let clientMessageID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEE05"))
         let payload = """
         {
           "id": "\(messageID.uuidString)",
@@ -348,7 +348,7 @@ final class TransportDecodingTests: XCTestCase {
 
 @MainActor
 final class RealtimeServiceTests: XCTestCase {
-    func testWebSocketEventDecodingWorks() async throws {
+    func testWebSocketEventDecodingWorks() async {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
         let chatID = UUID()
@@ -360,7 +360,7 @@ final class RealtimeServiceTests: XCTestCase {
         service.activate()
 
         let envelope = await nextEnvelope(from: stream)
-        if case .typing(let participants) = envelope?.event {
+        if case let .typing(participants) = envelope?.event {
             XCTAssertEqual(envelope?.chatID, chatID)
             XCTAssertEqual(participants, ["Анна"])
         } else {
@@ -368,7 +368,7 @@ final class RealtimeServiceTests: XCTestCase {
         }
     }
 
-    func testMessageCreatedDecodeWorks() async throws {
+    func testMessageCreatedDecodeWorks() async {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
         let chatID = UUID()
@@ -382,7 +382,7 @@ final class RealtimeServiceTests: XCTestCase {
         service.activate()
 
         let envelope = await nextEnvelope(from: stream)
-        guard case .message(let message)? = envelope?.event else {
+        guard case let .message(message)? = envelope?.event else {
             return XCTFail("Expected message event")
         }
 
@@ -424,7 +424,7 @@ final class RealtimeServiceTests: XCTestCase {
         XCTAssertEqual(message.status, .sent)
     }
 
-    func testLogoutClosesRealtimeConnection() async throws {
+    func testLogoutClosesRealtimeConnection() async {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
         socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
@@ -440,7 +440,7 @@ final class RealtimeServiceTests: XCTestCase {
         XCTAssertEqual(cancelCount, 1)
     }
 
-    func testManualDisconnectDoesNotReconnect() async throws {
+    func testManualDisconnectDoesNotReconnect() async {
         let socket = FakeRealtimeSocketTask()
         var factoryCalls = 0
         let service = makeRealtimeService(socket: socket) { request in
@@ -466,8 +466,8 @@ final class RealtimeServiceTests: XCTestCase {
         let firstSocket = FakeRealtimeSocketTask()
         let secondSocket = FakeRealtimeSocketTask()
         var factoryCalls = 0
-        let service = DefaultChatRealtimeService(
-            websocketURL: URL(string: "ws://localhost/realtime")!,
+        let service = try DefaultChatRealtimeService(
+            websocketURL: XCTUnwrap(URL(string: "ws://localhost/realtime")),
             authTokenProvider: { "test-token" },
             analytics: AnalyticsServiceSpy(),
             reachability: ReachabilityServiceStub(isReachable: true),
@@ -513,8 +513,8 @@ final class RealtimeServiceTests: XCTestCase {
         secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
 
         var factoryCalls = 0
-        let service = DefaultChatRealtimeService(
-            websocketURL: URL(string: "ws://localhost/realtime")!,
+        let service = try DefaultChatRealtimeService(
+            websocketURL: XCTUnwrap(URL(string: "ws://localhost/realtime")),
             authTokenProvider: { "test-token" },
             analytics: AnalyticsServiceSpy(),
             reachability: ReachabilityServiceStub(isReachable: true),
@@ -598,7 +598,7 @@ final class RealtimeServiceTests: XCTestCase {
     }
 
     private func waitForCancelCount(on socket: FakeRealtimeSocketTask) async -> Int {
-        for _ in 0..<20 {
+        for _ in 0 ..< 20 {
             let count = await socket.cancelCount
             if count > 0 {
                 return count
@@ -712,7 +712,7 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
     }
 
     func testRetryFailedMessageDoesNotCreateDuplicate() async throws {
-        SessionStore.Constants.currentUserID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        SessionStore.Constants.currentUserID = try XCTUnwrap(UUID(uuidString: "11111111-2222-3333-4444-555555555555"))
         SessionStore.Constants.currentUserDisplayName = "Вы"
         let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
         let realtime = SequencedRealtimeServiceStub(
@@ -729,7 +729,7 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
                         createdAt: Date(),
                         status: .sent
                     )
-                )
+                ),
             ]
         )
         let repository = DefaultChatRepository(
@@ -769,11 +769,11 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         XCTAssertEqual(messages.first?.text, "Recovered")
     }
 
-    func testSessionLogoutClearsTokenAndUserIdentity() {
+    func testSessionLogoutClearsTokenAndUserIdentity() throws {
         let tokenStore = InMemoryTokenStore()
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         let sessionStore = SessionStore(tokenStore: tokenStore, defaults: defaults)
-        let userID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let userID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
 
         sessionStore.authenticate(with: "demo-token", userID: userID, displayName: "Анна Demo")
         sessionStore.logout()
@@ -786,12 +786,12 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
 
     func testUserSwitchClearsOldChatsBeforeLoadingNextAccount() async throws {
         let tokenStore = InMemoryTokenStore()
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         let sessionStore = SessionStore(tokenStore: tokenStore, defaults: defaults)
         let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
         let chatID = UUID()
-        let userA = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
-        let userB = UUID(uuidString: "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF")!
+        let userA = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
+        let userB = try XCTUnwrap(UUID(uuidString: "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF"))
 
         sessionStore.authenticate(with: "token-a", userID: userA, displayName: "Анна Demo")
         try await store.ensureChatExists(id: chatID, title: "Анна и Борис")
@@ -830,7 +830,7 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         in store: SwiftDataChatStore,
         chatID: UUID
     ) async throws -> [Message] {
-        for _ in 0..<20 {
+        for _ in 0 ..< 20 {
             let messages = try await store.loadMessages(for: chatID, limit: 10, before: nil)
             if let first = messages.first, first.status == .failed {
                 return messages
@@ -865,20 +865,22 @@ private final class ChatRepositorySpy: ChatRepository {
     var observedChats: AsyncStream<[Chat]> = AsyncStream { continuation in
         continuation.finish()
     }
+
     var observedMessages: AsyncStream<Message> = AsyncStream { continuation in
         continuation.finish()
     }
+
     var onSendMessage: ((UUID, String, UUID?) -> Void)?
 
-    func createChat(title: String, participantContacts: [String]) async throws -> Chat {
+    func createChat(title _: String, participantContacts _: [String]) async throws -> Chat {
         createChatResult
     }
 
-    func cachedChats(searchQuery: String?) async -> [Chat] {
+    func cachedChats(searchQuery _: String?) async -> [Chat] {
         cachedChatsResult
     }
 
-    func listChats(searchQuery: String?) async throws -> [Chat] {
+    func listChats(searchQuery _: String?) async throws -> [Chat] {
         listChatsResult
     }
 
@@ -886,15 +888,15 @@ private final class ChatRepositorySpy: ChatRepository {
         observedChats
     }
 
-    func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
+    func observeMessages(for _: UUID) -> AsyncStream<Message> {
         observedMessages
     }
 
-    func cachedHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async -> [Message] {
+    func cachedHistory(for _: UUID, limit _: Int, before _: UUID?) async -> [Message] {
         historyResult
     }
 
-    func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
+    func loadHistory(for _: UUID, limit _: Int, before _: UUID?) async throws -> [Message] {
         historyResult
     }
 
@@ -903,17 +905,17 @@ private final class ChatRepositorySpy: ChatRepository {
         return sendMessageResult
     }
 
-    func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message {
+    func sendImageMessage(chatID _: UUID, imageData _: Data, caption _: String?, localID _: UUID?) async throws -> Message {
         sendMessageResult
     }
 
-    func setTyping(chatID: UUID, isTyping: Bool) async {}
+    func setTyping(chatID _: UUID, isTyping _: Bool) async {}
 
-    func retryPendingMessages(for chatID: UUID) async {}
+    func retryPendingMessages(for _: UUID) async {}
 
     func refreshForForeground() async {}
 
-    func markMessage(_ messageID: UUID, in chatID: UUID, with status: MessageStatus) async throws {}
+    func markMessage(_: UUID, in _: UUID, with _: MessageStatus) async throws {}
 
     func resetLocalState() async {}
 }
@@ -991,9 +993,9 @@ private final class FakeRealtimeSocketTask: RealtimeSocketTask {
 
     func receive() async throws -> URLSessionWebSocketTask.Message {
         switch await state.next() {
-        case .success(let message):
+        case let .success(message):
             return message
-        case .failure(let error):
+        case let .failure(error):
             throw error
         }
     }
@@ -1012,21 +1014,30 @@ private struct RealtimeServiceStub: ChatRealtimeService {
     func activate() {}
     func deactivate() {}
     func handleLogout() {}
-    func connect(to chatID: UUID) { _ = chatID }
-    func disconnect(from chatID: UUID) { _ = chatID }
+    func connect(to chatID: UUID) {
+        _ = chatID
+    }
+
+    func disconnect(from chatID: UUID) {
+        _ = chatID
+    }
+
     func observeEvents(for chatID: UUID) -> AsyncStream<ChatRealtimeEvent> {
         _ = chatID
         return AsyncStream { continuation in continuation.finish() }
     }
+
     func observeAllEvents() -> AsyncStream<ChatRealtimeEnvelope> {
         AsyncStream { continuation in continuation.finish() }
     }
+
     func observeConnectionState() -> AsyncStream<ChatRealtimeConnectionState> {
         AsyncStream { continuation in
             continuation.yield(.connected)
             continuation.finish()
         }
     }
+
     func sendMessage(
         chatID: UUID,
         kind: Message.Kind,
@@ -1052,10 +1063,12 @@ private struct RealtimeServiceStub: ChatRealtimeService {
             status: .delivered
         )
     }
+
     func setTyping(chatID: UUID, isTyping: Bool) async {
         _ = chatID
         _ = isTyping
     }
+
     func markRead(chatID: UUID, messageID: UUID) async {
         _ = chatID
         _ = messageID
@@ -1083,23 +1096,32 @@ private final class SequencedRealtimeServiceStub: ChatRealtimeService, @unchecke
     func activate() {}
     func deactivate() {}
     func handleLogout() {}
-    func connect(to chatID: UUID) { _ = chatID }
-    func disconnect(from chatID: UUID) { _ = chatID }
+    func connect(to chatID: UUID) {
+        _ = chatID
+    }
+
+    func disconnect(from chatID: UUID) {
+        _ = chatID
+    }
+
     func observeEvents(for chatID: UUID) -> AsyncStream<ChatRealtimeEvent> {
         _ = chatID
         return AsyncStream { continuation in continuation.finish() }
     }
+
     func observeAllEvents() -> AsyncStream<ChatRealtimeEnvelope> {
         AsyncStream { continuation in continuation.finish() }
     }
+
     func observeConnectionState() -> AsyncStream<ChatRealtimeConnectionState> {
         AsyncStream { continuation in
             continuation.yield(.connected)
             continuation.finish()
         }
     }
+
     func sendMessage(
-        chatID: UUID,
+        chatID _: UUID,
         kind: Message.Kind,
         text: String?,
         mediaID: UUID?,
@@ -1111,7 +1133,7 @@ private final class SequencedRealtimeServiceStub: ChatRealtimeService, @unchecke
         let next = outcomes.isEmpty ? Result<Message, Error>.failure(AppError.unknown) : outcomes.removeFirst()
         lock.unlock()
         switch next {
-        case .success(let message):
+        case let .success(message):
             return Message(
                 id: message.id,
                 localID: clientMessageID,
@@ -1124,14 +1146,16 @@ private final class SequencedRealtimeServiceStub: ChatRealtimeService, @unchecke
                 status: message.status,
                 attachments: message.attachments
             )
-        case .failure(let error):
+        case let .failure(error):
             throw error
         }
     }
+
     func setTyping(chatID: UUID, isTyping: Bool) async {
         _ = chatID
         _ = isTyping
     }
+
     func markRead(chatID: UUID, messageID: UUID) async {
         _ = chatID
         _ = messageID
@@ -1216,8 +1240,8 @@ private struct ReachabilityServiceStub: ReachabilityService {
 }
 
 private struct AnalyticsServiceSpy: AnalyticsService {
-    func track(event: AppAnalyticsEvent) {}
-    func track(error: Error, context: String) {}
+    func track(event _: AppAnalyticsEvent) {}
+    func track(error _: Error, context _: String) {}
 }
 
 private actor AuthServiceSpy: AuthNetworking {
