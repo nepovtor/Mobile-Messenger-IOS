@@ -14,28 +14,54 @@ describe("authApi", () => {
     );
   });
 
-  it("requestCode posts the new phone payload", async () => {
+  it("requestCode posts the Railway-compatible contact payload", async () => {
     await authApi.requestCode("+375291234567");
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/auth/request"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ phone: "+375291234567" }),
+        body: JSON.stringify({
+          method: "phone",
+          contact: "+375291234567",
+        }),
       }),
     );
   });
 
-  it("verifyCode posts the new phone payload", async () => {
+  it("verifyCode posts the Railway-compatible contact payload", async () => {
     await authApi.verifyCode("+375291234567", "123456");
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/auth/verify"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ phone: "+375291234567", code: "123456" }),
+        body: JSON.stringify({
+          method: "phone",
+          contact: "+375291234567",
+          code: "123456",
+        }),
       }),
     );
+  });
+
+  it("requestCode normalizes the legacy Railway response shape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ expiresIn: 300 }),
+      }),
+    );
+
+    await expect(authApi.requestCode("+375291234567")).resolves.toEqual({
+      status: "code_sent",
+      delivery: "telegram",
+      resendAfterSeconds: 60,
+      expiresIn: 300,
+      debugCode: undefined,
+    });
   });
 
   it("telegram-linked errors keep the backend code in ApiError", async () => {

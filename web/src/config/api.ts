@@ -2,7 +2,7 @@ const PRODUCTION_API_URL =
   "https://mobile-messenger-ios-production.up.railway.app/api";
 const PRODUCTION_WEBSOCKET_URL =
   "wss://mobile-messenger-ios-production.up.railway.app/realtime";
-const PRODUCTION_TELEGRAM_BOT_USERNAME = "";
+const PRODUCTION_TELEGRAM_BOT_USERNAME = "verificMobileMessengerIOSbot";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");

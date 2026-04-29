@@ -137,6 +137,7 @@ describe("authStore", () => {
       delivery: "telegram",
       resendAfterSeconds: 60,
       expiresIn: 300,
+      debugCode: undefined,
     });
 
     const response = await authStore.getState().requestCode("+15550004");

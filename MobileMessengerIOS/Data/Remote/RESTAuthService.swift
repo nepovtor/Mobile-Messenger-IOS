@@ -406,13 +406,15 @@ public struct RESTAuthService: AuthNetworking {
 
     public func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
         try await sendRequest(endpoint: "/auth/request", payload: [
-            "phone": contact
+            "method": method.rawValue,
+            "contact": contact
         ])
     }
 
     public func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse {
         try await sendRequest(endpoint: "/auth/verify", payload: [
-            "phone": contact,
+            "method": method.rawValue,
+            "contact": contact,
             "code": code
         ])
     }
@@ -473,6 +475,37 @@ public struct AuthCodeResponse: Codable {
     public let resendAfterSeconds: Int
     public let expiresIn: Int
     public let debugCode: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case delivery
+        case resendAfterSeconds
+        case expiresIn
+        case debugCode
+    }
+
+    public init(
+        status: String,
+        delivery: String,
+        resendAfterSeconds: Int,
+        expiresIn: Int,
+        debugCode: String? = nil
+    ) {
+        self.status = status
+        self.delivery = delivery
+        self.resendAfterSeconds = resendAfterSeconds
+        self.expiresIn = expiresIn
+        self.debugCode = debugCode
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "code_sent"
+        delivery = try container.decodeIfPresent(String.self, forKey: .delivery) ?? "telegram"
+        resendAfterSeconds = try container.decodeIfPresent(Int.self, forKey: .resendAfterSeconds) ?? 60
+        expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) ?? 300
+        debugCode = try container.decodeIfPresent(String.self, forKey: .debugCode)
+    }
 }
 
 public struct AuthVerifyResponse: Decodable {

@@ -311,6 +311,21 @@ final class TransportDecodingTests: XCTestCase {
         XCTAssertEqual(response.expiresIn, 300)
     }
 
+    func testAuthRequestResponseDecodesLegacyRailwayPayload() throws {
+        let payload = """
+        {
+          "expiresIn": 300
+        }
+        """
+
+        let response = try JSONDecoder().decode(AuthCodeResponse.self, from: Data(payload.utf8))
+
+        XCTAssertEqual(response.status, "code_sent")
+        XCTAssertEqual(response.delivery, "telegram")
+        XCTAssertEqual(response.resendAfterSeconds, 60)
+        XCTAssertEqual(response.expiresIn, 300)
+    }
+
     func testTelegramNotLinkedErrorMappingIsUserFriendly() {
         let error = APIResponseParser.ParseError(
             userMessage: "Open the Telegram bot and send your phone number before requesting a code.",
