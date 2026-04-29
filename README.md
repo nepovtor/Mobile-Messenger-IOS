@@ -51,6 +51,16 @@ SwiftUI Views
 - Demo accounts with seeded chats for predictable demo flow.
 - Backend e2e tests, backend heartbeat unit test, iOS unit tests, GitHub Actions CI.
 
+## iOS App Features
+
+- Auth with demo accounts and real backend session verification.
+- Chat list with per-user chat isolation and unread state.
+- Message history, optimistic sending, retry for failed messages, and delivery state updates.
+- Native WebSocket realtime via `URLSessionWebSocketTask`.
+- Keychain-backed token storage.
+- Profile screen with initials avatar, display name, phone, user ID fallback, and realtime status.
+- Secure logout that clears session state, cached chats/messages, and realtime connectivity.
+
 ## Planned
 
 - Push notification delivery from backend.
@@ -88,12 +98,14 @@ Backend seeds 5 demo users and 4 deterministic chats in development.
 
 ## Demo Flow
 
-1. Start backend and open the iOS app.
+1. Start the backend locally or select the Railway iOS config.
 2. Login as Анна Demo with `+15551230011` / `demo1111`.
 3. Open `Анна и Борис` or `Demo Team`.
 4. Send a message and watch it move from `sending` to `sent`.
-5. Login as Борис Demo with `+15551230012` / `demo2222`.
-6. Open the shared chat and verify realtime `message.created` without refresh.
+5. Open Profile and inspect realtime/session security info.
+6. Logout from Profile.
+7. Login as Борис Demo with `+15551230012` / `demo2222`.
+8. Verify that a different chat set is shown for the second account.
 
 ## Backend
 
@@ -128,6 +140,22 @@ Key endpoints:
 
 Open `MobileMessengerIOS.xcodeproj`, choose the `MobileMessengerIOS` scheme, and run on a simulator.
 
+### iOS Config
+
+- Debug local backend: [MobileMessengerIOS/Configurations/Debug.xcconfig](./MobileMessengerIOS/Configurations/Debug.xcconfig)
+- Railway backend config: [MobileMessengerIOS/Configurations/Railway.xcconfig](./MobileMessengerIOS/Configurations/Railway.xcconfig)
+- Example local override: [Config/Config.example.xcconfig](./Config/Config.example.xcconfig)
+
+The Railway config points at the public backend and keeps existing Debug/Release configs unchanged.
+
+To use Railway in Xcode:
+
+1. Duplicate `Debug` or `Release` if you want a dedicated `Railway` build configuration.
+2. Set its Base Configuration to `MobileMessengerIOS/Configurations/Railway.xcconfig`.
+3. Run the existing `MobileMessengerIOS` scheme with that build configuration.
+
+### iOS Build
+
 When running tests from Terminal, pass an explicit iOS Simulator `-destination`. Without it, `xcodebuild test` may pick a Mac/Catalyst path and fail before the Swift tests even start.
 
 Build from terminal:
@@ -136,10 +164,33 @@ Build from terminal:
 xcodebuild \
   -project MobileMessengerIOS.xcodeproj \
   -scheme MobileMessengerIOS \
-  -destination 'platform=iOS,name=iPhone S' \
   CODE_SIGNING_ALLOWED=NO \
   build
 ```
+
+### iOS Testing
+
+Run tests on an available simulator:
+
+```bash
+xcrun simctl list devices available
+xcodebuild \
+  -project MobileMessengerIOS.xcodeproj \
+  -scheme MobileMessengerIOS \
+  -destination 'platform=iOS Simulator,id=5B35CA4E-0218-4562-98CD-22DDBFD7E68D' \
+  CODE_SIGNING_ALLOWED=NO \
+  test
+```
+
+iOS test coverage includes:
+
+- auth verify response decoding;
+- chat and message DTO decoding;
+- shared ISO-8601 date decoding;
+- message dedup by server ID and client message ID;
+- message ack, failed state, retry, logout cleanup, and reconnect behavior;
+- profile/auth/chat list view model scenarios;
+- user-switch cleanup for cached chat state.
 
 ## Testing Commands
 
@@ -148,12 +199,6 @@ cd server && npm ci
 cd server && npm run lint
 cd server && npm test
 cd server && npm run build
-xcodebuild \
-  -project MobileMessengerIOS.xcodeproj \
-  -scheme MobileMessengerIOS \
-  -destination 'platform=iOS Simulator,id=5B35CA4E-0218-4562-98CD-22DDBFD7E68D' \
-  CODE_SIGNING_ALLOWED=NO \
-  test
 ```
 
 Convenience target:

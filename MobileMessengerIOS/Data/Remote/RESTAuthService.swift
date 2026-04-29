@@ -451,10 +451,49 @@ public struct AuthCodeResponse: Codable {
     public let expiresIn: Int?
 }
 
-public struct AuthVerifyResponse: Codable {
+public struct AuthVerifyResponse: Decodable {
     public let token: String
     public let userID: UUID
     public let displayName: String
+    public let phone: String?
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case userID
+        case userId
+        case displayName
+        case phone
+        case contact
+    }
+
+    public init(token: String, userID: UUID, displayName: String, phone: String? = nil) {
+        self.token = token
+        self.userID = userID
+        self.displayName = displayName
+        self.phone = phone
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        token = try container.decode(String.self, forKey: .token)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        phone =
+            try container.decodeIfPresent(String.self, forKey: .phone) ??
+            container.decodeIfPresent(String.self, forKey: .contact)
+
+        if let decodedUserID = try container.decodeIfPresent(UUID.self, forKey: .userID) ??
+            container.decodeIfPresent(UUID.self, forKey: .userId) {
+            userID = decodedUserID
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.userID,
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Missing userID/userId in auth response"
+                )
+            )
+        }
+    }
 }
 
 public protocol ContactsNetworking: Sendable {

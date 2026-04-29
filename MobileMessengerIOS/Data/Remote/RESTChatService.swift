@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ServerChat: Codable, Sendable {
+public struct ServerChat: Decodable, Sendable {
     public let id: UUID
     public let title: String
     public let lastMessagePreview: String?
@@ -9,9 +9,63 @@ public struct ServerChat: Codable, Sendable {
     public let typingParticipants: [String]
     public let participantNames: [String]
     public let participantCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case lastMessagePreview
+        case lastMessage
+        case lastActivity
+        case updatedAt
+        case unreadCount
+        case typingParticipants
+        case participantNames
+        case participants
+        case participantCount
+    }
+
+    public init(
+        id: UUID,
+        title: String,
+        lastMessagePreview: String?,
+        lastActivity: Date,
+        unreadCount: Int,
+        typingParticipants: [String],
+        participantNames: [String],
+        participantCount: Int
+    ) {
+        self.id = id
+        self.title = title
+        self.lastMessagePreview = lastMessagePreview
+        self.lastActivity = lastActivity
+        self.unreadCount = unreadCount
+        self.typingParticipants = typingParticipants
+        self.participantNames = participantNames
+        self.participantCount = participantCount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        lastMessagePreview =
+            try container.decodeIfPresent(String.self, forKey: .lastMessagePreview) ??
+            container.decodeIfPresent(String.self, forKey: .lastMessage)
+        lastActivity =
+            try container.decodeIfPresent(Date.self, forKey: .lastActivity) ??
+            container.decode(Date.self, forKey: .updatedAt)
+        unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
+        typingParticipants = try container.decodeIfPresent([String].self, forKey: .typingParticipants) ?? []
+        participantNames =
+            try container.decodeIfPresent([String].self, forKey: .participantNames) ??
+            container.decodeIfPresent([String].self, forKey: .participants) ?? []
+        participantCount =
+            try container.decodeIfPresent(Int.self, forKey: .participantCount) ??
+            max(participantNames.count, 1)
+    }
 }
 
-public struct ServerMessage: Codable, Sendable {
+public struct ServerMessage: Decodable, Sendable {
     public let id: UUID
     public let messageID: UUID
     public let chatID: UUID
@@ -23,6 +77,72 @@ public struct ServerMessage: Codable, Sendable {
     public let mediaURL: URL?
     public let status: MessageStatus
     public let createdAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case messageID
+        case clientMessageId
+        case chatID
+        case senderID
+        case authorID
+        case authorName
+        case senderName
+        case kind
+        case text
+        case mediaID
+        case mediaURL
+        case status
+        case createdAt
+    }
+
+    public init(
+        id: UUID,
+        messageID: UUID,
+        chatID: UUID,
+        authorID: UUID,
+        authorName: String,
+        kind: Message.Kind,
+        text: String?,
+        mediaID: UUID?,
+        mediaURL: URL?,
+        status: MessageStatus,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.messageID = messageID
+        self.chatID = chatID
+        self.authorID = authorID
+        self.authorName = authorName
+        self.kind = kind
+        self.text = text
+        self.mediaID = mediaID
+        self.mediaURL = mediaURL
+        self.status = status
+        self.createdAt = createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        messageID =
+            try container.decodeIfPresent(UUID.self, forKey: .messageID) ??
+            container.decodeIfPresent(UUID.self, forKey: .clientMessageId) ??
+            id
+        chatID = try container.decode(UUID.self, forKey: .chatID)
+        authorID =
+            try container.decodeIfPresent(UUID.self, forKey: .authorID) ??
+            container.decode(UUID.self, forKey: .senderID)
+        authorName =
+            try container.decodeIfPresent(String.self, forKey: .authorName) ??
+            container.decodeIfPresent(String.self, forKey: .senderName) ??
+            "Unknown sender"
+        kind = try container.decode(Message.Kind.self, forKey: .kind)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        mediaID = try container.decodeIfPresent(UUID.self, forKey: .mediaID)
+        mediaURL = try container.decodeIfPresent(URL.self, forKey: .mediaURL)
+        status = try container.decodeIfPresent(MessageStatus.self, forKey: .status) ?? .delivered
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
 
     public func asDomainMessage(localID: UUID? = nil) -> Message {
         let attachments: [MessageAttachment]

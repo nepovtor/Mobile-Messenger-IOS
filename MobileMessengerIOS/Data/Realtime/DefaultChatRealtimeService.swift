@@ -69,6 +69,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private var heartbeatTask: Task<Void, Never>?
     private var socket: RealtimeSocketTask?
     private var pendingSends: [UUID: CheckedContinuation<Message, Error>] = [:]
+    private var connectionGeneration: UInt64 = 0
 
     init(
         websocketURL: URL,
@@ -107,9 +108,10 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         guard featureFlags.isRealtimeEnabled else { return }
         stateQueue.async { [weak self] in
             guard let self else { return }
+            connectionGeneration &+= 1
             reconnectAllowed = true
             shouldMaintainConnection = true
-            startConnectionIfNeeded(retry: 0)
+            startConnectionIfNeeded(retry: 0, generation: connectionGeneration)
         }
     }
 
@@ -258,28 +260,32 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         )
     }
 
-    private func startConnectionIfNeeded(retry: Int) {
+    private func startConnectionIfNeeded(retry: Int, generation: UInt64) {
         guard connectionTask == nil else { return }
         setState(retry == 0 ? .connecting(retry: retry) : .reconnecting(retry: retry))
         connectionTask = Task { [weak self] in
-            await self?.runConnectionLoop(retry: retry)
+            await self?.runConnectionLoop(retry: retry, generation: generation)
         }
     }
 
-    private func runConnectionLoop(retry: Int) async {
+    private func runConnectionLoop(retry: Int, generation: UInt64) async {
+        guard isCurrentGeneration(generation) else { return }
+
         guard let token = await authTokenProvider() else {
             stateQueue.async { [weak self] in
-                self?.connectionTask = nil
-                self?.setState(.failed(reason: AppError.unauthorized.localizedDescription))
+                guard let self, self.connectionGeneration == generation else { return }
+                self.connectionTask = nil
+                self.setState(.failed(reason: AppError.unauthorized.localizedDescription))
             }
             return
         }
 
         guard reachability.isReachable else {
             stateQueue.async { [weak self] in
-                self?.setState(.reconnecting(retry: retry + 1))
+                guard let self, self.connectionGeneration == generation else { return }
+                self.setState(.reconnecting(retry: retry + 1))
             }
-            await scheduleReconnect(after: retry)
+            await scheduleReconnect(after: retry, generation: generation)
             return
         }
 
@@ -289,46 +295,55 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
 
             let currentSocket = socketFactory(request)
             stateQueue.async { [weak self] in
-                self?.socket = currentSocket
+                guard let self, self.connectionGeneration == generation else {
+                    currentSocket.cancel(with: .normalClosure, reason: nil)
+                    return
+                }
+                self.socket = currentSocket
             }
             currentSocket.resume()
 
             while !Task.isCancelled {
                 let message = try await currentSocket.receive()
-                try await handle(message: message)
+                guard isCurrentGeneration(generation) else { return }
+                try await handle(message: message, generation: generation)
             }
         } catch {
             guard !Task.isCancelled else {
-                clearConnection()
+                clearConnection(generation: generation)
                 return
             }
+            guard isCurrentGeneration(generation) else { return }
 
             analytics.track(error: error, context: "websocket_connect")
             broadcast(event: .disconnected(error))
             failAllPendingSends(with: error)
             stateQueue.async { [weak self] in
-                self?.setState(.reconnecting(retry: retry + 1))
+                guard let self, self.connectionGeneration == generation else { return }
+                self.setState(.reconnecting(retry: retry + 1))
             }
-            await scheduleReconnect(after: retry)
+            await scheduleReconnect(after: retry, generation: generation)
             return
         }
 
-        clearConnection()
+        clearConnection(generation: generation)
     }
 
-    private func handle(message: URLSessionWebSocketTask.Message) async throws {
+    private func handle(message: URLSessionWebSocketTask.Message, generation: UInt64) async throws {
+        guard isCurrentGeneration(generation) else { return }
         switch message {
         case .string(let text):
-            try handle(text: text)
+            try handle(text: text, generation: generation)
         case .data(let data):
             guard let text = String(data: data, encoding: .utf8) else { return }
-            try handle(text: text)
+            try handle(text: text, generation: generation)
         @unknown default:
             break
         }
     }
 
-    private func handle(text: String) throws {
+    private func handle(text: String, generation: UInt64) throws {
+        guard isCurrentGeneration(generation) else { return }
         guard let data = text.data(using: .utf8),
               let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let event = payload["event"] as? String else {
@@ -341,7 +356,8 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         switch event {
         case "connection.ready":
             stateQueue.async { [weak self] in
-                self?.setState(.connected)
+                guard let self, self.connectionGeneration == generation else { return }
+                self.setState(.connected)
             }
             startHeartbeat()
             broadcast(event: .connected)
@@ -415,18 +431,20 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         try await socket.send(.string(string))
     }
 
-    private func scheduleReconnect(after retry: Int) async {
-        clearSocketReference()
+    private func scheduleReconnect(after retry: Int, generation: UInt64) async {
+        clearSocketReference(generation: generation)
         let delay = UInt64(backoff(for: retry) * 1_000_000_000)
         await sleep(delay)
+        guard isCurrentGeneration(generation) else { return }
         guard shouldReconnect else {
-            clearConnection()
+            clearConnection(generation: generation)
             return
         }
-        await runConnectionLoop(retry: retry + 1)
+        await runConnectionLoop(retry: retry + 1, generation: generation)
     }
 
     private func stopConnection(manual: Bool, reason: Error?) {
+        connectionGeneration &+= 1
         reconnectAllowed = false
         shouldMaintainConnection = false
         cancelHeartbeat()
@@ -441,19 +459,21 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         }
     }
 
-    private func clearConnection() {
+    private func clearConnection(generation: UInt64) {
         stateQueue.async { [weak self] in
-            self?.cancelHeartbeat()
-            self?.socket = nil
-            self?.connectionTask = nil
-            self?.setState(.disconnected)
+            guard let self, self.connectionGeneration == generation else { return }
+            self.cancelHeartbeat()
+            self.socket = nil
+            self.connectionTask = nil
+            self.setState(.disconnected)
         }
     }
 
-    private func clearSocketReference() {
+    private func clearSocketReference(generation: UInt64) {
         stateQueue.async { [weak self] in
-            self?.cancelHeartbeat()
-            self?.socket = nil
+            guard let self, self.connectionGeneration == generation else { return }
+            self.cancelHeartbeat()
+            self.socket = nil
         }
     }
 
@@ -488,6 +508,10 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         stateQueue.sync {
             shouldMaintainConnection && reconnectAllowed
         }
+    }
+
+    private func isCurrentGeneration(_ generation: UInt64) -> Bool {
+        stateQueue.sync { connectionGeneration == generation }
     }
 
     private func currentState() async -> ChatRealtimeConnectionState {
