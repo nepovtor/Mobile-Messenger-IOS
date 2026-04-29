@@ -6,6 +6,8 @@ import { realtimeStore } from "./realtimeStore";
 
 vi.mock("../api/authApi", () => ({
   authApi: {
+    requestCode: vi.fn(),
+    verifyCode: vi.fn(),
     login: vi.fn(),
     getMe: vi.fn(),
   },
@@ -84,6 +86,7 @@ describe("authStore", () => {
       token: "fresh-token",
       userID: "user-2",
       displayName: "Boris",
+      phone: "+15550002",
     });
     vi.mocked(authApi.getMe).mockImplementation(async () => {
       expect(authStore.getState().token).toBe("fresh-token");
@@ -104,5 +107,39 @@ describe("authStore", () => {
 
     expect(authStore.getState().currentUser?.displayName).toBe("Boris");
     expect(authStore.getState().token).toBe("fresh-token");
+  });
+
+  it("verifyCode stores session and current user", async () => {
+    vi.mocked(authApi.verifyCode).mockResolvedValue({
+      token: "sms-token",
+      userID: "user-3",
+      displayName: "Vera",
+      phone: "+15550003",
+    });
+    vi.mocked(authApi.getMe).mockResolvedValue({
+      userID: "user-3",
+      displayName: "Vera",
+      contact: "+15550003",
+      phone: "+15550003",
+      method: "phone",
+    });
+
+    await authStore.getState().verifyCode("+15550003", "123456");
+
+    expect(authStore.getState().token).toBe("sms-token");
+    expect(authStore.getState().currentUser?.contact).toBe("+15550003");
+  });
+
+  it("requestCode returns backend cooldown payload", async () => {
+    vi.mocked(authApi.requestCode).mockResolvedValue({
+      status: "code_sent",
+      resendAfterSeconds: 60,
+      expiresIn: 300,
+    });
+
+    const response = await authStore.getState().requestCode("+15550004");
+
+    expect(response.status).toBe("code_sent");
+    expect(response.resendAfterSeconds).toBe(60);
   });
 });

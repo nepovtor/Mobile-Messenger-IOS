@@ -40,7 +40,7 @@ public struct AuthDemoAccount: Identifiable, Hashable, Sendable {
 @MainActor
 public final class AuthViewModel: ObservableObject {
     @Published public var screenMode: AuthScreenMode = .signIn
-    @Published public var credentialMode: AuthCredentialMode = .password
+    @Published public var credentialMode: AuthCredentialMode = .code
     @Published public var method: AuthMethod = .phone
     @Published public var contact: String = ""
     @Published public var password: String = ""
@@ -71,8 +71,9 @@ public final class AuthViewModel: ObservableObject {
         let trimmed = contact.trimmingCharacters(in: .whitespacesAndNewlines)
         switch method {
         case .phone:
-            let digits = trimmed.filter { $0.isNumber }
-            return digits.count >= 10
+            let sanitized = sanitize(contact: trimmed)
+            let digits = sanitized.filter { $0.isNumber }
+            return sanitized.hasPrefix("+") && digits.count >= 8 && digits.count <= 15
         case .email:
             return trimmed.contains("@") && trimmed.contains(".")
         }
@@ -86,22 +87,10 @@ public final class AuthViewModel: ObservableObject {
         password.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
     }
 
-    public var isPasswordFlow: Bool {
-        screenMode == .signIn && credentialMode == .password
-    }
-
-    public var isCodeFlow: Bool {
-        !isPasswordFlow
-    }
-
     public func setScreenMode(_ mode: AuthScreenMode) {
         guard screenMode != mode else { return }
         screenMode = mode
-        if mode == .signUp {
-            credentialMode = .code
-        } else {
-            credentialMode = .password
-        }
+        credentialMode = .code
         clearTransientState(keepContact: true)
         if mode == .signUp {
             password = ""
@@ -126,7 +115,7 @@ public final class AuthViewModel: ObservableObject {
         do {
             let response = try await authService.requestCode(method: method, contact: sanitizedContact)
             isCodeSent = true
-            codeExpirationSeconds = response?.expiresIn
+            codeExpirationSeconds = response.expiresIn
         } catch {
             errorMessage = AppError.presentableMessage(for: error)
         }
@@ -173,7 +162,7 @@ public final class AuthViewModel: ObservableObject {
     public func selectDemoAccount(_ account: AuthDemoAccount) {
         method = .phone
         screenMode = .signIn
-        credentialMode = .password
+        credentialMode = .code
         contact = account.contact
         password = account.password
         clearTransientState(keepContact: true)
@@ -199,7 +188,11 @@ public final class AuthViewModel: ObservableObject {
         switch method {
         case .phone:
             let allowed = CharacterSet(charactersIn: "+0123456789")
-            return trimmed.unicodeScalars.filter { allowed.contains($0) }.map(String.init).joined()
+            return trimmed
+                .unicodeScalars
+                .filter { allowed.contains($0) }
+                .map(String.init)
+                .joined()
         case .email:
             return trimmed.lowercased()
         }

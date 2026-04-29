@@ -23,6 +23,10 @@ export function getJwtSecret(): string {
   return secret;
 }
 
+export function getJwtExpiresIn(): string {
+  return process.env.JWT_EXPIRES_IN?.trim() || "7d";
+}
+
 export function isDatabaseSynchronizationEnabled(): boolean {
   return readBooleanEnv("DB_SYNCHRONIZE", !isProductionEnv());
 }
@@ -31,12 +35,82 @@ export function areDemoAccountsEnabled(): boolean {
   return readBooleanEnv("AUTH_ENABLE_DEMO_ACCOUNTS", !isProductionEnv());
 }
 
+export function isTestCodeAllowed(): boolean {
+  return readBooleanEnv("AUTH_ALLOW_TEST_CODE", !isProductionEnv());
+}
+
+export function getAuthTestCode(): string {
+  const code = process.env.AUTH_TEST_CODE?.trim() || "123456";
+  return /^\d{6}$/.test(code) ? code : "123456";
+}
+
+export function getAuthCodeTTLSeconds(): number {
+  const value = Number(process.env.AUTH_CODE_TTL_SECONDS || "300");
+  return Number.isFinite(value) && value > 0 ? value : 300;
+}
+
+export function getAuthCodeMaxAttempts(): number {
+  const value = Number(process.env.AUTH_CODE_MAX_ATTEMPTS || "5");
+  return Number.isFinite(value) && value > 0 ? value : 5;
+}
+
+export function getAuthCodeResendCooldownSeconds(): number {
+  const value = Number(process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS || "60");
+  return Number.isFinite(value) && value > 0 ? value : 60;
+}
+
 export function isPasswordLoginEnabled(): boolean {
   return readBooleanEnv("AUTH_ALLOW_PASSWORD_LOGIN", !isProductionEnv());
 }
 
 export function shouldExposeDebugAuthCode(): boolean {
-  return readBooleanEnv("AUTH_EXPOSE_DEBUG_CODE", !isProductionEnv());
+  return !isProductionEnv() && isTestCodeAllowed();
+}
+
+export type SmsProviderName =
+  | "console"
+  | "twilio"
+  | "vonage"
+  | "smsru"
+  | "mock";
+
+export function getSmsProvider(): SmsProviderName {
+  const value = process.env.SMS_PROVIDER?.trim().toLowerCase();
+  switch (value) {
+    case "twilio":
+    case "vonage":
+    case "smsru":
+    case "mock":
+    case "console":
+      return value;
+    default:
+      return isProductionEnv() ? "console" : "console";
+  }
+}
+
+export function getSmsFrom(): string {
+  return process.env.SMS_FROM?.trim() || "MobileMsg";
+}
+
+export function canUseConsoleSmsInCurrentEnv(): boolean {
+  return !isProductionEnv() || isTestCodeAllowed();
+}
+
+export function getTwilioConfig(): {
+  accountSID: string;
+  authToken: string;
+  from: string;
+} | null {
+  const accountSID = process.env.SMS_TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.SMS_TWILIO_AUTH_TOKEN?.trim();
+  const from =
+    process.env.SMS_TWILIO_FROM?.trim() || process.env.SMS_FROM?.trim();
+
+  if (!accountSID || !authToken || !from) {
+    return null;
+  }
+
+  return { accountSID, authToken, from };
 }
 
 export function getCorsOrigins(): string[] {
@@ -63,6 +137,10 @@ export function getAuthRateLimitWindowMs(): number {
 export function getAuthRateLimitMaxRequests(): number {
   const value = Number(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || "20");
   return Number.isFinite(value) && value > 0 ? value : 20;
+}
+
+export function getPhoneRequestRateLimitMaxRequests(): number {
+  return 3;
 }
 
 export function isDemoChatSeedingEnabled(): boolean {

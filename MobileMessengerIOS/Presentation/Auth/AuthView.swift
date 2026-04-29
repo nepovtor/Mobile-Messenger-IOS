@@ -3,8 +3,6 @@ import Combine
 
 struct AuthView: View {
     @StateObject private var viewModel: AuthViewModel
-    private let container: AppContainer
-    @State private var serverURLDraft: String
     let onAuthorized: () -> Void
 
     @MainActor
@@ -15,8 +13,6 @@ struct AuthView: View {
     @MainActor
     init(container: AppContainer, onAuthorized: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: container.makeAuthViewModel())
-        _serverURLDraft = State(initialValue: container.restBaseURLString)
-        self.container = container
         self.onAuthorized = onAuthorized
     }
 
@@ -36,7 +32,6 @@ struct AuthView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     heroSection
                     authCard
-                    backendCard
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
@@ -82,31 +77,8 @@ struct AuthView: View {
 
     private var authCard: some View {
         VStack(alignment: .leading, spacing: 18) {
-            segment(
-                items: AuthScreenMode.allCases,
-                selected: viewModel.screenMode,
-                title: \.title
-            ) { mode in
-                viewModel.setScreenMode(mode)
-            }
-
-            if viewModel.screenMode == .signIn {
-                segment(
-                    items: AuthCredentialMode.allCases,
-                    selected: viewModel.credentialMode,
-                    title: \.title
-                ) { mode in
-                    viewModel.setCredentialMode(mode)
-                }
-            }
-
             contactField
-
-            if viewModel.isPasswordFlow {
-                passwordSection
-            } else {
-                codeSection
-            }
+            codeSection
 
             if let error = viewModel.errorMessage {
                 Text(error)
@@ -115,9 +87,7 @@ struct AuthView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if viewModel.isPasswordFlow {
-                demoAccountsSection
-            }
+            demoAccountsSection
         }
         .padding(20)
         .background(
@@ -129,76 +99,6 @@ struct AuthView: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.28), radius: 28, x: 0, y: 18)
-    }
-
-    private var backendCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: "network")
-                    .font(.system(size: 20, weight: .semibold))
-                Text("Backend")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-            }
-            .foregroundStyle(.white)
-
-            Text("Simulator can use 127.0.0.1. A real iPhone must use your Mac Wi-Fi IP, and `/api` will be added automatically if needed.")
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.7))
-                .fixedSize(horizontal: false, vertical: true)
-
-            TextField("http://127.0.0.1:8080/api", text: $serverURLDraft)
-                .keyboardType(.URL)
-                .textContentType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(size: 17, weight: .medium, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .frame(height: 64)
-                .background(fieldBackground)
-
-            VStack(alignment: .leading, spacing: 8) {
-                statusLine(
-                    title: "Current",
-                    value: container.restBaseURLString
-                )
-                statusLine(
-                    title: "Default",
-                    value: container.defaultRESTBaseURLString
-                )
-            }
-
-            HStack(spacing: 12) {
-                compactActionButton(
-                    title: "Apply URL",
-                    systemImage: "checkmark.circle.fill",
-                    prominent: true,
-                    action: applyServerURL
-                )
-
-                compactActionButton(
-                    title: container.isUsingCustomRESTBaseURL ? "Use Default" : "Use Localhost",
-                    systemImage: "arrow.counterclockwise",
-                    prominent: false,
-                    action: resetServerURL
-                )
-            }
-
-            Text(container.isUsingCustomRESTBaseURL ? "Custom debug backend is active. The app resets the current session after switching servers." : "Default local debug backend is active.")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(Color.white.opacity(0.7))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(Color(red: 0.01, green: 0.03, blue: 0.08).opacity(0.9))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.2), radius: 20, x: 0, y: 12)
     }
 
     private var contactField: some View {
@@ -250,8 +150,8 @@ struct AuthView: View {
 
     private var codeSection: some View {
         VStack(alignment: .leading, spacing: 16) {
+            fieldLabel("SMS verification", systemImage: "message.fill")
             if viewModel.isCodeSent {
-                fieldLabel("Code", systemImage: "number.square.fill")
                 TextField("Enter code", text: $viewModel.code)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
@@ -267,7 +167,7 @@ struct AuthView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
             } else {
-                Text(viewModel.screenMode == .signUp ? "Create an account with a one-time code." : "Use a one-time code if you prefer not to use a demo password.")
+                Text("Enter a real phone number in international format to receive a one-time SMS code.")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
@@ -283,7 +183,7 @@ struct AuthView: View {
 
             if viewModel.isCodeSent {
                 primaryButton(
-                    title: viewModel.screenMode == .signUp ? "Create account" : "Sign in with code",
+                    title: "Verify and continue",
                     systemImage: "checkmark.circle.fill",
                     isLoading: viewModel.isVerifyingCode,
                     isEnabled: viewModel.isCodeValid && !viewModel.isVerifyingCode,
@@ -455,17 +355,6 @@ struct AuthView: View {
         }
     }
 
-    private func applyServerURL() {
-        do {
-            try container.updateRESTBaseURL(serverURLDraft)
-        } catch {
-            viewModel.errorMessage = AppError.presentableMessage(for: error)
-        }
-    }
-
-    private func resetServerURL() {
-        container.resetRESTBaseURL()
-    }
 }
 
 private struct DemoAccountCard: View {

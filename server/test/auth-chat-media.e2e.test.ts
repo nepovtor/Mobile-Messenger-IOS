@@ -11,20 +11,26 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { WsAdapter } from "@nestjs/platform-ws";
 import { Test } from "@nestjs/testing";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import { DataType, newDb } from "pg-mem";
 import request from "supertest";
+import { Repository } from "typeorm";
 import { WebSocket } from "ws";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
 import { MediaEntity, MediaStatus } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
+import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
 import { UserEntity } from "../src/entities/user.entity";
 import { AuthModule } from "../src/modules/auth/auth.module";
 import { ChatModule } from "../src/modules/chat/chat.module";
 import { MediaModule } from "../src/modules/media/media.module";
 import { MediaService } from "../src/modules/media/media.service";
 import { RealtimeModule } from "../src/modules/realtime/realtime.module";
+import {
+  SMS_SERVICE,
+  SmsService,
+} from "../src/modules/auth/sms/sms.types";
 
 class FakeMediaService {
   private readonly media = new Map<string, MediaEntity>();
@@ -97,6 +103,12 @@ class FakeMediaService {
 type TestAppOptions = {
   allowPasswordLogin?: boolean;
   authRateLimitMaxRequests?: number;
+  enableDemoAccounts?: boolean;
+  allowTestCode?: boolean;
+  authCodeTTLSeconds?: number;
+  authCodeMaxAttempts?: number;
+  authCodeResendCooldownSeconds?: number;
+  smsProvider?: "mock" | "console";
 };
 
 async function createTestApp(
@@ -104,17 +116,31 @@ async function createTestApp(
 ): Promise<INestApplication> {
   process.env.NODE_ENV = "test";
   process.env.JWT_SECRET = "test-jwt-secret";
+  process.env.JWT_EXPIRES_IN = "7d";
   process.env.DB_SYNCHRONIZE = "true";
-  process.env.AUTH_ENABLE_DEMO_ACCOUNTS = "true";
+  process.env.AUTH_ENABLE_DEMO_ACCOUNTS =
+    options.enableDemoAccounts === false ? "false" : "true";
   process.env.AUTH_ALLOW_PASSWORD_LOGIN = options.allowPasswordLogin
     ? "true"
     : "false";
-  process.env.AUTH_EXPOSE_DEBUG_CODE = "true";
+  process.env.AUTH_ALLOW_TEST_CODE =
+    options.allowTestCode === false ? "false" : "true";
+  process.env.AUTH_TEST_CODE = "123456";
+  process.env.AUTH_CODE_TTL_SECONDS = String(
+    options.authCodeTTLSeconds ?? 300,
+  );
+  process.env.AUTH_CODE_MAX_ATTEMPTS = String(
+    options.authCodeMaxAttempts ?? 5,
+  );
+  process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS = String(
+    options.authCodeResendCooldownSeconds ?? 60,
+  );
   process.env.CHAT_ENABLE_DEMO_SEEDING = "false";
   process.env.AUTH_RATE_LIMIT_WINDOW_MS = "60000";
   process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = String(
     options.authRateLimitMaxRequests ?? 20,
   );
+  process.env.SMS_PROVIDER = options.smsProvider ?? "mock";
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -123,6 +149,7 @@ async function createTestApp(
           type: "postgres",
           entities: [
             UserEntity,
+            PhoneVerificationCodeEntity,
             ChatEntity,
             ChatParticipantEntity,
             MessageEntity,
@@ -184,6 +211,10 @@ function realtimeURL(app: INestApplication): string {
 type SocketEvent<TData = unknown> = {
   event: string;
   data: TData;
+};
+
+type MockSmsProviderLike = SmsService & {
+  sentMessages: Array<{ phone: string; code: string }>;
 };
 
 async function openRealtimeSocket(
@@ -279,19 +310,20 @@ function sendRealtimeEvent(
 async function authenticateByCode(
   app: INestApplication,
   contact: string,
-): Promise<{ token: string; userID: string; displayName: string }> {
+): Promise<{ token: string; userID: string; displayName: string; phone: string }> {
   const requestCodeResponse = await request(app.getHttpServer())
     .post("/api/auth/request")
-    .send({ method: "phone", contact })
+    .send({ phone: contact })
     .expect(201);
 
   assert.equal(typeof requestCodeResponse.body.debugCode, "string");
+  assert.equal(requestCodeResponse.body.status, "code_sent");
+  assert.equal(typeof requestCodeResponse.body.resendAfterSeconds, "number");
 
   const verifyResponse = await request(app.getHttpServer())
     .post("/api/auth/verify")
     .send({
-      method: "phone",
-      contact,
+      phone: contact,
       code: requestCodeResponse.body.debugCode,
     })
     .expect(201);
@@ -414,7 +446,7 @@ test("verification codes are single-use and contacts keep current user first", a
 
   const requestCodeResponse = await request(app.getHttpServer())
     .post("/api/auth/request")
-    .send({ method: "phone", contact: "+15551230011" })
+    .send({ phone: "+15551230011" })
     .expect(201);
 
   const debugCode = requestCodeResponse.body.debugCode as string;
@@ -423,8 +455,7 @@ test("verification codes are single-use and contacts keep current user first", a
   const firstVerifyResponse = await request(app.getHttpServer())
     .post("/api/auth/verify")
     .send({
-      method: "phone",
-      contact: "+15551230011",
+      phone: "+15551230011",
       code: debugCode,
     })
     .expect(201);
@@ -432,8 +463,7 @@ test("verification codes are single-use and contacts keep current user first", a
   await request(app.getHttpServer())
     .post("/api/auth/verify")
     .send({
-      method: "phone",
-      contact: "+15551230011",
+      phone: "+15551230011",
       code: debugCode,
     })
     .expect(401);
@@ -900,16 +930,245 @@ test("auth endpoints are rate limited", async (t) => {
 
   await request(app.getHttpServer())
     .post("/api/auth/request")
-    .send({ method: "phone", contact: "+15551230011" })
+    .send({ phone: "+15551230011" })
     .expect(201);
 
   await request(app.getHttpServer())
     .post("/api/auth/request")
-    .send({ method: "phone", contact: "+15551230011" })
+    .send({ phone: "+15551230012" })
     .expect(201);
 
   await request(app.getHttpServer())
     .post("/api/auth/request")
-    .send({ method: "phone", contact: "+15551230011" })
+    .send({ phone: "+15551230013" })
     .expect(429);
+});
+
+test("request code creates hashed verification code and calls SMS mock", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const response = await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+375291234567" })
+    .expect(201);
+
+  assert.equal(response.body.status, "code_sent");
+  assert.equal(response.body.resendAfterSeconds, 60);
+  assert.equal(response.body.expiresIn, 300);
+  assert.equal(response.body.debugCode, "123456");
+
+  const repository = app.get<Repository<PhoneVerificationCodeEntity>>(
+    getRepositoryToken(PhoneVerificationCodeEntity),
+  );
+  const verificationCode = await repository.findOneByOrFail({
+    phone: "+375291234567",
+  });
+
+  assert.notEqual(verificationCode.codeHash, "123456");
+  assert.equal(verificationCode.attempts, 0);
+  assert.equal(verificationCode.consumedAt, null);
+
+  const smsProvider = app.get<MockSmsProviderLike>(SMS_SERVICE);
+  assert.equal(smsProvider.sentMessages.length, 1);
+  assert.deepEqual(smsProvider.sentMessages[0], {
+    phone: "+375291234567",
+    code: "123456",
+  });
+});
+
+test("request code respects resend cooldown", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+79991234567" })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+79991234567" })
+    .expect(429);
+});
+
+test("verify with correct code creates new user and returns JWT payload fields", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const requestResponse = await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+15550123456" })
+    .expect(201);
+
+  const verifyResponse = await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({
+      phone: "+15550123456",
+      code: requestResponse.body.debugCode,
+    })
+    .expect(201);
+
+  assert.equal(typeof verifyResponse.body.token, "string");
+  assert.equal(verifyResponse.body.phone, "+15550123456");
+  assert.equal(verifyResponse.body.displayName, "User 3456");
+
+  const usersRepository = app.get<Repository<UserEntity>>(
+    getRepositoryToken(UserEntity),
+  );
+  const user = await usersRepository.findOneByOrFail({ phone: "+15550123456" });
+  assert.equal(verifyResponse.body.userID, user.id);
+});
+
+test("verify with correct code logs in existing user and preserves userID", async (t) => {
+  const app = await createTestApp({ authCodeResendCooldownSeconds: 1 });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const firstAuth = await authenticateByCode(app, "+15559876543");
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const secondAuth = await authenticateByCode(app, "+15559876543");
+
+  assert.equal(firstAuth.userID, secondAuth.userID);
+  assert.equal(secondAuth.phone, "+15559876543");
+});
+
+test("verify with wrong code increments attempts", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+15557654321" })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({ phone: "+15557654321", code: "000000" })
+    .expect(401);
+
+  const repository = app.get<Repository<PhoneVerificationCodeEntity>>(
+    getRepositoryToken(PhoneVerificationCodeEntity),
+  );
+  const verificationCode = await repository.findOneByOrFail({
+    phone: "+15557654321",
+  });
+
+  assert.equal(verificationCode.attempts, 1);
+});
+
+test("expired code is rejected", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+15553456789" })
+    .expect(201);
+
+  const repository = app.get<Repository<PhoneVerificationCodeEntity>>(
+    getRepositoryToken(PhoneVerificationCodeEntity),
+  );
+  const verificationCode = await repository.findOneByOrFail({
+    phone: "+15553456789",
+  });
+  verificationCode.expiresAt = new Date(Date.now() - 1_000);
+  await repository.save(verificationCode);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({ phone: "+15553456789", code: "123456" })
+    .expect(401);
+});
+
+test("consumed code cannot be reused", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const firstVerifyResponse = await authenticateByCode(app, "+15554561234");
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({ phone: "+15554561234", code: "123456" })
+    .expect(401);
+
+  assert.equal(typeof firstVerifyResponse.token, "string");
+});
+
+test("too many attempts are rejected", async (t) => {
+  const app = await createTestApp({ authCodeMaxAttempts: 3 });
+  t.after(async () => {
+    await app.close();
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+15552345678" })
+    .expect(201);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({ phone: "+15552345678", code: "000000" })
+    .expect(401);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({ phone: "+15552345678", code: "000000" })
+    .expect(401);
+
+  await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({ phone: "+15552345678", code: "000000" })
+    .expect(429);
+});
+
+test("demo account still works when enabled", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const response = await request(app.getHttpServer())
+    .post("/api/auth/login")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      password: "demo1111",
+    })
+    .expect(201);
+
+  assert.equal(response.body.displayName, "Анна Demo");
+  assert.equal(response.body.phone, "+15551230011");
+});
+
+test("demo account is disabled when AUTH_ENABLE_DEMO_ACCOUNTS=false", async (t) => {
+  const app = await createTestApp({
+    allowPasswordLogin: true,
+    enableDemoAccounts: false,
+  });
+  t.after(async () => {
+    await app.close();
+  });
+
+  await request(app.getHttpServer())
+    .post("/api/auth/login")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      password: "demo1111",
+    })
+    .expect(403);
 });

@@ -1,29 +1,55 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
   Injectable,
+  Logger,
   OnModuleInit,
+  ServiceUnavailableException,
   UnauthorizedException,
   ForbiddenException,
 } from "@nestjs/common";
+import { createHmac, randomInt } from "node:crypto";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
-import { buildDisplayName, normalizeContact } from "../common/contact.utils";
+import {
+  buildDisplayName,
+  normalizeContact,
+  normalizePhone,
+} from "../common/contact.utils";
 import {
   areDemoAccountsEnabled,
+  getAuthCodeMaxAttempts,
+  getAuthCodeResendCooldownSeconds,
+  getAuthCodeTTLSeconds,
+  getAuthRateLimitWindowMs,
+  getAuthTestCode,
+  getJwtExpiresIn,
   getJwtSecret,
+  getPhoneRequestRateLimitMaxRequests,
   isPasswordLoginEnabled,
+  isTestCodeAllowed,
   shouldExposeDebugAuthCode,
 } from "../common/runtime-config";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
+import {
+  SMS_SERVICE,
+  SmsProviderUnavailableError,
+  SmsService,
+} from "./sms/sms.types";
 
 type AuthResult = {
   token: string;
   userID: string;
   displayName: string;
+  phone: string;
 };
 
 type DemoAccount = {
@@ -35,10 +61,10 @@ type DemoAccount = {
 
 @Injectable()
 export class AuthService implements OnModuleInit {
-  private readonly verificationCodes = new Map<
-    string,
-    { code: string; expiresAt: number }
-  >();
+  private readonly logger = new Logger(AuthService.name);
+  private readonly codeTTLSeconds = getAuthCodeTTLSeconds();
+  private readonly codeMaxAttempts = getAuthCodeMaxAttempts();
+  private readonly resendCooldownSeconds = getAuthCodeResendCooldownSeconds();
   private readonly demoAccounts: DemoAccount[] = [
     {
       method: AuthMethod.PHONE,
@@ -75,7 +101,12 @@ export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
+    @InjectRepository(PhoneVerificationCodeEntity)
+    private readonly verificationCodesRepository: Repository<PhoneVerificationCodeEntity>,
     private readonly jwtService: JwtService,
+    private readonly authRateLimitService: AuthRateLimitService,
+    @Inject(SMS_SERVICE)
+    private readonly smsService: SmsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -92,25 +123,71 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async requestCode(dto: RequestAuthDto): Promise<{
+  async requestCode(
+    dto: RequestAuthDto,
+    requestContext?: {
+      requestIP?: string | null;
+      userAgent?: string | null;
+    },
+  ): Promise<{
+    status: "code_sent";
+    resendAfterSeconds: number;
     expiresIn: number;
     debugCode?: string;
   }> {
-    const normalizedContact = normalizeContact(dto.method, dto.contact);
-    const expiresIn = 300;
-    const debugCode = this.generateVerificationCode();
+    const phone = this.resolvePhone(dto);
+    this.authRateLimitService.consume(`request:phone:${phone}`, {
+      maxRequests: getPhoneRequestRateLimitMaxRequests(),
+      windowMs: getAuthRateLimitWindowMs(),
+      message: "Too many auth requests for this phone number",
+    });
 
-    this.verificationCodes.set(
-      this.makeVerificationKey(dto.method, normalizedContact),
-      {
-        code: debugCode,
-        expiresAt: Date.now() + expiresIn * 1000,
-      },
-    );
+    const activeCode = await this.findLatestCode(phone);
+    const now = new Date();
+    if (
+      activeCode &&
+      !activeCode.consumedAt &&
+      activeCode.resendAvailableAt.getTime() > now.getTime()
+    ) {
+      throw new HttpException(
+        `Resend cooldown active. Try again in ${Math.ceil((activeCode.resendAvailableAt.getTime() - now.getTime()) / 1000)} seconds`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const code = this.generateVerificationCode();
+    const codeEntity = this.verificationCodesRepository.create({
+      phone,
+      codeHash: this.hashVerificationCode(phone, code),
+      expiresAt: new Date(now.getTime() + this.codeTTLSeconds * 1000),
+      attempts: 0,
+      consumedAt: null,
+      resendAvailableAt: new Date(
+        now.getTime() + this.resendCooldownSeconds * 1000,
+      ),
+      requestIP: requestContext?.requestIP ?? null,
+      userAgent: requestContext?.userAgent ?? null,
+    });
+
+    await this.verificationCodesRepository.save(codeEntity);
+
+    try {
+      await this.smsService.sendVerificationCode(phone, code);
+    } catch (error) {
+      await this.verificationCodesRepository.delete({ id: codeEntity.id });
+      if (error instanceof SmsProviderUnavailableError) {
+        throw new ServiceUnavailableException("SMS provider unavailable");
+      }
+
+      this.logger.error(`Failed to send SMS for ${phone}`, error as Error);
+      throw new ServiceUnavailableException("SMS provider unavailable");
+    }
 
     return {
-      expiresIn,
-      ...(shouldExposeDebugAuthCode() ? { debugCode } : {}),
+      status: "code_sent",
+      resendAfterSeconds: this.resendCooldownSeconds,
+      expiresIn: this.codeTTLSeconds,
+      ...(shouldExposeDebugAuthCode() ? { debugCode: code } : {}),
     };
   }
 
@@ -118,29 +195,55 @@ export class AuthService implements OnModuleInit {
     token: string;
     userID: string;
     displayName: string;
+    phone: string;
   }> {
-    const normalizedContact = normalizeContact(dto.method, dto.contact);
-    const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
-    const verificationKey = this.makeVerificationKey(
-      dto.method,
-      normalizedContact,
-    );
-    const verificationCode = this.verificationCodes.get(verificationKey);
+    const phone = this.resolvePhone(dto);
+    const verificationCode = await this.findLatestCode(phone);
 
-    if (
-      !verificationCode ||
-      verificationCode.expiresAt < Date.now() ||
-      dto.code !== verificationCode.code
-    ) {
+    if (!verificationCode) {
       throw new UnauthorizedException("Invalid verification code");
     }
 
-    this.verificationCodes.delete(verificationKey);
+    if (verificationCode.consumedAt) {
+      throw new UnauthorizedException("Verification code has already been used");
+    }
+
+    if (verificationCode.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException("Verification code expired");
+    }
+
+    if (verificationCode.attempts >= this.codeMaxAttempts) {
+      throw new HttpException(
+        "Too many verification attempts",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const submittedCode = dto.code.trim();
+    if (
+      this.hashVerificationCode(phone, submittedCode) !==
+      verificationCode.codeHash
+    ) {
+      verificationCode.attempts += 1;
+      await this.verificationCodesRepository.save(verificationCode);
+
+      if (verificationCode.attempts >= this.codeMaxAttempts) {
+        throw new HttpException(
+          "Too many verification attempts",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
+      throw new UnauthorizedException("Invalid verification code");
+    }
+
+    verificationCode.consumedAt = new Date();
+    await this.verificationCodesRepository.save(verificationCode);
 
     const user = await this.findOrCreateUser(
-      dto.method,
-      normalizedContact,
-      demoAccount?.displayName,
+      AuthMethod.PHONE,
+      phone,
+      this.findDemoAccount(AuthMethod.PHONE, phone)?.displayName,
     );
 
     return this.buildAuthResult(user);
@@ -151,8 +254,9 @@ export class AuthService implements OnModuleInit {
       throw new ForbiddenException("Password login is disabled");
     }
 
-    const normalizedContact = normalizeContact(dto.method, dto.contact);
-    const demoAccount = this.findDemoAccount(dto.method, normalizedContact);
+    const normalizedMethod = dto.method ?? AuthMethod.PHONE;
+    const normalizedContact = this.resolveContact(dto);
+    const demoAccount = this.findDemoAccount(normalizedMethod, normalizedContact);
     const password = dto.password.trim();
 
     if (!demoAccount || password !== demoAccount.password) {
@@ -160,7 +264,7 @@ export class AuthService implements OnModuleInit {
     }
 
     const user = await this.findOrCreateUser(
-      dto.method,
+      normalizedMethod,
       normalizedContact,
       demoAccount.displayName,
     );
@@ -173,6 +277,7 @@ export class AuthService implements OnModuleInit {
     displayName: string;
     contact: string;
     method: string;
+    phone: string | null;
   }> {
     const user = await this.usersRepository.findOneBy({
       id: userID as UserEntity["id"],
@@ -186,6 +291,7 @@ export class AuthService implements OnModuleInit {
       displayName: user.displayName,
       contact: user.contact,
       method: user.method,
+      phone: user.phone,
     };
   }
 
@@ -195,6 +301,7 @@ export class AuthService implements OnModuleInit {
       displayName: string;
       contact: string;
       method: AuthMethod;
+      phone: string | null;
       isCurrentUser: boolean;
     }>
   > {
@@ -212,7 +319,7 @@ export class AuthService implements OnModuleInit {
     return users
       .filter(
         (user) =>
-          user.id === userID ||
+        user.id === userID ||
           !areDemoAccountsEnabled() ||
           demoContacts.has(user.contact),
       )
@@ -247,6 +354,7 @@ export class AuthService implements OnModuleInit {
         displayName: user.displayName,
         contact: user.contact,
         method: user.method,
+        phone: user.phone,
         isCurrentUser: user.id === userID,
       }));
   }
@@ -266,7 +374,7 @@ export class AuthService implements OnModuleInit {
     preferredDisplayName?: string,
   ): Promise<UserEntity> {
     let user = await this.usersRepository.findOne({
-      where: { method, contact },
+      where: method === AuthMethod.PHONE ? { phone: contact } : { method, contact },
     });
 
     const displayName =
@@ -276,6 +384,7 @@ export class AuthService implements OnModuleInit {
       user = this.usersRepository.create({
         method,
         contact,
+        phone: method === AuthMethod.PHONE ? contact : null,
         displayName,
       });
 
@@ -297,10 +406,11 @@ export class AuthService implements OnModuleInit {
         displayName: user.displayName,
         contact: user.contact,
         method: user.method,
+        phone: user.phone ?? user.contact,
       },
       {
         secret: getJwtSecret(),
-        expiresIn: "30d",
+        expiresIn: getJwtExpiresIn() as never,
       },
     );
 
@@ -308,14 +418,53 @@ export class AuthService implements OnModuleInit {
       token,
       userID: user.id,
       displayName: user.displayName,
+      phone: user.phone ?? user.contact,
     };
   }
 
   private generateVerificationCode(): string {
-    return String(Math.floor(1000 + Math.random() * 9000));
+    if (isTestCodeAllowed()) {
+      return getAuthTestCode();
+    }
+
+    return String(randomInt(100000, 999999));
   }
 
-  private makeVerificationKey(method: AuthMethod, contact: string): string {
-    return `${method}:${contact}`;
+  private resolvePhone(dto: {
+    phone?: string;
+    contact?: string;
+    method?: AuthMethod;
+  }): string {
+    const method = dto.method ?? AuthMethod.PHONE;
+    if (method !== AuthMethod.PHONE) {
+      throw new BadRequestException("Only phone authentication is supported");
+    }
+
+    return normalizePhone(dto.phone ?? dto.contact ?? "");
+  }
+
+  private resolveContact(dto: {
+    phone?: string;
+    contact?: string;
+    method?: AuthMethod;
+  }): string {
+    const method = dto.method ?? AuthMethod.PHONE;
+    const contact = dto.phone ?? dto.contact ?? "";
+    return normalizeContact(method, contact);
+  }
+
+  private hashVerificationCode(phone: string, code: string): string {
+    return createHmac("sha256", getJwtSecret())
+      .update(`${phone}:${code}`)
+      .digest("hex");
+  }
+
+  private findLatestCode(
+    phone: string,
+  ): Promise<PhoneVerificationCodeEntity | null> {
+    return this.verificationCodesRepository.findOne({
+      where: { phone },
+      order: { createdAt: "DESC" },
+    });
   }
 }

@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { authApi } from "../api/authApi";
-import type { CurrentUser, LoginPayload } from "../types/auth";
+import type {
+  AuthCodeResponse,
+  AuthResponse,
+  CurrentUser,
+  LoginPayload,
+} from "../types/auth";
 import { storage } from "../utils/storage";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
@@ -11,6 +16,8 @@ type AuthStore = {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  requestCode: (phone: string) => Promise<AuthCodeResponse>;
+  verifyCode: (phone: string, code: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => void;
   restoreSession: () => Promise<void>;
@@ -24,23 +31,40 @@ export const authStore = create<AuthStore>((set) => ({
   isAuthenticated: Boolean(storage.getToken()),
   isLoading: false,
   error: null,
+  async requestCode(phone) {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await authApi.requestCode(phone);
+      set({ isLoading: false, error: null });
+      return response;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not send the verification code.";
+      set({ isLoading: false, error: message });
+      throw error;
+    }
+  },
+  async verifyCode(phone, code) {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await authApi.verifyCode(phone, code);
+      await authenticateWithBackendResult(result, set);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not verify the confirmation code.";
+      set({ isLoading: false, error: message });
+      throw error;
+    }
+  },
   async login(payload) {
     set({ isLoading: true, error: null });
     try {
       const result = await authApi.login(payload);
-      storage.setToken(result.token);
-      set({
-        token: result.token,
-        isAuthenticated: true,
-      });
-      const currentUser = await authApi.getMe();
-      storage.setUser(currentUser);
-      set({
-        token: result.token,
-        currentUser,
-        isAuthenticated: true,
-        isLoading: false,
-      });
+      await authenticateWithBackendResult(result, set);
     } catch (error) {
       set({
         error:
@@ -111,3 +135,23 @@ export const authStore = create<AuthStore>((set) => ({
     set({ error: null });
   },
 }));
+
+async function authenticateWithBackendResult(
+  result: AuthResponse,
+  set: (partial: Partial<AuthStore>) => void,
+) {
+  storage.setToken(result.token);
+  set({
+    token: result.token,
+    isAuthenticated: true,
+  });
+  const currentUser = await authApi.getMe();
+  storage.setUser(currentUser);
+  set({
+    token: result.token,
+    currentUser,
+    isAuthenticated: true,
+    isLoading: false,
+    error: null,
+  });
+}

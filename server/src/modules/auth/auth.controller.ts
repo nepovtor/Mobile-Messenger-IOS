@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
+import { normalizePhone } from "../common/contact.utils";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { AuthGuard } from "./auth.guard";
@@ -18,25 +19,38 @@ export class AuthController {
 
   @Post("request")
   requestCode(@Req() request: Request, @Body() dto: RequestAuthDto) {
-    this.authRateLimitService.consume(
-      `${this.getRequestIP(request)}:request:${dto.method}`,
-    );
-    return this.authService.requestCode(dto);
+    this.authRateLimitService.consume(`${this.getRequestIP(request)}:request`, {
+      message: "Too many auth requests",
+    });
+    return this.authService.requestCode(dto, {
+      requestIP: this.getRequestIP(request),
+      userAgent: this.getUserAgent(request),
+    });
   }
 
   @Post("verify")
   verifyCode(@Req() request: Request, @Body() dto: VerifyAuthDto) {
-    this.authRateLimitService.consume(
-      `${this.getRequestIP(request)}:verify:${dto.method}`,
-    );
+    const phoneOrContact = dto.phone ?? dto.contact;
+    if (phoneOrContact) {
+      try {
+        const normalizedPhone = normalizePhone(phoneOrContact);
+        this.authRateLimitService.consume(
+          `${this.getRequestIP(request)}:verify:${normalizedPhone}`,
+          {
+            maxRequests: 10,
+            message: "Too many auth attempts",
+          },
+        );
+      } catch {
+        this.authRateLimitService.consume(`${this.getRequestIP(request)}:verify`);
+      }
+    }
     return this.authService.verifyCode(dto);
   }
 
   @Post("login")
   login(@Req() request: Request, @Body() dto: LoginAuthDto) {
-    this.authRateLimitService.consume(
-      `${this.getRequestIP(request)}:login:${dto.method}`,
-    );
+    this.authRateLimitService.consume(`${this.getRequestIP(request)}:login`);
     return this.authService.login(dto);
   }
 
@@ -59,5 +73,10 @@ export class AuthController {
     }
 
     return request.ip || "unknown";
+  }
+
+  private getUserAgent(request: Request): string | null {
+    const userAgent = request.headers["user-agent"];
+    return typeof userAgent === "string" ? userAgent : null;
   }
 }

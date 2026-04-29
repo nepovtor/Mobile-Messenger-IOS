@@ -10,16 +10,26 @@ export class AuthRateLimitService {
   private readonly windowMs = getAuthRateLimitWindowMs();
   private readonly maxRequests = getAuthRateLimitMaxRequests();
 
-  consume(key: string): void {
+  consume(
+    key: string,
+    options?: {
+      windowMs?: number;
+      maxRequests?: number;
+      message?: string;
+    },
+  ): void {
     const now = Date.now();
-    const windowStart = now - this.windowMs;
+    const windowMs = options?.windowMs ?? this.windowMs;
+    const maxRequests = options?.maxRequests ?? this.maxRequests;
+    const message = options?.message ?? "Too many auth attempts";
+    const windowStart = now - windowMs;
     const current = (this.attempts.get(key) ?? []).filter(
       (timestamp) => timestamp >= windowStart,
     );
 
-    if (current.length >= this.maxRequests) {
+    if (current.length >= maxRequests) {
       throw new HttpException(
-        "Too many auth attempts",
+        message,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }

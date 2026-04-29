@@ -145,8 +145,9 @@ struct APIResponseParser {
     private static func validateSuccessfulStatus(_ envelope: ResponseEnvelope) throws {
         let statusCode = envelope.response.statusCode
         guard 200..<300 ~= statusCode else {
+            let backendMessage = extractBackendMessage(from: envelope)
             let parseError = ParseError(
-                userMessage: userMessage(forStatusCode: statusCode),
+                userMessage: backendMessage ?? userMessage(forStatusCode: statusCode),
                 technicalDetails: technicalDetails(reason: "HTTP status was not successful", envelope: envelope),
                 isRetryable: statusCode >= 500,
                 statusCode: statusCode
@@ -291,10 +292,26 @@ struct APIResponseParser {
         case 500...599:
             return backendUnavailableMessage
         case 400...499:
-            return configurationFailureMessage
+            return invalidResponseMessage
         default:
             return invalidResponseMessage
         }
+    }
+
+    private static func extractBackendMessage(from envelope: ResponseEnvelope) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: envelope.data) as? [String: Any] else {
+            return nil
+        }
+
+        if let message = object["message"] as? String {
+            return message
+        }
+
+        if let messages = object["message"] as? [String], let first = messages.first {
+            return first
+        }
+
+        return nil
     }
 
     private static func summarizeDecodingError(_ error: Error) -> String {
@@ -368,7 +385,7 @@ extension JSONDecoder {
 }
 
 public protocol AuthNetworking: Sendable {
-    func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse?
+    func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse
     func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse
     func signIn(method: AuthMethod, contact: String, password: String) async throws -> AuthVerifyResponse
 }
@@ -382,17 +399,15 @@ public struct RESTAuthService: AuthNetworking {
         self.session = session
     }
 
-    public func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse? {
+    public func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
         try await sendRequest(endpoint: "/auth/request", payload: [
-            "method": method.rawValue,
-            "contact": contact
+            "phone": contact
         ])
     }
 
     public func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse {
         try await sendRequest(endpoint: "/auth/verify", payload: [
-            "method": method.rawValue,
-            "contact": contact,
+            "phone": contact,
             "code": code
         ])
     }
@@ -448,7 +463,10 @@ public enum AuthMethod: String, Codable {
 }
 
 public struct AuthCodeResponse: Codable {
-    public let expiresIn: Int?
+    public let status: String
+    public let resendAfterSeconds: Int
+    public let expiresIn: Int
+    public let debugCode: String?
 }
 
 public struct AuthVerifyResponse: Decodable {

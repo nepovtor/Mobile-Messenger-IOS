@@ -7,21 +7,19 @@ import type {
 import { httpRequest } from "./httpClient";
 
 export const authApi = {
-  requestCode(contact: string) {
+  requestCode(phone: string) {
     return httpRequest<AuthCodeResponse>("/auth/request", {
       method: "POST",
       body: JSON.stringify({
-        method: "phone",
-        contact,
+        phone,
       }),
     });
   },
-  verifyCode(contact: string, code: string) {
+  verifyCode(phone: string, code: string) {
     return httpRequest<AuthResponse>("/auth/verify", {
       method: "POST",
       body: JSON.stringify({
-        method: "phone",
-        contact,
+        phone,
         code,
       }),
     });

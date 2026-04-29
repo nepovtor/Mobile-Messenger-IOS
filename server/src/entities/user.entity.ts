@@ -5,6 +5,7 @@ import {
   Entity,
   OneToMany,
   PrimaryColumn,
+  UpdateDateColumn,
 } from "typeorm";
 import { ChatParticipantEntity } from "./chat-participant.entity";
 import { MediaEntity } from "./media.entity";
@@ -26,11 +27,17 @@ export class UserEntity {
   @Column({ type: "varchar", unique: true })
   contact!: string;
 
+  @Column({ type: "varchar", unique: true, nullable: true })
+  phone!: string | null;
+
   @Column({ name: "display_name", type: "varchar" })
   displayName!: string;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
+
+  @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
+  updatedAt!: Date;
 
   @OneToMany(() => ChatParticipantEntity, (participant) => participant.user)
   chatParticipants?: ChatParticipantEntity[];

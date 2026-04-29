@@ -5,4 +5,5 @@ export interface AuthenticatedUser {
   displayName: string;
   contact: string;
   method: AuthMethod;
+  phone: string;
 }

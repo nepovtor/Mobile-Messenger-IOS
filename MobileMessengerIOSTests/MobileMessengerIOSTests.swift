@@ -203,6 +203,28 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.errorMessage)
     }
 
+    func testVerifyCodeAuthenticatesSession() async {
+        let authService = AuthServiceSpy()
+        let sessionStore = makeSessionStore()
+        let viewModel = AuthViewModel(authService: authService, sessionStore: sessionStore)
+        viewModel.contact = "+15551230011"
+        viewModel.code = "123456"
+
+        await viewModel.verifyCode()
+
+        let verify = await authService.lastVerifyCodeInput
+        XCTAssertEqual(verify?.contact, "+15551230011")
+        XCTAssertEqual(verify?.code, "123456")
+
+        guard case let .authenticated(token, userID, displayName) = sessionStore.state else {
+            return XCTFail("Expected authenticated state")
+        }
+
+        XCTAssertEqual(token, "test-token")
+        XCTAssertEqual(userID, UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
+        XCTAssertEqual(displayName, "Анна Demo")
+    }
+
     func testSetScreenModeToSignUpSwitchesToCodeFlowAndClearsPassword() {
         let viewModel = AuthViewModel(authService: AuthServiceSpy(), sessionStore: makeSessionStore())
         viewModel.password = "demo1111"
@@ -264,6 +286,55 @@ final class TransportDecodingTests: XCTestCase {
         XCTAssertEqual(response.userID, userID)
         XCTAssertEqual(response.displayName, "Анна Demo")
         XCTAssertEqual(response.phone, "+15551230011")
+    }
+
+    func testAuthRequestResponseDecodesCooldownPayload() throws {
+        let payload = """
+        {
+          "status": "code_sent",
+          "resendAfterSeconds": 60,
+          "expiresIn": 300
+        }
+        """
+
+        let response = try JSONDecoder().decode(AuthCodeResponse.self, from: Data(payload.utf8))
+
+        XCTAssertEqual(response.status, "code_sent")
+        XCTAssertEqual(response.resendAfterSeconds, 60)
+        XCTAssertEqual(response.expiresIn, 300)
+    }
+
+    func testInvalidPhoneErrorMappingUsesBackendMessage() {
+        let error = APIResponseParser.ParseError(
+            userMessage: "Phone number must be in international format and start with +",
+            technicalDetails: nil,
+            isRetryable: false,
+            statusCode: 400
+        )
+
+        XCTAssertEqual(
+            AppError.presentableMessage(for: error),
+            "Phone number must be in international format and start with +"
+        )
+    }
+
+    @MainActor
+    func testSessionStoreLogoutClearsTokenAndSession() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let tokenStore = InMemoryTokenStore()
+        let sessionStore = SessionStore(tokenStore: tokenStore, defaults: defaults)
+
+        sessionStore.authenticate(
+            with: "demo-token",
+            userID: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+            displayName: "Анна Demo"
+        )
+        sessionStore.logout()
+
+        XCTAssertNil(tokenStore.retrieveToken())
+        XCTAssertNil(sessionStore.currentUserID)
+        XCTAssertNil(sessionStore.currentDisplayName)
+        XCTAssertNil(sessionStore.authToken)
     }
 
     func testServerChatDecodesProductionDTOFields() throws {
@@ -1249,9 +1320,9 @@ private actor AuthServiceSpy: AuthNetworking {
     var lastVerifyCodeInput: (method: AuthMethod, contact: String, code: String)?
     var lastSignInInput: (method: AuthMethod, contact: String, password: String)?
 
-    func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse? {
+    func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
         lastRequestCodeInput = (method, contact)
-        return AuthCodeResponse(expiresIn: 300)
+        return AuthCodeResponse(status: "code_sent", resendAfterSeconds: 60, expiresIn: 300, debugCode: nil)
     }
 
     func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse {

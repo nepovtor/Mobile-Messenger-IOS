@@ -4,6 +4,8 @@ export interface JwtPayload {
   sub: string;
   phone: string;
   displayName: string;
+  contact: string;
+  method: string;
 }
 
 export type AuthenticatedRequest = Request & {
