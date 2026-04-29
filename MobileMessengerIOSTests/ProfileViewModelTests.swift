@@ -78,6 +78,16 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertEqual(ProfileRealtimeStatus(state: .failed(reason: "boom")), .failed)
     }
 
+    func testInitialsUseDisplayNameWords() {
+        XCTAssertEqual(ProfileViewModel.makeInitials(from: "Анна Demo"), "АD")
+        XCTAssertEqual(ProfileViewModel.makeInitials(from: "Boris"), "BO")
+    }
+
+    func testPhoneFallbackReturnsUnknownForInvalidContact() {
+        XCTAssertEqual(ProfileViewModel.phoneText(from: nil), "Unknown phone")
+        XCTAssertEqual(ProfileViewModel.phoneText(from: "demo"), "Unknown phone")
+    }
+
     private func makeViewModel(
         contacts: [ContactDTO] = [],
         logoutAction: @escaping @MainActor () -> Void = {}

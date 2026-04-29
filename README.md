@@ -80,21 +80,13 @@ Screenshots placeholder:
 
 Backend seeds 5 demo users and 4 deterministic chats in development.
 
-- `+15551230011` / `demo1111` — Анна Demo
-  sees: `Анна и Борис`, `Анна и Вера`, `Demo Team`
-  does not see: `Борис и Глеб`
-- `+15551230012` / `demo2222` — Борис Demo
-  sees: `Анна и Борис`, `Борис и Глеб`, `Demo Team`
-  does not see: `Анна и Вера`
-- `+15551230013` / `demo3333` — Вера Demo
-  sees: `Анна и Вера`
-  does not see: `Анна и Борис`, `Борис и Глеб`, `Demo Team`
-- `+15551230014` / `demo4444` — Глеб Demo
-  sees: `Борис и Глеб`, `Demo Team`
-  does not see: `Анна и Вера`
-- `+15551230015` / `demo5555` — Даша Demo
-  sees: `Demo Team`
-  does not see: `Анна и Борис`, `Анна и Вера`, `Борис и Глеб`
+| User | Phone | Password | Visible Chats | Hidden Chats |
+| --- | --- | --- | --- | --- |
+| Анна Demo | `+15551230011` | `demo1111` | `Анна и Борис`, `Анна и Вера`, `Demo Team` | `Борис и Глеб` |
+| Борис Demo | `+15551230012` | `demo2222` | `Анна и Борис`, `Борис и Глеб`, `Demo Team` | `Анна и Вера` |
+| Вера Demo | `+15551230013` | `demo3333` | `Анна и Вера` | `Анна и Борис`, `Борис и Глеб`, `Demo Team` |
+| Глеб Demo | `+15551230014` | `demo4444` | `Борис и Глеб`, `Demo Team` | `Анна и Вера` |
+| Даша Demo | `+15551230015` | `demo5555` | `Demo Team` | `Анна и Борис`, `Анна и Вера`, `Борис и Глеб` |
 
 ## Demo Flow
 
@@ -147,6 +139,7 @@ Open `MobileMessengerIOS.xcodeproj`, choose the `MobileMessengerIOS` scheme, and
 - Example local override: [Config/Config.example.xcconfig](./Config/Config.example.xcconfig)
 
 The Railway config points at the public backend and keeps existing Debug/Release configs unchanged.
+Push notifications remain planned, so Railway keeps `FEATURE_PUSH = NO`.
 
 To use Railway in Xcode:
 

@@ -35,7 +35,7 @@ struct ProfileInfoRow: View {
     let systemImage: String
     let title: String
     let value: String
-    var detail: String? = nil
+    var detail: String?
     var tint: Color = .blue
     var monospaced = false
 

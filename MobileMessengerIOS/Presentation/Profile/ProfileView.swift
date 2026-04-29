@@ -95,9 +95,15 @@ struct ProfileView: View {
             }
 
             HStack {
-                ProfileStatusBadge(title: viewModel.realtimeStatus.title, tone: realtimeBadgeTone)
+                ProfileStatusBadge(
+                    title: viewModel.realtimeStatus.title,
+                    tone: realtimeBadgeTone
+                )
                 Spacer()
-                ProfileStatusBadge(title: viewModel.environmentInfo.badgeTitle, tone: .neutral)
+                ProfileStatusBadge(
+                    title: viewModel.environmentInfo.badgeTitle,
+                    tone: .neutral
+                )
             }
         }
         .padding(22)
@@ -172,7 +178,9 @@ struct ProfileView: View {
             ProfileInfoRow(
                 systemImage: "key.fill",
                 title: "Token stored in Keychain",
-                value: viewModel.hasStoredToken ? "Protected on this device" : "No active token",
+                value: viewModel.hasStoredToken
+                    ? "Protected on this device"
+                    : "No active token",
                 detail: "The token value is never shown on the profile screen.",
                 tint: .purple
             )

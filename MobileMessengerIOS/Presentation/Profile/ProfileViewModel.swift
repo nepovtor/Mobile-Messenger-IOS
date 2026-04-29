@@ -151,7 +151,9 @@ final class ProfileViewModel: ObservableObject {
 
         do {
             let contacts = try await contactsService.listContacts()
-            let currentContact = contacts.first(where: { $0.isCurrentUser || $0.userID == userID })?.contact
+            let currentContact = contacts.first(where: {
+                $0.isCurrentUser || $0.userID == userID
+            })?.contact
             phone = Self.phoneText(from: currentContact)
             lastLoadedUserID = userID
         } catch {
