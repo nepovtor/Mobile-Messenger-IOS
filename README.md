@@ -4,7 +4,7 @@
 
 Portfolio-ready messenger MVP with a SwiftUI iOS client and a NestJS backend. REST is used for auth, chat list/history, and media upload. Native WebSocket is used for realtime delivery, typing, read events, and message send acknowledgements.
 
-Real phone registration is now supported through SMS provider integration. Demo accounts remain available as a separate mode when enabled by environment flags.
+Real phone registration is now supported through Telegram verification in the portfolio/demo setup, while the existing SMS abstraction remains available for provider-backed deployments. Demo accounts remain available as a separate mode when enabled by environment flags.
 
 ## Web Client
 
@@ -47,7 +47,7 @@ SwiftUI Views
 - Heartbeat ping/pong, dead connection cleanup, reconnect with exponential backoff.
 - Stable message lifecycle: `sending`, `sent`, `delivered`, `read`, `failed`, retry for failed local messages.
 - REST auth, chat list, history, media upload, read receipts, typing.
-- Real SMS phone verification with TTL, resend cooldown, attempt limits, and JWT session issuance.
+- Real phone verification with Telegram delivery, TTL, resend cooldown, attempt limits, and JWT session issuance.
 - Profile screen with account info, realtime status, and secure logout.
 - Account info card with display name, phone fallback, user ID, and environment summary.
 - Security card that confirms Keychain token storage and session cleanup on logout.
@@ -57,7 +57,7 @@ SwiftUI Views
 ## iOS App Features
 
 - Auth with demo accounts and real backend session verification.
-- Real phone sign-in on iOS and web via `/api/auth/request` and `/api/auth/verify`.
+- Real phone sign-in on iOS and web via `/api/auth/request` and `/api/auth/verify`, with verification codes delivered through Telegram in the portfolio flow.
 - Chat list with per-user chat isolation and unread state.
 - Message history, optimistic sending, retry for failed messages, and delivery state updates.
 - Native WebSocket realtime via `URLSessionWebSocketTask`.
@@ -84,7 +84,7 @@ Screenshots placeholder:
 
 Backend seeds 5 demo users and 4 deterministic chats in development.
 
-Demo mode is optional and controlled by environment flags. Real SMS auth does not require demo accounts to stay enabled.
+Demo mode is optional and controlled by environment flags. Real Telegram auth does not require demo accounts to stay enabled.
 
 | User | Phone | Password | Visible Chats | Hidden Chats |
 | --- | --- | --- | --- | --- |
@@ -128,7 +128,7 @@ npm install
 npm run start:dev
 ```
 
-For real SMS auth setup, see [docs/REAL_SMS_AUTH.md](./docs/REAL_SMS_AUTH.md).
+For Telegram auth setup, see [docs/TELEGRAM_AUTH.md](./docs/TELEGRAM_AUTH.md). The previous SMS provider setup is still documented in [docs/REAL_SMS_AUTH.md](./docs/REAL_SMS_AUTH.md).
 
 Key endpoints:
 
@@ -212,7 +212,8 @@ make test-ios
 
 - JWT is required for REST and WebSocket handshake; invalid or expired tokens are rejected.
 - Auth endpoints are rate limited.
-- SMS verification codes are stored hashed, expire automatically, and enforce resend cooldown plus max attempts.
+- Verification codes are stored hashed, expire automatically, and enforce resend cooldown plus max attempts.
+- Telegram bot tokens and provider credentials must stay in environment variables and never be committed.
 - iOS auth token is stored in Keychain with `ThisDeviceOnly` accessibility.
 - Logout clears token, current user session, local chats/messages, and closes realtime connection.
 - Reconnect is disabled for explicit logout or manual disconnect.

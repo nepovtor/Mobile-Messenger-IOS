@@ -3,6 +3,7 @@ import Combine
 
 struct AuthView: View {
     @StateObject private var viewModel: AuthViewModel
+    @Environment(\.openURL) private var openURL
     let onAuthorized: () -> Void
 
     @MainActor
@@ -150,7 +151,8 @@ struct AuthView: View {
 
     private var codeSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            fieldLabel("SMS verification", systemImage: "message.fill")
+            fieldLabel("Telegram verification", systemImage: "paperplane.fill")
+            telegramInstructionCard
             if viewModel.isCodeSent {
                 TextField("Enter code", text: $viewModel.code)
                     .keyboardType(.numberPad)
@@ -167,7 +169,7 @@ struct AuthView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
             } else {
-                Text("Enter a real phone number in international format to receive a one-time SMS code.")
+                Text("Enter a real phone number in international format to receive a one-time Telegram code.")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
@@ -191,6 +193,42 @@ struct AuthView: View {
                 )
             }
         }
+    }
+
+    private var telegramInstructionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(viewModel.telegramInstructionText)
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.82))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: openTelegramBot) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.up.right.circle.fill")
+                    Text("Открыть Telegram-бота")
+                }
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color(red: 0.12, green: 0.54, blue: 0.99).opacity(0.88))
+                )
+            }
+            .disabled(viewModel.telegramBotURL == nil)
+
+            if viewModel.telegramBotURL == nil {
+                Text("Telegram bot username is not configured in this build yet.")
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.55))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
     }
 
     private var demoAccountsSection: some View {
@@ -353,6 +391,11 @@ struct AuthView: View {
                 onAuthorized()
             }
         }
+    }
+
+    private func openTelegramBot() {
+        guard let telegramBotURL = viewModel.telegramBotURL else { return }
+        openURL(telegramBotURL)
     }
 
 }

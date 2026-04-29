@@ -8,8 +8,12 @@ import {
   getAuthTestCode,
   getCorsOrigins,
   getJwtSecret,
+  getTelegramBotToken,
+  getTelegramBotUsername,
+  getVerificationProvider,
   getSmsProvider,
   getTwilioConfig,
+  hasTelegramBotConfig,
   readBooleanEnv,
 } from "../src/modules/common/runtime-config";
 
@@ -127,6 +131,22 @@ test("sms provider config reads twilio credentials and production guard", () => 
         from: "+15550001111",
       });
       assert.equal(canUseConsoleSmsInCurrentEnv(), false);
+    },
+  );
+});
+
+test("verification provider reads telegram config", () => {
+  withEnv(
+    {
+      VERIFICATION_PROVIDER: "telegram",
+      TELEGRAM_BOT_TOKEN: "bot-token",
+      TELEGRAM_BOT_USERNAME: "@mobile_demo_bot",
+    },
+    () => {
+      assert.equal(getVerificationProvider(), "telegram");
+      assert.equal(getTelegramBotToken(), "bot-token");
+      assert.equal(getTelegramBotUsername(), "mobile_demo_bot");
+      assert.equal(hasTelegramBotConfig(), true);
     },
   );
 });

@@ -24,6 +24,11 @@ public enum AppError: LocalizedError, Sendable {
             return description
         }
 
+        if let parseError = error as? APIResponseParser.ParseError,
+           parseError.backendCode == "TELEGRAM_NOT_LINKED" {
+            return "Откройте Telegram-бота, нажмите /start, отправьте туда свой номер и затем запросите код снова."
+        }
+
         if let configError = error as? ConfigError, let description = configError.errorDescription {
             return description
         }

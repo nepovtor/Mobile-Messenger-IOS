@@ -6,6 +6,8 @@ public protocol ConfigService: AnyObject {
     var restBaseURL: URL { get }
     var defaultRESTBaseURL: URL { get }
     var websocketURL: URL { get }
+    var telegramBotUsername: String? { get }
+    var telegramBotURL: URL? { get }
     var features: FeatureFlags { get }
     var hasCustomRESTBaseURL: Bool { get }
     func updateRESTBaseURL(_ rawValue: String) throws
@@ -41,6 +43,7 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     @Published public private(set) var restBaseURL: URL
     public let defaultRESTBaseURL: URL
+    public let telegramBotUsername: String?
     public let features: FeatureFlags
 
     private let defaults: UserDefaults
@@ -48,6 +51,7 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
     public init(bundle: Bundle = .main, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.defaultRESTBaseURL = Self.readRESTBaseURL(from: bundle)
+        self.telegramBotUsername = Self.readTelegramBotUsername(from: bundle)
         self.features = Self.readFeatures(from: bundle)
 
         if let overrideValue = defaults.string(forKey: Constants.restBaseURLOverrideKey),
@@ -64,6 +68,11 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     public var websocketURL: URL {
         Self.makeWebSocketURL(from: restBaseURL)
+    }
+
+    public var telegramBotURL: URL? {
+        guard let telegramBotUsername else { return nil }
+        return URL(string: "https://t.me/\(telegramBotUsername)")
     }
 
     public func updateRESTBaseURL(_ rawValue: String) throws {
@@ -84,6 +93,17 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
         }
 
         return URL(string: "https://api.example.com/api")!
+    }
+
+    private static func readTelegramBotUsername(from bundle: Bundle) -> String? {
+        guard let value = bundle.object(forInfoDictionaryKey: "TELEGRAM_BOT_USERNAME") as? String else {
+            return nil
+        }
+
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        return normalized.isEmpty ? nil : normalized
     }
 
     private static func readFeatures(from bundle: Bundle) -> FeatureFlags {

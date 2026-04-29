@@ -51,6 +51,7 @@ public final class AuthViewModel: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var isCodeSent: Bool = false
     @Published public var codeExpirationSeconds: Int?
+    public let telegramBotURL: URL?
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
@@ -62,9 +63,14 @@ public final class AuthViewModel: ObservableObject {
         AuthDemoAccount(displayName: "Даша Demo", contact: "+15551230015", password: "demo5555")
     ]
 
-    public init(authService: AuthNetworking, sessionStore: SessionStore) {
+    public init(
+        authService: AuthNetworking,
+        sessionStore: SessionStore,
+        telegramBotURL: URL? = nil
+    ) {
         self.authService = authService
         self.sessionStore = sessionStore
+        self.telegramBotURL = telegramBotURL
     }
 
     public var isContactValid: Bool {
@@ -181,6 +187,10 @@ public final class AuthViewModel: ObservableObject {
         password = ""
         code = ""
         clearTransientState(keepContact: true)
+    }
+
+    public var telegramInstructionText: String {
+        "Код подтверждения приходит в Telegram. Перед входом откройте нашего Telegram-бота и нажмите /start."
     }
 
     private func sanitize(contact: String) -> String {

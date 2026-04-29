@@ -10,6 +10,7 @@ struct APIResponseParser {
         let technicalDetails: String?
         let isRetryable: Bool
         let statusCode: Int?
+        let backendCode: String?
 
         var errorDescription: String? {
             userMessage
@@ -19,12 +20,14 @@ struct APIResponseParser {
             userMessage: String,
             technicalDetails: String? = nil,
             isRetryable: Bool = false,
-            statusCode: Int? = nil
+            statusCode: Int? = nil,
+            backendCode: String? = nil
         ) {
             self.userMessage = userMessage
             self.technicalDetails = technicalDetails
             self.isRetryable = isRetryable
             self.statusCode = statusCode
+            self.backendCode = backendCode
         }
     }
 
@@ -145,12 +148,13 @@ struct APIResponseParser {
     private static func validateSuccessfulStatus(_ envelope: ResponseEnvelope) throws {
         let statusCode = envelope.response.statusCode
         guard 200..<300 ~= statusCode else {
-            let backendMessage = extractBackendMessage(from: envelope)
+            let backendPayload = extractBackendError(from: envelope)
             let parseError = ParseError(
-                userMessage: backendMessage ?? userMessage(forStatusCode: statusCode),
+                userMessage: backendPayload.message ?? userMessage(forStatusCode: statusCode),
                 technicalDetails: technicalDetails(reason: "HTTP status was not successful", envelope: envelope),
                 isRetryable: statusCode >= 500,
-                statusCode: statusCode
+                statusCode: statusCode,
+                backendCode: backendPayload.code
             )
             logDebugInfo(parseError)
             throw parseError
@@ -298,20 +302,21 @@ struct APIResponseParser {
         }
     }
 
-    private static func extractBackendMessage(from envelope: ResponseEnvelope) -> String? {
+    private static func extractBackendError(from envelope: ResponseEnvelope) -> (message: String?, code: String?) {
         guard let object = try? JSONSerialization.jsonObject(with: envelope.data) as? [String: Any] else {
-            return nil
+            return (nil, nil)
         }
 
+        let code = object["code"] as? String
         if let message = object["message"] as? String {
-            return message
+            return (message, code)
         }
 
         if let messages = object["message"] as? [String], let first = messages.first {
-            return first
+            return (first, code)
         }
 
-        return nil
+        return (nil, code)
     }
 
     private static func summarizeDecodingError(_ error: Error) -> String {
@@ -464,6 +469,7 @@ public enum AuthMethod: String, Codable {
 
 public struct AuthCodeResponse: Codable {
     public let status: String
+    public let delivery: String
     public let resendAfterSeconds: Int
     public let expiresIn: Int
     public let debugCode: String?

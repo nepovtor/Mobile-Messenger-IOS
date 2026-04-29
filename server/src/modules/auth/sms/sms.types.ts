@@ -10,3 +10,14 @@ export class SmsProviderUnavailableError extends Error {
     this.name = "SmsProviderUnavailableError";
   }
 }
+
+export class TelegramNotLinkedError extends Error {
+  readonly code = "TELEGRAM_NOT_LINKED";
+
+  constructor(
+    message = "Open the Telegram bot and send your phone number before requesting a code.",
+  ) {
+    super(message);
+    this.name = "TelegramNotLinkedError";
+  }
+}

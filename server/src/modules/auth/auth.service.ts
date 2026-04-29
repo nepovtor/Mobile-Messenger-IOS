@@ -15,6 +15,7 @@ import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
+import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import {
   buildDisplayName,
@@ -31,6 +32,7 @@ import {
   getJwtExpiresIn,
   getJwtSecret,
   getPhoneRequestRateLimitMaxRequests,
+  getVerificationProvider,
   isPasswordLoginEnabled,
   isTestCodeAllowed,
   shouldExposeDebugAuthCode,
@@ -43,6 +45,7 @@ import {
   SMS_SERVICE,
   SmsProviderUnavailableError,
   SmsService,
+  TelegramNotLinkedError,
 } from "./sms/sms.types";
 
 type AuthResult = {
@@ -103,6 +106,8 @@ export class AuthService implements OnModuleInit {
     private readonly usersRepository: Repository<UserEntity>,
     @InjectRepository(PhoneVerificationCodeEntity)
     private readonly verificationCodesRepository: Repository<PhoneVerificationCodeEntity>,
+    @InjectRepository(TelegramLinkEntity)
+    private readonly telegramLinksRepository: Repository<TelegramLinkEntity>,
     private readonly jwtService: JwtService,
     private readonly authRateLimitService: AuthRateLimitService,
     @Inject(SMS_SERVICE)
@@ -131,6 +136,7 @@ export class AuthService implements OnModuleInit {
     },
   ): Promise<{
     status: "code_sent";
+    delivery: string;
     resendAfterSeconds: number;
     expiresIn: number;
     debugCode?: string;
@@ -175,16 +181,31 @@ export class AuthService implements OnModuleInit {
       await this.smsService.sendVerificationCode(phone, code);
     } catch (error) {
       await this.verificationCodesRepository.delete({ id: codeEntity.id });
+      if (error instanceof TelegramNotLinkedError) {
+        throw new HttpException(
+          {
+            code: error.code,
+            message: error.message,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       if (error instanceof SmsProviderUnavailableError) {
-        throw new ServiceUnavailableException("SMS provider unavailable");
+        throw new ServiceUnavailableException(
+          "Verification provider unavailable",
+        );
       }
 
-      this.logger.error(`Failed to send SMS for ${phone}`, error as Error);
-      throw new ServiceUnavailableException("SMS provider unavailable");
+      this.logger.error(
+        `Failed to deliver verification code for ${phone}`,
+        error as Error,
+      );
+      throw new ServiceUnavailableException("Verification provider unavailable");
     }
 
     return {
       status: "code_sent",
+      delivery: getVerificationProvider(),
       resendAfterSeconds: this.resendCooldownSeconds,
       expiresIn: this.codeTTLSeconds,
       ...(shouldExposeDebugAuthCode() ? { debugCode: code } : {}),
@@ -239,11 +260,13 @@ export class AuthService implements OnModuleInit {
 
     verificationCode.consumedAt = new Date();
     await this.verificationCodesRepository.save(verificationCode);
+    const telegramLink = await this.telegramLinksRepository.findOneBy({ phone });
 
     const user = await this.findOrCreateUser(
       AuthMethod.PHONE,
       phone,
       this.findDemoAccount(AuthMethod.PHONE, phone)?.displayName,
+      telegramLink ?? undefined,
     );
 
     return this.buildAuthResult(user);
@@ -278,6 +301,8 @@ export class AuthService implements OnModuleInit {
     contact: string;
     method: string;
     phone: string | null;
+    telegramChatId: string | null;
+    telegramUsername: string | null;
   }> {
     const user = await this.usersRepository.findOneBy({
       id: userID as UserEntity["id"],
@@ -292,6 +317,8 @@ export class AuthService implements OnModuleInit {
       contact: user.contact,
       method: user.method,
       phone: user.phone,
+      telegramChatId: user.telegramChatId,
+      telegramUsername: user.telegramUsername,
     };
   }
 
@@ -372,6 +399,7 @@ export class AuthService implements OnModuleInit {
     method: AuthMethod,
     contact: string,
     preferredDisplayName?: string,
+    telegramLink?: TelegramLinkEntity,
   ): Promise<UserEntity> {
     let user = await this.usersRepository.findOne({
       where: method === AuthMethod.PHONE ? { phone: contact } : { method, contact },
@@ -385,14 +413,31 @@ export class AuthService implements OnModuleInit {
         method,
         contact,
         phone: method === AuthMethod.PHONE ? contact : null,
+        telegramChatId: telegramLink?.chatId ?? null,
+        telegramUsername: telegramLink?.username ?? null,
         displayName,
       });
 
       return this.usersRepository.save(user);
     }
 
+    let shouldSave = false;
     if (preferredDisplayName && user.displayName !== preferredDisplayName) {
       user.displayName = preferredDisplayName;
+      shouldSave = true;
+    }
+    if (telegramLink) {
+      if (user.telegramChatId !== telegramLink.chatId) {
+        user.telegramChatId = telegramLink.chatId;
+        shouldSave = true;
+      }
+      if (user.telegramUsername !== telegramLink.username) {
+        user.telegramUsername = telegramLink.username;
+        shouldSave = true;
+      }
+    }
+
+    if (shouldSave) {
       return this.usersRepository.save(user);
     }
 

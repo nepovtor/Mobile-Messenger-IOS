@@ -23,6 +23,7 @@ export type CurrentUser = {
 
 export type AuthCodeResponse = {
   status: "code_sent";
+  delivery: "telegram" | "console" | "mock" | "sms";
   resendAfterSeconds: number;
   expiresIn: number;
   debugCode?: string;

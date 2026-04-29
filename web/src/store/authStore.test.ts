@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authApi } from "../api/authApi";
+import { ApiError } from "../api/httpClient";
 import { authStore } from "./authStore";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
@@ -133,6 +134,7 @@ describe("authStore", () => {
   it("requestCode returns backend cooldown payload", async () => {
     vi.mocked(authApi.requestCode).mockResolvedValue({
       status: "code_sent",
+      delivery: "telegram",
       resendAfterSeconds: 60,
       expiresIn: 300,
     });
@@ -141,5 +143,19 @@ describe("authStore", () => {
 
     expect(response.status).toBe("code_sent");
     expect(response.resendAfterSeconds).toBe(60);
+  });
+
+  it("maps TELEGRAM_NOT_LINKED into a user-friendly auth error", async () => {
+    vi.mocked(authApi.requestCode).mockRejectedValue(
+      new ApiError(
+        "Open the Telegram bot and send your phone number before requesting a code.",
+        400,
+        "TELEGRAM_NOT_LINKED",
+      ),
+    );
+
+    await expect(authStore.getState().requestCode("+15550005")).rejects.toBeDefined();
+
+    expect(authStore.getState().error).toMatch(/Telegram bot/i);
   });
 });

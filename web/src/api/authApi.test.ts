@@ -37,4 +37,24 @@ describe("authApi", () => {
       }),
     );
   });
+
+  it("telegram-linked errors keep the backend code in ApiError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () =>
+          JSON.stringify({
+            code: "TELEGRAM_NOT_LINKED",
+            message:
+              "Open the Telegram bot and send your phone number before requesting a code.",
+          }),
+      }),
+    );
+
+    await expect(authApi.requestCode("+375291234567")).rejects.toMatchObject({
+      code: "TELEGRAM_NOT_LINKED",
+    });
+  });
 });

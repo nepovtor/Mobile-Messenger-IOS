@@ -21,6 +21,7 @@ import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
 import { MediaEntity, MediaStatus } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
 import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
+import { TelegramLinkEntity } from "../src/entities/telegram-link.entity";
 import { UserEntity } from "../src/entities/user.entity";
 import { AuthModule } from "../src/modules/auth/auth.module";
 import { ChatModule } from "../src/modules/chat/chat.module";
@@ -31,6 +32,7 @@ import {
   SMS_SERVICE,
   SmsService,
 } from "../src/modules/auth/sms/sms.types";
+import { TelegramBotService } from "../src/modules/auth/telegram/telegram-bot.service";
 
 class FakeMediaService {
   private readonly media = new Map<string, MediaEntity>();
@@ -108,6 +110,7 @@ type TestAppOptions = {
   authCodeTTLSeconds?: number;
   authCodeMaxAttempts?: number;
   authCodeResendCooldownSeconds?: number;
+  verificationProvider?: "mock" | "console" | "telegram" | "sms";
   smsProvider?: "mock" | "console";
 };
 
@@ -140,7 +143,10 @@ async function createTestApp(
   process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = String(
     options.authRateLimitMaxRequests ?? 20,
   );
+  process.env.VERIFICATION_PROVIDER = options.verificationProvider ?? "mock";
   process.env.SMS_PROVIDER = options.smsProvider ?? "mock";
+  process.env.TELEGRAM_BOT_TOKEN = "test-telegram-token";
+  process.env.TELEGRAM_BOT_USERNAME = "mobile_messenger_test_bot";
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -150,6 +156,7 @@ async function createTestApp(
           entities: [
             UserEntity,
             PhoneVerificationCodeEntity,
+            TelegramLinkEntity,
             ChatEntity,
             ChatParticipantEntity,
             MessageEntity,
@@ -318,6 +325,7 @@ async function authenticateByCode(
 
   assert.equal(typeof requestCodeResponse.body.debugCode, "string");
   assert.equal(requestCodeResponse.body.status, "code_sent");
+  assert.equal(requestCodeResponse.body.delivery, "mock");
   assert.equal(typeof requestCodeResponse.body.resendAfterSeconds, "number");
 
   const verifyResponse = await request(app.getHttpServer())
@@ -956,6 +964,7 @@ test("request code creates hashed verification code and calls SMS mock", async (
     .expect(201);
 
   assert.equal(response.body.status, "code_sent");
+  assert.equal(response.body.delivery, "mock");
   assert.equal(response.body.resendAfterSeconds, 60);
   assert.equal(response.body.expiresIn, 300);
   assert.equal(response.body.debugCode, "123456");
@@ -977,6 +986,156 @@ test("request code creates hashed verification code and calls SMS mock", async (
     phone: "+375291234567",
     code: "123456",
   });
+});
+
+test("/auth/request with telegram provider returns TELEGRAM_NOT_LINKED if no link exists", async (t) => {
+  const app = await createTestApp({ verificationProvider: "telegram" });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ ok: true, result: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const response = await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+375291234567" })
+    .expect(400);
+
+  assert.equal(response.body.code, "TELEGRAM_NOT_LINKED");
+  assert.match(
+    response.body.message,
+    /Open the Telegram bot and send your phone number/i,
+  );
+});
+
+test("Telegram contact update creates TelegramLink", async (t) => {
+  const app = await createTestApp({ verificationProvider: "telegram" });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const originalFetch = globalThis.fetch;
+  const sentMessages: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    sentMessages.push(body);
+
+    return new Response(JSON.stringify({ ok: true, result: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const telegramBotService = app.get(TelegramBotService);
+  await telegramBotService.handleUpdate({
+    update_id: 1,
+    message: {
+      message_id: 10,
+      chat: { id: 777, username: "anna_demo", first_name: "Anna" },
+      contact: { phone_number: "375291234567", first_name: "Anna" },
+    },
+  });
+
+  const repository = app.get<Repository<TelegramLinkEntity>>(
+    getRepositoryToken(TelegramLinkEntity),
+  );
+  const link = await repository.findOneByOrFail({ phone: "+375291234567" });
+
+  assert.equal(link.chatId, "777");
+  assert.equal(link.username, "anna_demo");
+  assert.equal(sentMessages.length, 1);
+});
+
+test("Telegram text phone update creates TelegramLink", async (t) => {
+  const app = await createTestApp({ verificationProvider: "telegram" });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ ok: true, result: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const telegramBotService = app.get(TelegramBotService);
+  await telegramBotService.handleUpdate({
+    update_id: 2,
+    message: {
+      message_id: 11,
+      text: "+79991234567",
+      chat: { id: 888, username: "boris_demo", first_name: "Boris" },
+      from: { username: "boris_demo", first_name: "Boris" },
+    },
+  });
+
+  const repository = app.get<Repository<TelegramLinkEntity>>(
+    getRepositoryToken(TelegramLinkEntity),
+  );
+  const link = await repository.findOneByOrFail({ phone: "+79991234567" });
+
+  assert.equal(link.chatId, "888");
+  assert.equal(link.username, "boris_demo");
+});
+
+test("/auth/request sends code when TelegramLink exists", async (t) => {
+  const app = await createTestApp({ verificationProvider: "telegram" });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const originalFetch = globalThis.fetch;
+  const sentBodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    sentBodies.push(body);
+
+    return new Response(JSON.stringify({ ok: true, result: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const linksRepository = app.get<Repository<TelegramLinkEntity>>(
+    getRepositoryToken(TelegramLinkEntity),
+  );
+  await linksRepository.save(
+    linksRepository.create({
+      phone: "+15557654321",
+      chatId: "999",
+      username: "vera_demo",
+      firstName: "Vera",
+    }),
+  );
+
+  const response = await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+15557654321" })
+    .expect(201);
+
+  assert.equal(response.body.delivery, "telegram");
+  const sendMessagePayload = sentBodies.find((item) => item.chat_id === "999");
+  assert.ok(sendMessagePayload);
+  assert.match(String(sendMessagePayload?.text), /Mobile Messenger/);
+  assert.match(String(sendMessagePayload?.text), /123456/);
 });
 
 test("request code respects resend cooldown", async (t) => {
@@ -1024,6 +1183,45 @@ test("verify with correct code creates new user and returns JWT payload fields",
   );
   const user = await usersRepository.findOneByOrFail({ phone: "+15550123456" });
   assert.equal(verifyResponse.body.userID, user.id);
+});
+
+test("/auth/verify persists telegram link data into user", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const linksRepository = app.get<Repository<TelegramLinkEntity>>(
+    getRepositoryToken(TelegramLinkEntity),
+  );
+  await linksRepository.save(
+    linksRepository.create({
+      phone: "+15551231234",
+      chatId: "12345",
+      username: "linked_user",
+      firstName: "Linked",
+    }),
+  );
+
+  const requestResponse = await request(app.getHttpServer())
+    .post("/api/auth/request")
+    .send({ phone: "+15551231234" })
+    .expect(201);
+
+  const verifyResponse = await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({
+      phone: "+15551231234",
+      code: requestResponse.body.debugCode,
+    })
+    .expect(201);
+
+  const usersRepository = app.get<Repository<UserEntity>>(
+    getRepositoryToken(UserEntity),
+  );
+  const user = await usersRepository.findOneByOrFail({ id: verifyResponse.body.userID });
+  assert.equal(user.telegramChatId, "12345");
+  assert.equal(user.telegramUsername, "linked_user");
 });
 
 test("verify with correct code logs in existing user and preserves userID", async (t) => {

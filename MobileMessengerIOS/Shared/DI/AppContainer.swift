@@ -246,7 +246,11 @@ public final class AppContainer: ObservableObject {
 
     /// Creates and returns a new AuthViewModel.
     public func makeAuthViewModel() -> AuthViewModel {
-        AuthViewModel(authService: RESTAuthService(baseURL: configService.restBaseURL), sessionStore: sessionStore)
+        AuthViewModel(
+            authService: RESTAuthService(baseURL: configService.restBaseURL),
+            sessionStore: sessionStore,
+            telegramBotURL: configService.telegramBotURL
+        )
     }
 
     private func configureNetworkingServices() {

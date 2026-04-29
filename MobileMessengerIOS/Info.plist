@@ -52,6 +52,8 @@
 	<string>Нужно для выбора фотографии и отправки ее в чат.</string>
 	<key>REST_BASE_URL</key>
 	<string>$(REST_BASE_URL)</string>
+	<key>TELEGRAM_BOT_USERNAME</key>
+	<string>$(TELEGRAM_BOT_USERNAME)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

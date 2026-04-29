@@ -9,6 +9,8 @@ type LoginFormProps = {
   error: string | null;
   codeSent: boolean;
   helperText: string | null;
+  telegramHint: string;
+  telegramBotUrl: string | null;
   onRequestCode: (payload: { phone: string }) => Promise<void>;
   onVerifyCode: (payload: { phone: string; code: string }) => Promise<void>;
 };
@@ -20,6 +22,8 @@ export function LoginForm({
   error,
   codeSent,
   helperText,
+  telegramHint,
+  telegramBotUrl,
   onRequestCode,
   onVerifyCode,
 }: LoginFormProps) {
@@ -39,6 +43,24 @@ export function LoginForm({
         await onRequestCode({ phone });
       }}
     >
+      <div className="rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-4 text-sm text-sky-100">
+        <div className="font-medium text-white">Telegram verification</div>
+        <div className="mt-2 leading-6">{telegramHint}</div>
+        {telegramBotUrl ? (
+          <a
+            href={telegramBotUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-white"
+          >
+            Open Telegram bot
+          </a>
+        ) : (
+          <div className="mt-3 text-xs text-sky-200/80">
+            Telegram bot username is not configured in this build yet.
+          </div>
+        )}
+      </div>
       <div className="space-y-2">
         <label className="text-sm text-slate-300">Phone number</label>
         <Input
@@ -49,7 +71,7 @@ export function LoginForm({
       </div>
       {codeSent ? (
         <div className="space-y-2">
-          <label className="text-sm text-slate-300">SMS code</label>
+          <label className="text-sm text-slate-300">Telegram code</label>
           <Input
             value={code}
             onChange={(event) => setCode(event.target.value)}
@@ -76,7 +98,7 @@ export function LoginForm({
         </Button>
       </div>
       <div className="text-xs leading-5 text-slate-400">
-        Enter a real number in international format. Demo accounts stay available below.
+        Enter the same international phone number in Telegram and in the app. Demo accounts stay available below.
       </div>
     </form>
   );

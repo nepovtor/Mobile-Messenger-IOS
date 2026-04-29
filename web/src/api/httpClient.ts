@@ -18,6 +18,13 @@ type RequestOptions = RequestInit & {
 };
 
 function toApiError(status: number, payload: unknown): ApiError {
+  const code =
+    typeof payload === "object" &&
+    payload !== null &&
+    "code" in payload &&
+    typeof payload.code === "string"
+      ? payload.code
+      : undefined;
   const message =
     typeof payload === "object" &&
     payload !== null &&
@@ -30,7 +37,7 @@ function toApiError(status: number, payload: unknown): ApiError {
           ? "Backend is unavailable right now. Please try again."
           : "The request could not be completed.";
 
-  return new ApiError(message, status);
+  return new ApiError(message, status, code);
 }
 
 async function parseJson(response: Response): Promise<unknown> {

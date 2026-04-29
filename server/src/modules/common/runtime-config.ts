@@ -74,6 +74,35 @@ export type SmsProviderName =
   | "smsru"
   | "mock";
 
+export type VerificationProviderName =
+  | "telegram"
+  | "console"
+  | "mock"
+  | "sms";
+
+export function getVerificationProvider(): VerificationProviderName {
+  const value = process.env.VERIFICATION_PROVIDER?.trim().toLowerCase();
+  switch (value) {
+    case "telegram":
+    case "console":
+    case "mock":
+    case "sms":
+      return value;
+    default:
+      switch (getSmsProvider()) {
+        case "twilio":
+        case "vonage":
+        case "smsru":
+          return "sms";
+        case "mock":
+          return "mock";
+        case "console":
+        default:
+          return "console";
+      }
+  }
+}
+
 export function getSmsProvider(): SmsProviderName {
   const value = process.env.SMS_PROVIDER?.trim().toLowerCase();
   switch (value) {
@@ -86,6 +115,20 @@ export function getSmsProvider(): SmsProviderName {
     default:
       return isProductionEnv() ? "console" : "console";
   }
+}
+
+export function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  return token || null;
+}
+
+export function getTelegramBotUsername(): string | null {
+  const username = process.env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@+/, "");
+  return username || null;
+}
+
+export function hasTelegramBotConfig(): boolean {
+  return Boolean(getTelegramBotToken());
 }
 
 export function getSmsFrom(): string {

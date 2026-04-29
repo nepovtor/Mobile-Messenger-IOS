@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PhoneVerificationCodeEntity } from "../entities/phone-verification-code.entity";
+import { TelegramLinkEntity } from "../entities/telegram-link.entity";
 import { isDatabaseSynchronizationEnabled } from "./common/runtime-config";
 import { AuthModule } from "./auth/auth.module";
 import { ChatModule } from "./chat/chat.module";
@@ -23,7 +24,7 @@ import { VersionModule } from "./version/version.module";
       synchronize: isDatabaseSynchronizationEnabled(),
       retryAttempts: 5,
       retryDelay: 2000,
-      entities: [PhoneVerificationCodeEntity],
+      entities: [PhoneVerificationCodeEntity, TelegramLinkEntity],
     }),
     DocsModule,
     HealthModule,

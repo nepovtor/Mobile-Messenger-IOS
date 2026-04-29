@@ -2,6 +2,14 @@
 import XCTest
 
 @MainActor
+private func makeSessionStore() -> SessionStore {
+    SessionStore(
+        tokenStore: InMemoryTokenStore(),
+        defaults: UserDefaults(suiteName: UUID().uuidString)!
+    )
+}
+
+@MainActor
 final class ChatViewModelTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -263,9 +271,6 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertEqual(displayName, "Анна Demo")
     }
 
-    private func makeSessionStore() -> SessionStore {
-        SessionStore(tokenStore: InMemoryTokenStore(), defaults: UserDefaults(suiteName: UUID().uuidString)!)
-    }
 }
 
 final class TransportDecodingTests: XCTestCase {
@@ -292,6 +297,7 @@ final class TransportDecodingTests: XCTestCase {
         let payload = """
         {
           "status": "code_sent",
+          "delivery": "telegram",
           "resendAfterSeconds": 60,
           "expiresIn": 300
         }
@@ -300,22 +306,32 @@ final class TransportDecodingTests: XCTestCase {
         let response = try JSONDecoder().decode(AuthCodeResponse.self, from: Data(payload.utf8))
 
         XCTAssertEqual(response.status, "code_sent")
+        XCTAssertEqual(response.delivery, "telegram")
         XCTAssertEqual(response.resendAfterSeconds, 60)
         XCTAssertEqual(response.expiresIn, 300)
     }
 
-    func testInvalidPhoneErrorMappingUsesBackendMessage() {
+    func testTelegramNotLinkedErrorMappingIsUserFriendly() {
         let error = APIResponseParser.ParseError(
-            userMessage: "Phone number must be in international format and start with +",
+            userMessage: "Open the Telegram bot and send your phone number before requesting a code.",
             technicalDetails: nil,
             isRetryable: false,
-            statusCode: 400
+            statusCode: 400,
+            backendCode: "TELEGRAM_NOT_LINKED"
         )
 
-        XCTAssertEqual(
-            AppError.presentableMessage(for: error),
-            "Phone number must be in international format and start with +"
+        XCTAssertTrue(AppError.presentableMessage(for: error).contains("Telegram"))
+    }
+
+    @MainActor
+    func testTelegramBotURLBuildsCorrectly() {
+        let viewModel = AuthViewModel(
+            authService: AuthServiceSpy(),
+            sessionStore: makeSessionStore(),
+            telegramBotURL: URL(string: "https://t.me/mobile_demo_bot")
         )
+
+        XCTAssertEqual(viewModel.telegramBotURL?.absoluteString, "https://t.me/mobile_demo_bot")
     }
 
     @MainActor
@@ -1322,7 +1338,7 @@ private actor AuthServiceSpy: AuthNetworking {
 
     func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
         lastRequestCodeInput = (method, contact)
-        return AuthCodeResponse(status: "code_sent", resendAfterSeconds: 60, expiresIn: 300, debugCode: nil)
+        return AuthCodeResponse(status: "code_sent", delivery: "telegram", resendAfterSeconds: 60, expiresIn: 300, debugCode: nil)
     }
 
     func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse {

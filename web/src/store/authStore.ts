@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { authApi } from "../api/authApi";
+import { ApiError } from "../api/httpClient";
 import type {
   AuthCodeResponse,
   AuthResponse,
@@ -38,10 +39,7 @@ export const authStore = create<AuthStore>((set) => ({
       set({ isLoading: false, error: null });
       return response;
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Could not send the verification code.";
+      const message = mapAuthErrorMessage(error);
       set({ isLoading: false, error: message });
       throw error;
     }
@@ -52,10 +50,7 @@ export const authStore = create<AuthStore>((set) => ({
       const result = await authApi.verifyCode(phone, code);
       await authenticateWithBackendResult(result, set);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Could not verify the confirmation code.";
+      const message = mapAuthErrorMessage(error);
       set({ isLoading: false, error: message });
       throw error;
     }
@@ -67,10 +62,10 @@ export const authStore = create<AuthStore>((set) => ({
       await authenticateWithBackendResult(result, set);
     } catch (error) {
       set({
-        error:
-          error instanceof Error
-            ? error.message
-            : "Sign in failed. Please check your demo credentials.",
+        error: mapAuthErrorMessage(
+          error,
+          "Sign in failed. Please check your demo credentials.",
+        ),
         isLoading: false,
       });
       throw error;
@@ -154,4 +149,19 @@ async function authenticateWithBackendResult(
     isLoading: false,
     error: null,
   });
+}
+
+function mapAuthErrorMessage(
+  error: unknown,
+  fallback = "Could not complete the authentication request.",
+) {
+  if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
+    return "Open the Telegram bot, press /start, send your phone number there, and then request the code again.";
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return fallback;
 }

@@ -2,9 +2,11 @@ import { Logger, Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
+import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
 import { UserEntity } from "../../entities/user.entity";
 import {
   getJwtSecret,
+  getVerificationProvider,
   getSmsProvider,
   getTwilioConfig,
 } from "../common/runtime-config";
@@ -17,10 +19,15 @@ import { MockSmsProvider } from "./sms/mock-sms.provider";
 import { SMS_SERVICE } from "./sms/sms.types";
 import { TwilioSmsProvider } from "./sms/twilio-sms.provider";
 import { UnavailableSmsProvider } from "./sms/unavailable-sms.provider";
+import { TelegramBotService } from "./telegram/telegram-bot.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, PhoneVerificationCodeEntity]),
+    TypeOrmModule.forFeature([
+      UserEntity,
+      PhoneVerificationCodeEntity,
+      TelegramLinkEntity,
+    ]),
     JwtModule.registerAsync({
       useFactory: async () => ({
         secret: getJwtSecret(),
@@ -32,11 +39,17 @@ import { UnavailableSmsProvider } from "./sms/unavailable-sms.provider";
     AuthService,
     AuthGuard,
     AuthRateLimitService,
+    TelegramBotService,
     {
       provide: SMS_SERVICE,
-      useFactory: () => {
+      inject: [TelegramBotService],
+      useFactory: (telegramBotService: TelegramBotService) => {
         const logger = new Logger("SmsProvider");
-        const provider = getSmsProvider();
+        const provider = getVerificationProvider();
+
+        if (provider === "telegram") {
+          return telegramBotService;
+        }
 
         if (provider === "mock") {
           return new MockSmsProvider();
@@ -46,7 +59,15 @@ import { UnavailableSmsProvider } from "./sms/unavailable-sms.provider";
           return new ConsoleSmsProvider(logger);
         }
 
-        if (provider === "twilio") {
+        if (provider === "sms") {
+          const smsProvider = getSmsProvider();
+          if (smsProvider === "mock") {
+            return new MockSmsProvider();
+          }
+          if (smsProvider === "console") {
+            return new ConsoleSmsProvider(logger);
+          }
+
           const config = getTwilioConfig();
           if (!config) {
             return new UnavailableSmsProvider(
@@ -60,7 +81,7 @@ import { UnavailableSmsProvider } from "./sms/unavailable-sms.provider";
 
         return new UnavailableSmsProvider(
           logger,
-          `SMS provider "${provider}" is not implemented in this build`,
+          `Verification provider "${provider}" is not implemented in this build`,
         );
       },
     },

@@ -30,6 +30,12 @@ export class UserEntity {
   @Column({ type: "varchar", unique: true, nullable: true })
   phone!: string | null;
 
+  @Column({ name: "telegram_chat_id", type: "varchar", nullable: true })
+  telegramChatId!: string | null;
+
+  @Column({ name: "telegram_username", type: "varchar", nullable: true })
+  telegramUsername!: string | null;
+
   @Column({ name: "display_name", type: "varchar" })
   displayName!: string;
 

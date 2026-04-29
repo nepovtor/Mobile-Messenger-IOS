@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { DemoAccountCard } from "../components/auth/DemoAccountCard";
 import { DemoPasswordForm, LoginForm } from "../components/auth/LoginForm";
+import { appConfig } from "../config/api";
 import { Card } from "../components/ui/Card";
 import { authStore } from "../store/authStore";
 import { useState } from "react";
@@ -58,11 +59,11 @@ export function LoginPage() {
                 Mobile Messenger Web
               </p>
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-6xl">
-                Production-ready messenger with real SMS sign-in and demo mode.
+                Production-ready messenger with Telegram verification and demo mode.
               </h1>
               <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-                Enter a real phone number, receive a verification code, and continue
-                straight into chats. Demo accounts remain available for portfolio flows.
+                Enter a real phone number, receive a verification code in Telegram,
+                and continue straight into chats. Demo accounts remain available for portfolio flows.
               </p>
             </div>
 
@@ -98,7 +99,7 @@ export function LoginPage() {
               <div>
                 <h2 className="text-2xl font-semibold text-white">Phone verification</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Request a one-time SMS code, verify it, and restore your session
+                  Request a one-time Telegram code, verify it, and restore your session
                   without exposing realtime or token details in the UI.
                 </p>
               </div>
@@ -107,12 +108,14 @@ export function LoginPage() {
                 error={error}
                 codeSent={codeSent}
                 helperText={requestInfo}
+                telegramHint="Before requesting a code, open our Telegram bot, press /start, and send the same phone number there."
+                telegramBotUrl={appConfig.telegramBotUrl}
                 onRequestCode={async ({ phone }) => {
                   clearError();
                   const response = await requestCode(phone.trim());
                   setCodeSent(true);
                   setRequestInfo(
-                    `Code sent. You can request another one in ${response.resendAfterSeconds} seconds.`,
+                    `Code sent via ${response.delivery}. You can request another one in ${response.resendAfterSeconds} seconds.`,
                   );
                 }}
                 onVerifyCode={async ({ phone, code }) => {
