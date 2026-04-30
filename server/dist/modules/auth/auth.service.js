@@ -236,22 +236,36 @@ let AuthService = AuthService_1 = class AuthService {
         return this.demoAccounts.find((account) => account.method === method && account.contact === contact);
     }
     async findOrCreateUser(method, contact, preferredDisplayName, telegramLink) {
-        let user = await this.usersRepository.findOne({
-            where: method === user_entity_1.AuthMethod.PHONE ? { phone: contact } : { method, contact },
-        });
+        let user = await this.findUserByMethodAndContact(method, contact);
         const displayName = preferredDisplayName ?? (0, contact_utils_1.buildDisplayName)(method, contact);
         if (!user) {
-            user = this.usersRepository.create({
-                method,
-                contact,
-                phone: method === user_entity_1.AuthMethod.PHONE ? contact : null,
-                telegramChatId: telegramLink?.chatId ?? null,
-                telegramUsername: telegramLink?.username ?? null,
-                displayName,
-            });
-            return this.usersRepository.save(user);
+            try {
+                user = this.usersRepository.create({
+                    method,
+                    contact,
+                    phone: method === user_entity_1.AuthMethod.PHONE ? contact : null,
+                    telegramChatId: telegramLink?.chatId ?? null,
+                    telegramUsername: telegramLink?.username ?? null,
+                    displayName,
+                });
+                return await this.usersRepository.save(user);
+            }
+            catch {
+                const existingUser = await this.findUserByMethodAndContact(method, contact);
+                if (existingUser) {
+                    user = existingUser;
+                }
+                else {
+                    throw new common_1.BadRequestException("Failed to create user");
+                }
+            }
         }
         let shouldSave = false;
+        if (method === user_entity_1.AuthMethod.PHONE &&
+            user.phone !== contact) {
+            user.phone = contact;
+            shouldSave = true;
+        }
         if (preferredDisplayName && user.displayName !== preferredDisplayName) {
             user.displayName = preferredDisplayName;
             shouldSave = true;
@@ -270,6 +284,13 @@ let AuthService = AuthService_1 = class AuthService {
             return this.usersRepository.save(user);
         }
         return user;
+    }
+    findUserByMethodAndContact(method, contact) {
+        return this.usersRepository.findOne({
+            where: method === user_entity_1.AuthMethod.PHONE
+                ? [{ method, contact }, { phone: contact }]
+                : { method, contact },
+        });
     }
     async buildAuthResult(user) {
         const token = await this.jwtService.signAsync({

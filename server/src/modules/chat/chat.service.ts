@@ -658,6 +658,7 @@ export class ChatService implements OnModuleInit {
           this.usersRepository.create({
             method: AuthMethod.PHONE,
             contact,
+            phone: contact,
             displayName,
           }),
         );

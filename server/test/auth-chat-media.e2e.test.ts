@@ -22,7 +22,7 @@ import { MediaEntity, MediaStatus } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
 import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../src/entities/telegram-link.entity";
-import { UserEntity } from "../src/entities/user.entity";
+import { AuthMethod, UserEntity } from "../src/entities/user.entity";
 import { AuthModule } from "../src/modules/auth/auth.module";
 import { ChatModule } from "../src/modules/chat/chat.module";
 import { MediaModule } from "../src/modules/media/media.module";
@@ -106,12 +106,14 @@ type TestAppOptions = {
   allowPasswordLogin?: boolean;
   authRateLimitMaxRequests?: number;
   enableDemoAccounts?: boolean;
+  enableDemoChatSeeding?: boolean;
   allowTestCode?: boolean;
   authCodeTTLSeconds?: number;
   authCodeMaxAttempts?: number;
   authCodeResendCooldownSeconds?: number;
   verificationProvider?: "mock" | "console" | "telegram" | "sms";
   smsProvider?: "mock" | "console";
+  beforeInit?: (app: INestApplication) => Promise<void> | void;
 };
 
 async function createTestApp(
@@ -138,7 +140,9 @@ async function createTestApp(
   process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS = String(
     options.authCodeResendCooldownSeconds ?? 60,
   );
-  process.env.CHAT_ENABLE_DEMO_SEEDING = "false";
+  process.env.CHAT_ENABLE_DEMO_SEEDING = options.enableDemoChatSeeding
+    ? "true"
+    : "false";
   process.env.AUTH_RATE_LIMIT_WINDOW_MS = "60000";
   process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = String(
     options.authRateLimitMaxRequests ?? 20,
@@ -204,6 +208,7 @@ async function createTestApp(
       forbidNonWhitelisted: true,
     }),
   );
+  await options.beforeInit?.(app);
   await app.init();
   await app.listen(0);
   return app;
@@ -1350,6 +1355,48 @@ test("demo account still works when enabled", async (t) => {
 
   assert.equal(response.body.displayName, "Анна Demo");
   assert.equal(response.body.phone, "+15551230011");
+});
+
+test("demo account bootstrap reuses legacy contact-only users during startup", async (t) => {
+  const app = await createTestApp({
+    allowPasswordLogin: true,
+    enableDemoChatSeeding: true,
+    beforeInit: async (pendingApp) => {
+      const usersRepository = pendingApp.get<Repository<UserEntity>>(
+        getRepositoryToken(UserEntity),
+      );
+      await usersRepository.save(
+        usersRepository.create({
+          method: AuthMethod.PHONE,
+          contact: "+15551230011",
+          phone: null,
+          displayName: "Legacy Анна",
+        }),
+      );
+    },
+  });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const response = await request(app.getHttpServer())
+    .post("/api/auth/login")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      password: "demo1111",
+    })
+    .expect(201);
+
+  assert.equal(response.body.displayName, "Анна Demo");
+  assert.equal(response.body.phone, "+15551230011");
+
+  const usersRepository = app.get<Repository<UserEntity>>(
+    getRepositoryToken(UserEntity),
+  );
+  const users = await usersRepository.findBy({ contact: "+15551230011" });
+  assert.equal(users.length, 1);
+  assert.equal(users[0]?.phone, "+15551230011");
 });
 
 test("demo account is disabled when AUTH_ENABLE_DEMO_ACCOUNTS=false", async (t) => {

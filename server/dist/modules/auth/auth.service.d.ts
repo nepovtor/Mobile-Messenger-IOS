@@ -65,6 +65,7 @@ export declare class AuthService implements OnModuleInit {
     }>>;
     private findDemoAccount;
     private findOrCreateUser;
+    private findUserByMethodAndContact;
     private buildAuthResult;
     private generateVerificationCode;
     private resolvePhone;

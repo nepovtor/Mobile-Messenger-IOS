@@ -448,6 +448,7 @@ let ChatService = class ChatService {
                 user = await this.usersRepository.save(this.usersRepository.create({
                     method: user_entity_1.AuthMethod.PHONE,
                     contact,
+                    phone: contact,
                     displayName,
                 }));
             }

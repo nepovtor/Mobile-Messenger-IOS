@@ -401,27 +401,44 @@ export class AuthService implements OnModuleInit {
     preferredDisplayName?: string,
     telegramLink?: TelegramLinkEntity,
   ): Promise<UserEntity> {
-    let user = await this.usersRepository.findOne({
-      where: method === AuthMethod.PHONE ? { phone: contact } : { method, contact },
-    });
+    let user = await this.findUserByMethodAndContact(method, contact);
 
     const displayName =
       preferredDisplayName ?? buildDisplayName(method, contact);
 
     if (!user) {
-      user = this.usersRepository.create({
-        method,
-        contact,
-        phone: method === AuthMethod.PHONE ? contact : null,
-        telegramChatId: telegramLink?.chatId ?? null,
-        telegramUsername: telegramLink?.username ?? null,
-        displayName,
-      });
+      try {
+        user = this.usersRepository.create({
+          method,
+          contact,
+          phone: method === AuthMethod.PHONE ? contact : null,
+          telegramChatId: telegramLink?.chatId ?? null,
+          telegramUsername: telegramLink?.username ?? null,
+          displayName,
+        });
 
-      return this.usersRepository.save(user);
+        return await this.usersRepository.save(user);
+      } catch {
+        const existingUser = await this.findUserByMethodAndContact(
+          method,
+          contact,
+        );
+        if (existingUser) {
+          user = existingUser;
+        } else {
+          throw new BadRequestException("Failed to create user");
+        }
+      }
     }
 
     let shouldSave = false;
+    if (
+      method === AuthMethod.PHONE &&
+      user.phone !== contact
+    ) {
+      user.phone = contact;
+      shouldSave = true;
+    }
     if (preferredDisplayName && user.displayName !== preferredDisplayName) {
       user.displayName = preferredDisplayName;
       shouldSave = true;
@@ -442,6 +459,18 @@ export class AuthService implements OnModuleInit {
     }
 
     return user;
+  }
+
+  private findUserByMethodAndContact(
+    method: AuthMethod,
+    contact: string,
+  ): Promise<UserEntity | null> {
+    return this.usersRepository.findOne({
+      where:
+        method === AuthMethod.PHONE
+          ? [{ method, contact }, { phone: contact }]
+          : { method, contact },
+    });
   }
 
   private async buildAuthResult(user: UserEntity): Promise<AuthResult> {
