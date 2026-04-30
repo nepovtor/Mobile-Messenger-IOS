@@ -54,6 +54,16 @@ public final class SessionStore: ObservableObject {
         state = .unauthenticated
     }
 
+    public func updateDisplayName(_ displayName: String) {
+        guard case let .authenticated(token, userID, _) = state else {
+            return
+        }
+
+        defaults.set(displayName, forKey: Constants.displayNameKey)
+        updateCurrentUser(userID: userID, displayName: displayName)
+        state = .authenticated(token: token, userID: userID, displayName: displayName)
+    }
+
     public var currentUserID: UUID? {
         if case .authenticated(_, let userID, _) = state { return userID }
         return nil

@@ -8,7 +8,8 @@ import type { Message } from "../types/message";
 
 export function MessengerPage() {
   const navigate = useNavigate();
-  const { currentUser, token, isAuthenticated, logout, error, clearError } = authStore();
+  const { currentUser, token, isAuthenticated, logout, error, clearError, updateDisplayName } =
+    authStore();
   const { loadChats, upsertMessage, markMessageFailed, markMessageRead, updateTyping } =
     chatStore();
 
@@ -98,5 +99,11 @@ export function MessengerPage() {
     return null;
   }
 
-  return <AppShell currentUser={currentUser} onLogout={() => logout()} />;
+  return (
+    <AppShell
+      currentUser={currentUser}
+      onLogout={() => logout()}
+      onUpdateDisplayName={(displayName) => updateDisplayName(displayName)}
+    />
+  );
 }

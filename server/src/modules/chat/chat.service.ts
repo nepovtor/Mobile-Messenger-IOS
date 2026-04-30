@@ -404,13 +404,17 @@ export class ChatService implements OnModuleInit {
     typingParticipants: string[];
   }> {
     await this.getParticipantOrFail(chatID, user.sub);
+    const currentUser = await this.usersRepository.findOneBy({
+      id: user.sub as UserEntity["id"],
+    });
     const participants = await this.participantsRepository.find({
       where: { chatId: chatID },
     });
+    const displayName = currentUser?.displayName ?? user.displayName;
     const typingParticipants = this.realtimeService.setTyping(
       chatID,
       user.sub,
-      user.displayName,
+      displayName,
       dto.isTyping,
     );
 
@@ -419,7 +423,7 @@ export class ChatService implements OnModuleInit {
       data: {
         chatID,
         userID: user.sub,
-        displayName: user.displayName,
+        displayName,
         isTyping: dto.isTyping,
         typingParticipants,
       },
@@ -431,6 +435,48 @@ export class ChatService implements OnModuleInit {
       isTyping: dto.isTyping,
       typingParticipants,
     };
+  }
+
+  async findExistingDirectChatByUsers(
+    firstUserID: string,
+    secondUserID: string,
+  ): Promise<ChatEntity | null> {
+    return this.findExistingDirectChat([firstUserID, secondUserID].sort());
+  }
+
+  async findOrCreateDirectChat(
+    firstUserID: string,
+    secondUserID: string,
+  ): Promise<ChatSummary> {
+    const participantIDs = [firstUserID, secondUserID].sort();
+    const existingDirectChat = await this.findExistingDirectChat(participantIDs);
+    if (existingDirectChat) {
+      return this.getChatSummary(existingDirectChat.id, firstUserID);
+    }
+
+    const currentUser = await this.usersRepository.findOneBy({
+      id: firstUserID as UserEntity["id"],
+    });
+    const otherUser = await this.usersRepository.findOneBy({
+      id: secondUserID as UserEntity["id"],
+    });
+    if (!currentUser || !otherUser) {
+      throw new BadRequestException("User not found");
+    }
+
+    return this.createChat(
+      {
+        title: otherUser.displayName,
+        participantIDs: [otherUser.id],
+      },
+      {
+        sub: currentUser.id,
+        displayName: currentUser.displayName,
+        contact: currentUser.contact,
+        method: currentUser.method,
+        phone: currentUser.phone ?? currentUser.contact,
+      },
+    );
   }
 
   private async resolveParticipants(dto: CreateChatDto): Promise<UserEntity[]> {

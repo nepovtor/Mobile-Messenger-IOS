@@ -78,17 +78,25 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var environmentInfo: ProfileEnvironmentInfo = .unknown
     @Published private(set) var isLoadingProfile = false
     @Published private(set) var hasStoredToken = false
+    @Published var editedDisplayName = ""
+    @Published private(set) var isEditingDisplayName = false
+    @Published private(set) var isSavingDisplayName = false
+    @Published private(set) var inlineMessage: String?
+    @Published private(set) var didSaveDisplayName = false
 
-    private let contactsService: ContactsNetworking
+    private let profileService: ProfileNetworking
+    private let updateDisplayNameAction: @MainActor (String) -> Void
     private let logoutAction: @MainActor () -> Void
     private var currentUserID: UUID?
     private var lastLoadedUserID: UUID?
 
     init(
-        contactsService: ContactsNetworking,
+        profileService: ProfileNetworking,
+        updateDisplayNameAction: @escaping @MainActor (String) -> Void,
         logoutAction: @escaping @MainActor () -> Void
     ) {
-        self.contactsService = contactsService
+        self.profileService = profileService
+        self.updateDisplayNameAction = updateDisplayNameAction
         self.logoutAction = logoutAction
     }
 
@@ -108,6 +116,9 @@ final class ProfileViewModel: ObservableObject {
             }
             currentUserID = userID
             self.displayName = displayName.isEmpty ? "Unknown user" : displayName
+            if !isEditingDisplayName {
+                editedDisplayName = self.displayName
+            }
             userIDText = userID.uuidString
             userIDFootnote = "User ID"
             initials = Self.makeInitials(from: self.displayName)
@@ -131,6 +142,10 @@ final class ProfileViewModel: ObservableObject {
             accountBadgeDetail = "No active account session."
             hasStoredToken = false
             lastLoadedUserID = nil
+            editedDisplayName = ""
+            isEditingDisplayName = false
+            inlineMessage = nil
+            didSaveDisplayName = false
         }
     }
 
@@ -150,19 +165,81 @@ final class ProfileViewModel: ObservableObject {
         defer { isLoadingProfile = false }
 
         do {
-            let contacts = try await contactsService.listContacts()
-            let currentContact = contacts.first(where: {
-                $0.isCurrentUser || $0.userID == userID
-            })?.contact
-            phone = Self.phoneText(from: currentContact)
+            let profile = try await profileService.fetchProfile()
+            phone = Self.phoneText(from: profile.phone)
+            displayName = profile.displayName.isEmpty ? displayName : profile.displayName
+            initials = Self.makeInitials(from: displayName)
             lastLoadedUserID = userID
         } catch {
             phone = "Unknown phone"
         }
     }
 
+    func startEditingDisplayName() {
+        editedDisplayName = displayName
+        inlineMessage = nil
+        didSaveDisplayName = false
+        isEditingDisplayName = true
+    }
+
+    func cancelEditingDisplayName() {
+        editedDisplayName = displayName
+        inlineMessage = nil
+        didSaveDisplayName = false
+        isEditingDisplayName = false
+    }
+
+    func saveDisplayName() async {
+        let trimmed = editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let validationMessage = Self.displayNameValidationMessage(for: trimmed) else {
+            isSavingDisplayName = true
+            defer { isSavingDisplayName = false }
+
+            do {
+                let profile = try await profileService.updateProfile(displayName: trimmed)
+                displayName = profile.displayName
+                editedDisplayName = profile.displayName
+                phone = Self.phoneText(from: profile.phone)
+                initials = Self.makeInitials(from: profile.displayName)
+                lastLoadedUserID = currentUserID
+                isEditingDisplayName = false
+                didSaveDisplayName = true
+                inlineMessage = "Имя обновлено."
+                updateDisplayNameAction(profile.displayName)
+            } catch {
+                didSaveDisplayName = false
+                inlineMessage = AppError.presentableMessage(for: error)
+            }
+            return
+        }
+
+        didSaveDisplayName = false
+        inlineMessage = validationMessage
+    }
+
     func logout() {
         logoutAction()
+    }
+
+    var canSaveDisplayName: Bool {
+        Self.displayNameValidationMessage(
+            for: editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        ) == nil
+    }
+
+    static func displayNameValidationMessage(for displayName: String) -> String? {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let count = Array(trimmed).count
+        if trimmed.isEmpty {
+            return "Введите имя пользователя."
+        }
+        if count < 2 {
+            return "Имя должно быть не короче 2 символов."
+        }
+        if count > 40 {
+            return "Имя должно быть не длиннее 40 символов."
+        }
+        return nil
     }
 
     static func makeInitials(from displayName: String) -> String {

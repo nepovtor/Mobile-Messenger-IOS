@@ -1,9 +1,11 @@
 import { Menu } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { chatApi } from "../../api/chatApi";
+import { contactsApi } from "../../api/contactsApi";
 import { chatStore } from "../../store/chatStore";
 import { realtimeStore } from "../../store/realtimeStore";
 import type { CurrentUser } from "../../types/auth";
+import type { ContactEntry } from "../../types/contact";
 import { ChatPanel } from "./ChatPanel";
 import { EmptyState } from "./EmptyState";
 import { Sidebar } from "./Sidebar";
@@ -12,9 +14,11 @@ import { Button } from "../ui/Button";
 export function AppShell({
   currentUser,
   onLogout,
+  onUpdateDisplayName,
 }: {
   currentUser: CurrentUser;
   onLogout: () => void;
+  onUpdateDisplayName: (displayName: string) => Promise<void>;
 }) {
   const {
     chats,
@@ -22,6 +26,7 @@ export function AppShell({
     messagesByChatId,
     isLoadingChats,
     selectChat,
+    loadChats,
     loadMessages,
     sendMessage,
     retryMessage,
@@ -30,11 +35,46 @@ export function AppShell({
   const realtimeError = realtimeStore((state) => state.lastError);
   const chatError = chatStore((state) => state.error);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [contacts, setContacts] = useState<ContactEntry[]>([]);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+  const [contactsNotice, setContactsNotice] = useState<string | null>(null);
+  const [isLoadingContacts, setLoadingContacts] = useState(false);
+  const [isAddingContact, setAddingContact] = useState(false);
+  const [removingContactId, setRemovingContactId] = useState<string | null>(null);
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) ?? null,
     [chats, selectedChatId],
   );
+
+  useEffect(() => {
+    let isCancelled = false;
+    setLoadingContacts(true);
+    void contactsApi
+      .getContacts()
+      .then((result) => {
+        if (isCancelled) {
+          return;
+        }
+        setContacts(result);
+        setContactsError(null);
+      })
+      .catch((error: Error) => {
+        if (isCancelled) {
+          return;
+        }
+        setContactsError(error.message);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setLoadingContacts(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser.userID]);
 
   useEffect(() => {
     if (selectedChatId && !messagesByChatId[selectedChatId]) {
@@ -66,6 +106,53 @@ export function AppShell({
     }
   }, [currentUser.userID, messagesByChatId, selectedChat]);
 
+  async function handleAddContact(phone: string) {
+    setAddingContact(true);
+    setContactsNotice(null);
+    try {
+      const result = await contactsApi.addContact(phone);
+      setContacts((existing) => {
+        const withoutDuplicate = existing.filter((item) => item.id !== result.id);
+        return result.alreadyExists ? withoutDuplicate : [result, ...withoutDuplicate];
+      });
+      setContactsError(null);
+      setContactsNotice(result.alreadyExists ? "Contact already added." : "Contact added.");
+    } catch (error) {
+      setContactsError(error instanceof Error ? error.message : "Could not add contact.");
+    } finally {
+      setAddingContact(false);
+    }
+  }
+
+  async function handleRemoveContact(contact: ContactEntry) {
+    setRemovingContactId(contact.id);
+    setContactsNotice(null);
+    try {
+      await contactsApi.removeContact(contact.id);
+      setContacts((existing) => existing.filter((item) => item.id !== contact.id));
+      setContactsError(null);
+      setContactsNotice("Contact removed.");
+    } catch (error) {
+      setContactsError(error instanceof Error ? error.message : "Could not remove contact.");
+    } finally {
+      setRemovingContactId(null);
+    }
+  }
+
+  async function handleOpenContact(contact: ContactEntry) {
+    try {
+      const chat =
+        contact.directChatID && chats.find((item) => item.id === contact.directChatID)
+          ? chats.find((item) => item.id === contact.directChatID)!
+          : await chatApi.createChat(contact.displayName, [contact.phone]);
+      await loadChats();
+      selectChat(chat.id);
+      setSidebarOpen(false);
+    } catch (error) {
+      setContactsError(error instanceof Error ? error.message : "Could not open direct chat.");
+    }
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.28),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(34,211,238,0.16),_transparent_26%),linear-gradient(180deg,#020617,#0f172a)] px-4 py-4 sm:px-6 sm:py-6">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20" />
@@ -81,12 +168,22 @@ export function AppShell({
           <Sidebar
             user={currentUser}
             chats={chats}
+            contacts={contacts}
             selectedChatId={selectedChatId}
             isLoading={isLoadingChats}
+            isLoadingContacts={isLoadingContacts}
             connectionState={connectionState}
+            contactsError={contactsError}
+            contactsNotice={contactsNotice}
+            isAddingContact={isAddingContact}
+            removingContactId={removingContactId}
             onSelectChat={(chatId) => {
               selectChat(chatId);
             }}
+            onOpenContact={(contact) => void handleOpenContact(contact)}
+            onAddContact={(phone) => void handleAddContact(phone)}
+            onRemoveContact={(contact) => void handleRemoveContact(contact)}
+            onUpdateDisplayName={onUpdateDisplayName}
             onLogout={onLogout}
           />
         </div>
@@ -144,13 +241,23 @@ export function AppShell({
             <Sidebar
               user={currentUser}
               chats={chats}
+              contacts={contacts}
               selectedChatId={selectedChatId}
               isLoading={isLoadingChats}
+              isLoadingContacts={isLoadingContacts}
               connectionState={connectionState}
+              contactsError={contactsError}
+              contactsNotice={contactsNotice}
+              isAddingContact={isAddingContact}
+              removingContactId={removingContactId}
               onSelectChat={(chatId) => {
                 selectChat(chatId);
                 setSidebarOpen(false);
               }}
+              onOpenContact={(contact) => void handleOpenContact(contact)}
+              onAddContact={(phone) => void handleAddContact(phone)}
+              onRemoveContact={(contact) => void handleRemoveContact(contact)}
+              onUpdateDisplayName={onUpdateDisplayName}
               onLogout={onLogout}
             />
           </div>

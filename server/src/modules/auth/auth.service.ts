@@ -124,6 +124,8 @@ export class AuthService implements OnModuleInit {
         account.method,
         account.contact,
         account.displayName,
+        undefined,
+        true,
       );
     }
   }
@@ -331,70 +333,6 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async listContacts(userID: string): Promise<
-    Array<{
-      userID: string;
-      displayName: string;
-      contact: string;
-      method: AuthMethod;
-      phone: string | null;
-      isCurrentUser: boolean;
-    }>
-  > {
-    await this.getMe(userID);
-
-    const demoOrder = new Map(
-      this.demoAccounts.map((account, index) => [account.contact, index]),
-    );
-
-    const demoContacts = new Set(
-      this.demoAccounts.map((account) => account.contact),
-    );
-    const users = await this.usersRepository.find();
-
-    return users
-      .filter(
-        (user) =>
-          user.id === userID ||
-          !areDemoAccountsEnabled() ||
-          demoContacts.has(user.contact),
-      )
-      .sort((left, right) => {
-        if (left.id === userID) {
-          return -1;
-        }
-        if (right.id === userID) {
-          return 1;
-        }
-
-        const leftOrder = demoOrder.get(left.contact);
-        const rightOrder = demoOrder.get(right.contact);
-        if (
-          leftOrder !== undefined &&
-          rightOrder !== undefined &&
-          leftOrder !== rightOrder
-        ) {
-          return leftOrder - rightOrder;
-        }
-        if (leftOrder !== undefined) {
-          return -1;
-        }
-        if (rightOrder !== undefined) {
-          return 1;
-        }
-
-        return left.displayName.localeCompare(right.displayName);
-      })
-      .map((user) => ({
-        userID: user.id,
-        displayName: user.displayName,
-        contact: user.contact,
-        method: user.method,
-        phone: user.phone,
-        isCurrentUser: user.id === userID,
-      }));
-  }
-
   private findDemoAccount(
     method: AuthMethod,
     contact: string,
@@ -409,6 +347,7 @@ export class AuthService implements OnModuleInit {
     contact: string,
     preferredDisplayName?: string,
     telegramLink?: TelegramLinkEntity,
+    syncExistingDisplayName = false,
   ): Promise<UserEntity> {
     let user = await this.findUserByMethodAndContact(method, contact);
 
@@ -445,7 +384,11 @@ export class AuthService implements OnModuleInit {
       user.phone = contact;
       shouldSave = true;
     }
-    if (preferredDisplayName && user.displayName !== preferredDisplayName) {
+    if (
+      syncExistingDisplayName &&
+      preferredDisplayName &&
+      user.displayName !== preferredDisplayName
+    ) {
       user.displayName = preferredDisplayName;
       shouldSave = true;
     }

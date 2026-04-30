@@ -106,6 +106,7 @@ public final class AppContainer: ObservableObject {
     private var chatRepository: ChatRepository!
     private var chatService: ChatNetworking!
     private var contactsService: ContactsNetworking!
+    private var profileService: ProfileNetworking!
     private var realtimeService: ChatRealtimeService!
     private var sessionStateCancellable: AnyCancellable?
     private var connectionStateTask: Task<Void, Never>?
@@ -237,7 +238,10 @@ public final class AppContainer: ObservableObject {
     /// Creates and returns a new ProfileViewModel.
     func makeProfileViewModel() -> ProfileViewModel {
         ProfileViewModel(
-            contactsService: contactsService,
+            profileService: profileService,
+            updateDisplayNameAction: { [sessionStore] displayName in
+                sessionStore.updateDisplayName(displayName)
+            },
             logoutAction: { [sessionStore] in
                 sessionStore.logout()
             }
@@ -262,6 +266,13 @@ public final class AppContainer: ObservableObject {
             }
         )
         contactsService = RESTContactsService(
+            baseURL: configService.restBaseURL,
+            authTokenProvider: authTokenProvider,
+            unauthorizedHandler: { [sessionStore] in
+                await MainActor.run { sessionStore.logout() }
+            }
+        )
+        profileService = RESTProfileService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
             unauthorizedHandler: { [sessionStore] in

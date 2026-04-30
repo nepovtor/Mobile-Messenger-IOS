@@ -77,8 +77,26 @@ function buildLandingPage(input: {
     },
     {
       method: "GET",
-      path: "/auth/contacts",
-      description: "Контакты и demo-аккаунты, доступные для чатов.",
+      path: "/contacts",
+      description: "Список контактов текущего пользователя.",
+      auth: "bearer",
+    },
+    {
+      method: "POST",
+      path: "/contacts",
+      description: "Добавление контакта по номеру телефона с переиспользованием direct chat.",
+      auth: "bearer",
+    },
+    {
+      method: "DELETE",
+      path: "/contacts/:identifier",
+      description: "Удаление контакта без удаления пользователя или истории чата.",
+      auth: "bearer",
+    },
+    {
+      method: "PATCH",
+      path: "/users/me/profile",
+      description: "Безопасное обновление display name текущего пользователя.",
       auth: "bearer",
     },
     {

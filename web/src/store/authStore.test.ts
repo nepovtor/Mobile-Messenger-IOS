@@ -11,6 +11,7 @@ vi.mock("../api/authApi", () => ({
     verifyCode: vi.fn(),
     login: vi.fn(),
     getMe: vi.fn(),
+    updateProfile: vi.fn(),
   },
 }));
 
@@ -158,5 +159,19 @@ describe("authStore", () => {
     await expect(authStore.getState().requestCode("+15550005")).rejects.toBeDefined();
 
     expect(authStore.getState().error).toMatch(/Telegram bot/i);
+  });
+
+  it("updateDisplayName refreshes currentUser without clearing the session", async () => {
+    vi.mocked(authApi.updateProfile).mockResolvedValue({
+      userID: "user-1",
+      displayName: "Anna Updated",
+      phone: "+1555",
+    });
+
+    await authStore.getState().updateDisplayName("Anna Updated");
+
+    expect(authStore.getState().currentUser?.displayName).toBe("Anna Updated");
+    expect(authStore.getState().token).toBe("token");
+    expect(authStore.getState().isAuthenticated).toBe(true);
   });
 });

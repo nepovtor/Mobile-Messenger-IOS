@@ -6,6 +6,15 @@ export const chatApi = {
   getChats() {
     return httpRequest<ChatSummary[]>("/chats");
   },
+  createChat(title: string, participantContacts: string[]) {
+    return httpRequest<ChatSummary>("/chats", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        participantContacts,
+      }),
+    });
+  },
   getMessages(chatId: string) {
     return httpRequest<Message[]>(`/chats/${chatId}/messages?limit=100`);
   },

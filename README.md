@@ -48,6 +48,8 @@ SwiftUI Views
 - Stable message lifecycle: `sending`, `sent`, `delivered`, `read`, `failed`, retry for failed local messages.
 - REST auth, chat list, history, media upload, read receipts, typing.
 - Real phone verification with Telegram delivery, TTL, resend cooldown, attempt limits, and JWT session issuance.
+- Contacts list with per-user isolation, add/remove by phone, and direct chat reuse/creation.
+- Secure profile display-name editing on backend, iOS, and web.
 - Profile screen with account info, realtime status, and secure logout.
 - Account info card with display name, phone fallback, user ID, and environment summary.
 - Security card that confirms Keychain token storage and session cleanup on logout.
@@ -59,10 +61,11 @@ SwiftUI Views
 - Auth with demo accounts and real backend session verification.
 - Real phone sign-in on iOS and web via `/api/auth/request` and `/api/auth/verify`, with verification codes delivered through Telegram in the portfolio flow.
 - Chat list with per-user chat isolation and unread state.
+- Contacts tab with backend-backed add/remove by phone and direct chat opening.
 - Message history, optimistic sending, retry for failed messages, and delivery state updates.
 - Native WebSocket realtime via `URLSessionWebSocketTask`.
 - Keychain-backed token storage.
-- Profile screen with initials avatar, display name, phone, user ID fallback, and realtime status.
+- Profile screen with initials avatar, display name editing, phone, user ID fallback, and realtime status.
 - Secure logout that clears session state, cached chats/messages, and realtime connectivity.
 
 ## Planned

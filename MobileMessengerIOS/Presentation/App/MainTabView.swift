@@ -4,8 +4,12 @@ import SwiftUI
 final class ContactsViewModel: ObservableObject {
     @Published private(set) var contacts: [ContactDTO] = []
     @Published var searchQuery: String = ""
+    @Published var addPhone = ""
     @Published var isLoading = false
+    @Published var isAdding = false
+    @Published var removingContactID: UUID?
     @Published var errorMessage: String?
+    @Published private(set) var successMessage: String?
     @Published var openingContactID: UUID?
 
     private let contactsService: ContactsNetworking
@@ -43,17 +47,65 @@ final class ContactsViewModel: ObservableObject {
         do {
             contacts = try await contactsService.listContacts()
             errorMessage = nil
+            successMessage = nil
         } catch {
             errorMessage = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "contacts_load")
         }
     }
 
-    func openChat(with contact: ContactDTO) async -> ChatListItem? {
-        guard !contact.isCurrentUser else {
-            errorMessage = "Нельзя открыть чат с текущим аккаунтом"
-            return nil
+    func addContact() async {
+        let trimmedPhone = addPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPhone.isEmpty else {
+            errorMessage = "Введите номер телефона."
+            successMessage = nil
+            return
         }
+        guard !isAdding else { return }
+
+        isAdding = true
+        defer { isAdding = false }
+
+        do {
+            let contact = try await contactsService.addContact(phone: trimmedPhone)
+            if let existingIndex = contacts.firstIndex(where: { $0.id == contact.id }) {
+                contacts[existingIndex] = contact
+            } else if contact.alreadyExists != true {
+                contacts.insert(contact, at: 0)
+            }
+            addPhone = ""
+            errorMessage = nil
+            successMessage = contact.alreadyExists == true
+                ? "Контакт уже добавлен."
+                : "Контакт добавлен."
+            if contact.alreadyExists == true, !contacts.contains(where: { $0.id == contact.id }) {
+                contacts.insert(contact, at: 0)
+            }
+        } catch {
+            successMessage = nil
+            errorMessage = AppError.presentableMessage(for: error)
+            analytics.track(error: error, context: "contacts_add")
+        }
+    }
+
+    func removeContact(_ contact: ContactDTO) async {
+        guard removingContactID == nil else { return }
+        removingContactID = contact.id
+        defer { removingContactID = nil }
+
+        do {
+            try await contactsService.removeContact(id: contact.id)
+            contacts.removeAll { $0.id == contact.id }
+            errorMessage = nil
+            successMessage = "Контакт удалён."
+        } catch {
+            successMessage = nil
+            errorMessage = AppError.presentableMessage(for: error)
+            analytics.track(error: error, context: "contacts_remove")
+        }
+    }
+
+    func openChat(with contact: ContactDTO) async -> ChatListItem? {
         guard openingContactID == nil else { return nil }
 
         openingContactID = contact.userID
@@ -76,6 +128,7 @@ final class ContactsViewModel: ObservableObject {
                 participantCount: chat.participantCount
             )
         } catch {
+            successMessage = nil
             errorMessage = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "contacts_open_chat")
             return nil
@@ -95,11 +148,45 @@ struct ContactsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Добавить контакт")
+                            .font(.headline)
+                        TextField("+375291234567", text: $viewModel.addPhone)
+                            .keyboardType(.phonePad)
+                            .textContentType(.telephoneNumber)
+                            .autocorrectionDisabled()
+
+                        Button {
+                            Task {
+                                await viewModel.addContact()
+                            }
+                        } label: {
+                            HStack {
+                                if viewModel.isAdding {
+                                    ProgressView()
+                                }
+                                Text("Добавить")
+                            }
+                        }
+                        .disabled(viewModel.isAdding)
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 if viewModel.isLoading && viewModel.contacts.isEmpty {
                     Section {
                         ForEach(0..<5, id: \.self) { _ in
                             ContactRowSkeleton()
                         }
+                    }
+                } else if viewModel.filteredContacts.isEmpty {
+                    Section {
+                        ContentUnavailableView(
+                            "Контактов пока нет",
+                            systemImage: "person.2.slash",
+                            description: Text("Добавьте пользователя по номеру телефона, чтобы быстро открыть direct chat.")
+                        )
                     }
                 } else {
                     Section {
@@ -117,7 +204,20 @@ struct ContactsView: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            .disabled(contact.isCurrentUser || viewModel.openingContactID == contact.userID)
+                            .disabled(viewModel.openingContactID == contact.userID)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.removeContact(contact)
+                                    }
+                                } label: {
+                                    if viewModel.removingContactID == contact.id {
+                                        ProgressView()
+                                    } else {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -130,8 +230,19 @@ struct ContactsView: View {
                 DialogueView(chat: chat)
             }
             .overlay(alignment: .top) {
-                if let errorMessage = viewModel.errorMessage {
-                    BannerMessageView(message: errorMessage, systemImage: "person.crop.circle.badge.exclamationmark")
+                if let successMessage = viewModel.successMessage {
+                    BannerMessageView(
+                        message: successMessage,
+                        systemImage: "checkmark.circle.fill",
+                        tint: .green
+                    )
+                    .padding()
+                } else if let errorMessage = viewModel.errorMessage {
+                    BannerMessageView(
+                        message: errorMessage,
+                        systemImage: "person.crop.circle.badge.exclamationmark",
+                        tint: .red
+                    )
                         .padding()
                 }
             }
@@ -147,41 +258,28 @@ private struct ContactRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Circle()
-                .fill(contact.isCurrentUser ? Color.green.opacity(0.2) : Color.blue.opacity(0.2))
+                .fill(Color.blue.opacity(0.2))
                 .frame(width: 48, height: 48)
                 .overlay(
                     Text(initials)
                         .font(.headline)
-                        .foregroundStyle(contact.isCurrentUser ? .green : .blue)
+                        .foregroundStyle(.blue)
                 )
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(contact.displayName)
-                        .font(.headline)
-                    if contact.isCurrentUser {
-                        Text("Вы")
-                            .font(.caption.bold())
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(Color.green.opacity(0.15)))
-                            .foregroundStyle(.green)
-                    }
-                }
-                Text(contact.contact)
+                Text(contact.displayName)
+                    .font(.headline)
+                Text(contact.phone)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(contact.isCurrentUser ? "Текущий аккаунт" : "Нажмите, чтобы открыть диалог")
+                Text(contact.directChatID == nil ? "Direct chat создастся автоматически" : "Нажмите, чтобы открыть диалог")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            if contact.isCurrentUser {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else if isOpening {
+            if isOpening {
                 ProgressView()
             } else {
                 Image(systemName: "message.fill")
@@ -220,6 +318,7 @@ private struct ContactRowSkeleton: View {
 private struct BannerMessageView: View {
     let message: String
     let systemImage: String
+    let tint: Color
 
     var body: some View {
         HStack {
@@ -229,6 +328,7 @@ private struct BannerMessageView: View {
             Spacer()
         }
         .padding()
+        .foregroundStyle(tint)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }

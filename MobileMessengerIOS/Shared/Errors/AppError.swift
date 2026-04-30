@@ -29,6 +29,17 @@ public enum AppError: LocalizedError, Sendable {
             return "Откройте Telegram-бота, нажмите /start, отправьте туда свой номер и затем запросите код снова."
         }
 
+        if let parseError = error as? APIResponseParser.ParseError {
+            switch parseError.backendCode {
+            case "USER_NOT_FOUND":
+                return "Пользователь с таким номером не найден."
+            case "CANNOT_ADD_SELF":
+                return "Нельзя добавить свой собственный аккаунт."
+            default:
+                break
+            }
+        }
+
         if let configError = error as? ConfigError, let description = configError.errorDescription {
             return description
         }

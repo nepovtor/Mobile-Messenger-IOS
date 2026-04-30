@@ -555,15 +555,61 @@ public struct AuthVerifyResponse: Decodable {
 
 public protocol ContactsNetworking: Sendable {
     func listContacts() async throws -> [ContactDTO]
+    func addContact(phone: String) async throws -> ContactDTO
+    func removeContact(id: UUID) async throws
 }
 
 public struct ContactDTO: Codable, Identifiable, Hashable, Sendable {
+    public let id: UUID
     public let userID: UUID
     public let displayName: String
-    public let contact: String
-    public let isCurrentUser: Bool
+    public let phone: String
+    public let createdAt: String
+    public let directChatID: UUID?
+    public let alreadyExists: Bool?
 
-    public var id: UUID { userID }
+    public var contact: String { phone }
+}
+
+public protocol ProfileNetworking: Sendable {
+    func fetchProfile() async throws -> UserProfileDTO
+    func updateProfile(displayName: String) async throws -> UserProfileDTO
+}
+
+public struct UserProfileDTO: Decodable, Sendable {
+    public let userID: UUID
+    public let displayName: String
+    public let phone: String
+
+    private enum CodingKeys: String, CodingKey {
+        case userID
+        case userId
+        case displayName
+        case phone
+        case contact
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        phone =
+            try container.decodeIfPresent(String.self, forKey: .phone) ??
+            (try container.decodeIfPresent(String.self, forKey: .contact)) ??
+            ""
+
+        if let decodedUserID = try container.decodeIfPresent(UUID.self, forKey: .userID) ??
+            container.decodeIfPresent(UUID.self, forKey: .userId) {
+            userID = decodedUserID
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.userID,
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Missing userID/userId in profile response"
+                )
+            )
+        }
+    }
 }
 
 public struct RESTContactsService: ContactsNetworking {
@@ -585,13 +631,9 @@ public struct RESTContactsService: ContactsNetworking {
     }
 
     public func listContacts() async throws -> [ContactDTO] {
-        var request = URLRequest(url: baseURL.appendingAPIPath("auth/contacts"))
+        var request = URLRequest(url: baseURL.appendingAPIPath("contacts"))
         request.httpMethod = "GET"
-        if let token = await authTokenProvider() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        } else {
-            throw AppError.unauthorized
-        }
+        try await authorize(&request)
 
         do {
             return try await APIResponseParser.requestJSON(
@@ -608,4 +650,129 @@ public struct RESTContactsService: ContactsNetworking {
             throw AppError.wrapped(error)
         }
     }
+
+    public func addContact(phone: String) async throws -> ContactDTO {
+        var request = URLRequest(url: baseURL.appendingAPIPath("contacts"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["phone": phone])
+        try await authorize(&request)
+
+        do {
+            return try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    public func removeContact(id: UUID) async throws {
+        var request = URLRequest(url: baseURL.appendingAPIPath("contacts/\(id.uuidString)"))
+        request.httpMethod = "DELETE"
+        try await authorize(&request)
+
+        do {
+            let _: EmptyResponse = try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    private func authorize(_ request: inout URLRequest) async throws {
+        if let token = await authTokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            throw AppError.unauthorized
+        }
+    }
 }
+
+public struct RESTProfileService: ProfileNetworking {
+    private let baseURL: URL
+    private let session: URLSession
+    private let authTokenProvider: @Sendable () async -> String?
+    private let unauthorizedHandler: @Sendable () async -> Void
+
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        authTokenProvider: @escaping @Sendable () async -> String?,
+        unauthorizedHandler: @escaping @Sendable () async -> Void = {}
+    ) {
+        self.baseURL = baseURL
+        self.session = session
+        self.authTokenProvider = authTokenProvider
+        self.unauthorizedHandler = unauthorizedHandler
+    }
+
+    public func fetchProfile() async throws -> UserProfileDTO {
+        var request = URLRequest(url: baseURL.appendingAPIPath("auth/me"))
+        request.httpMethod = "GET"
+        try await authorize(&request)
+
+        do {
+            return try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    public func updateProfile(displayName: String) async throws -> UserProfileDTO {
+        var request = URLRequest(url: baseURL.appendingAPIPath("users/me/profile"))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["displayName": displayName])
+        try await authorize(&request)
+
+        do {
+            return try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    private func authorize(_ request: inout URLRequest) async throws {
+        if let token = await authTokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            throw AppError.unauthorized
+        }
+    }
+}
+
+private struct EmptyResponse: Codable {}

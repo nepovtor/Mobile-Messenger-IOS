@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { ChatParticipantEntity } from "./chat-participant.entity";
+import { ContactEntity } from "./contact.entity";
 import { MediaEntity } from "./media.entity";
 import { MessageEntity } from "./message.entity";
 
@@ -47,6 +48,12 @@ export class UserEntity {
 
   @OneToMany(() => ChatParticipantEntity, (participant) => participant.user)
   chatParticipants?: ChatParticipantEntity[];
+
+  @OneToMany(() => ContactEntity, (contact) => contact.ownerUser)
+  ownedContacts?: ContactEntity[];
+
+  @OneToMany(() => ContactEntity, (contact) => contact.contactUser)
+  contactOfUsers?: ContactEntity[];
 
   @OneToMany(() => MessageEntity, (message) => message.author)
   messages?: MessageEntity[];

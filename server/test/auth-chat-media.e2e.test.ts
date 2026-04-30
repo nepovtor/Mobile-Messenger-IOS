@@ -18,6 +18,7 @@ import { Repository } from "typeorm";
 import { WebSocket } from "ws";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
+import { ContactEntity } from "../src/entities/contact.entity";
 import { MediaEntity, MediaStatus } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
 import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
@@ -159,6 +160,7 @@ async function createTestApp(
           type: "postgres",
           entities: [
             UserEntity,
+            ContactEntity,
             PhoneVerificationCodeEntity,
             TelegramLinkEntity,
             ChatEntity,
@@ -457,7 +459,7 @@ test("password login is disabled when the feature flag is off", async (t) => {
     .expect(403);
 });
 
-test("verification codes are single-use and contacts keep current user first", async (t) => {
+test("verification codes are single-use and auth/me returns the current user", async (t) => {
   const app = await createTestApp({ allowPasswordLogin: true });
   t.after(async () => {
     await app.close();
@@ -487,13 +489,13 @@ test("verification codes are single-use and contacts keep current user first", a
     })
     .expect(401);
 
-  const contactsResponse = await request(app.getHttpServer())
-    .get("/api/auth/contacts")
+  const meResponse = await request(app.getHttpServer())
+    .get("/api/auth/me")
     .set("Authorization", `Bearer ${firstVerifyResponse.body.token}`)
     .expect(200);
 
-  assert.equal(contactsResponse.body[0].isCurrentUser, true);
-  assert.equal(contactsResponse.body[0].contact, "+15551230011");
+  assert.equal(meResponse.body.userID, firstVerifyResponse.body.userID);
+  assert.equal(meResponse.body.contact, "+15551230011");
 });
 
 test("chat unread counters drop after mark-read and paginated history stays ordered", async (t) => {

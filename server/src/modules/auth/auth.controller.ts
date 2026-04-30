@@ -62,12 +62,6 @@ export class AuthController {
     return this.authService.getMe(user.sub);
   }
 
-  @Get("contacts")
-  @UseGuards(AuthGuard)
-  listContacts(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.listContacts(user.sub);
-  }
-
   private getRequestIP(request: Request): string {
     const forwardedFor = request.headers["x-forwarded-for"];
     if (typeof forwardedFor === "string") {

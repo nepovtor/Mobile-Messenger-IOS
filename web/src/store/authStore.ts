@@ -22,11 +22,12 @@ type AuthStore = {
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => void;
   restoreSession: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
   handleUnauthorized: (message: string) => void;
   clearError: () => void;
 };
 
-export const authStore = create<AuthStore>((set) => ({
+export const authStore = create<AuthStore>((set, get) => ({
   token: storage.getToken(),
   currentUser: storage.getUser() as CurrentUser | null,
   isAuthenticated: Boolean(storage.getToken()),
@@ -112,6 +113,41 @@ export const authStore = create<AuthStore>((set) => ({
         isLoading: false,
         error: "Session expired. Please sign in again.",
       });
+    }
+  },
+  async updateDisplayName(displayName) {
+    const trimmed = displayName.trim();
+    if (trimmed.length < 2) {
+      throw new Error("Display name must be at least 2 characters.");
+    }
+    if (trimmed.length > 40) {
+      throw new Error("Display name must be 40 characters or fewer.");
+    }
+
+    set({ isLoading: true, error: null });
+    try {
+      const result = await authApi.updateProfile(trimmed);
+      const existingUser = get().currentUser;
+      if (!existingUser) {
+        throw new Error("No authenticated user.");
+      }
+      const currentUser = {
+        ...existingUser,
+        displayName: trimmed,
+        contact: result.phone ?? existingUser.contact,
+        phone: result.phone ?? existingUser.phone ?? existingUser.contact,
+      };
+      storage.setUser(currentUser);
+      set({
+        currentUser,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not update display name.";
+      set({ isLoading: false, error: message });
+      throw error;
     }
   },
   handleUnauthorized(message) {

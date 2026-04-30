@@ -43,4 +43,14 @@ export const authApi = {
   getMe() {
     return httpRequest<CurrentUser>("/auth/me");
   },
+  updateProfile(displayName: string) {
+    return httpRequest<{
+      userID: string;
+      displayName: string;
+      phone: string;
+    }>("/users/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ displayName }),
+    });
+  },
 };

@@ -166,7 +166,6 @@ public final class ChatListViewModel: ObservableObject {
 
         do {
             let contacts = try await contactsService.listContacts()
-                .filter { !$0.isCurrentUser }
                 .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             availableContacts = contacts
             createContactsError = nil

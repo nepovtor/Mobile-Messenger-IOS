@@ -119,14 +119,14 @@ final class ChatListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.chats.first?.title, existingChat.title)
     }
 
-    func testLoadCreateContactsFiltersCurrentUserAndSortsAlphabetically() async {
+    func testLoadCreateContactsSortsAlphabetically() async {
         let repository = ChatRepositorySpy()
         let analytics = AnalyticsServiceSpy()
-        let contactsService = ContactsServiceStub(contacts: [
-            makeContact(displayName: "Глеб Demo", isCurrentUser: false),
-            makeContact(displayName: "Анна Demo", isCurrentUser: false),
-            makeContact(displayName: "Вы", isCurrentUser: true),
-        ])
+        let contactsService = ContactsServiceStub()
+        contactsService.contacts = [
+            makeContact(displayName: "Глеб Demo"),
+            makeContact(displayName: "Анна Demo"),
+        ]
 
         let viewModel = ChatListViewModel(
             loadChats: LoadChatListUseCase(repository: repository),
@@ -138,7 +138,7 @@ final class ChatListViewModelTests: XCTestCase {
 
         await viewModel.loadCreateContactsIfNeeded()
 
-        XCTAssertEqual(viewModel.availableContacts.map(\.displayName), ["Анна Demo", "Глеб Demo"])
+        XCTAssertEqual(viewModel.availableContacts.map { $0.displayName }, ["Анна Demo", "Глеб Demo"])
         XCTAssertNil(viewModel.createContactsError)
     }
 
@@ -183,12 +183,88 @@ final class ChatListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.chats.first?.title, "Борис Demo")
     }
 
-    private func makeContact(displayName: String, isCurrentUser: Bool) -> ContactDTO {
+    private func makeContact(displayName: String) -> ContactDTO {
         ContactDTO(
+            id: UUID(),
             userID: UUID(),
             displayName: displayName,
-            contact: "+15550000000",
-            isCurrentUser: isCurrentUser
+            phone: "+15550000000",
+            createdAt: "2026-05-01T00:00:00.000Z",
+            directChatID: nil,
+            alreadyExists: nil
+        )
+    }
+}
+
+@MainActor
+final class ContactsViewModelTests: XCTestCase {
+    func testAddContactSuccessUpdatesList() async {
+        let contactsService = ContactsServiceStub()
+        let repository = ChatRepositorySpy()
+        let analytics = AnalyticsServiceSpy()
+        let newContact = makeContact(displayName: "Борис Demo", phone: "+15551230012")
+        contactsService.addContactResult = .success(newContact)
+
+        let viewModel = ContactsViewModel(
+            contactsService: contactsService,
+            createChat: CreateChatUseCase(repository: repository),
+            analytics: analytics
+        )
+        viewModel.addPhone = "+15551230012"
+
+        await viewModel.addContact()
+
+        XCTAssertEqual(viewModel.contacts.first?.displayName, "Борис Demo")
+        XCTAssertEqual(viewModel.successMessage, "Контакт добавлен.")
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testAddContactMapsDuplicateAndUserNotFoundErrors() async {
+        let contactsService = ContactsServiceStub()
+        let repository = ChatRepositorySpy()
+        let analytics = AnalyticsServiceSpy()
+
+        contactsService.addContactResult = .success(
+            makeContact(displayName: "Борис Demo", phone: "+15551230012", alreadyExists: true)
+        )
+        let duplicateViewModel = ContactsViewModel(
+            contactsService: contactsService,
+            createChat: CreateChatUseCase(repository: repository),
+            analytics: analytics
+        )
+        duplicateViewModel.addPhone = "+15551230012"
+        await duplicateViewModel.addContact()
+        XCTAssertEqual(duplicateViewModel.successMessage, "Контакт уже добавлен.")
+
+        contactsService.addContactResult = .failure(
+            APIResponseParser.ParseError(
+                userMessage: "User with this phone number was not found",
+                backendCode: "USER_NOT_FOUND"
+            )
+        )
+        let missingUserViewModel = ContactsViewModel(
+            contactsService: contactsService,
+            createChat: CreateChatUseCase(repository: repository),
+            analytics: analytics
+        )
+        missingUserViewModel.addPhone = "+15559999999"
+        await missingUserViewModel.addContact()
+        XCTAssertEqual(missingUserViewModel.errorMessage, "Пользователь с таким номером не найден.")
+    }
+
+    private func makeContact(
+        displayName: String,
+        phone: String,
+        alreadyExists: Bool? = nil
+    ) -> ContactDTO {
+        ContactDTO(
+            id: UUID(),
+            userID: UUID(),
+            displayName: displayName,
+            phone: phone,
+            createdAt: "2026-05-01T00:00:00.000Z",
+            directChatID: nil,
+            alreadyExists: alreadyExists
         )
     }
 }
@@ -1323,11 +1399,23 @@ private struct ChatNetworkingStub: ChatNetworking {
     }
 }
 
-private struct ContactsServiceStub: ContactsNetworking {
+private final class ContactsServiceStub: ContactsNetworking {
     var contacts: [ContactDTO] = []
+    var addContactResult: Result<ContactDTO, Error> = .failure(AppError.unknown)
+    var removedContactIDs: [UUID] = []
 
     func listContacts() async throws -> [ContactDTO] {
         contacts
+    }
+
+    func addContact(phone: String) async throws -> ContactDTO {
+        _ = phone
+        return try addContactResult.get()
+    }
+
+    func removeContact(id: UUID) async throws {
+        removedContactIDs.append(id)
+        contacts.removeAll { $0.id == id }
     }
 }
 

@@ -130,13 +130,69 @@ struct ProfileView: View {
 
             divider
 
-            ProfileInfoRow(
-                systemImage: "person.text.rectangle.fill",
-                title: "Display name",
-                value: viewModel.displayName,
-                detail: viewModel.accountBadgeDetail,
-                tint: .green
-            )
+            VStack(alignment: .leading, spacing: 14) {
+                ProfileInfoRow(
+                    systemImage: "person.text.rectangle.fill",
+                    title: "Display name",
+                    value: viewModel.displayName,
+                    detail: viewModel.accountBadgeDetail,
+                    tint: .green
+                )
+
+                if viewModel.isEditingDisplayName {
+                    VStack(alignment: .leading, spacing: 12) {
+                        TextField("Новое имя", text: $viewModel.editedDisplayName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color.white.opacity(0.7))
+                            )
+
+                        if let message = viewModel.inlineMessage {
+                            Text(message)
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(viewModel.didSaveDisplayName ? .green : .red)
+                        }
+
+                        HStack(spacing: 12) {
+                            Button("Cancel") {
+                                viewModel.cancelEditingDisplayName()
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                Task {
+                                    await viewModel.saveDisplayName()
+                                }
+                            } label: {
+                                if viewModel.isSavingDisplayName {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Text("Save")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(viewModel.isSavingDisplayName || !viewModel.canSaveDisplayName)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 18)
+                } else {
+                    HStack {
+                        Button("Изменить имя") {
+                            viewModel.startEditingDisplayName()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 18)
+                }
+            }
 
             divider
 
@@ -222,6 +278,20 @@ struct ProfileView: View {
 
     private var actionsSection: some View {
         ProfileSectionCard(title: "Actions") {
+            if !viewModel.isEditingDisplayName,
+               let message = viewModel.inlineMessage {
+                HStack {
+                    Text(message)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(viewModel.didSaveDisplayName ? .green : .red)
+                    Spacer()
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+
+                divider
+            }
+
             Button {
                 Task {
                     syncViewModel()
