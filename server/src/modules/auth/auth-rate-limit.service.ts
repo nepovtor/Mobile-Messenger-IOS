@@ -28,10 +28,7 @@ export class AuthRateLimitService {
     );
 
     if (current.length >= maxRequests) {
-      throw new HttpException(
-        message,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw new HttpException(message, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     current.push(now);

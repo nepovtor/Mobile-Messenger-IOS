@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { TelegramLinkEntity } from "../../../entities/telegram-link.entity";
@@ -151,7 +156,9 @@ export class TelegramBotService
 
     try {
       const phone = normalizePhone(
-        rawPhone.startsWith("+") ? rawPhone : `+${rawPhone.replace(/[^\d]/g, "")}`,
+        rawPhone.startsWith("+")
+          ? rawPhone
+          : `+${rawPhone.replace(/[^\d]/g, "")}`,
       );
       const existingLink = await this.telegramLinksRepository.findOneBy({
         phone,

@@ -200,7 +200,9 @@ export class AuthService implements OnModuleInit {
         `Failed to deliver verification code for ${phone}`,
         error as Error,
       );
-      throw new ServiceUnavailableException("Verification provider unavailable");
+      throw new ServiceUnavailableException(
+        "Verification provider unavailable",
+      );
     }
 
     return {
@@ -226,7 +228,9 @@ export class AuthService implements OnModuleInit {
     }
 
     if (verificationCode.consumedAt) {
-      throw new UnauthorizedException("Verification code has already been used");
+      throw new UnauthorizedException(
+        "Verification code has already been used",
+      );
     }
 
     if (verificationCode.expiresAt.getTime() < Date.now()) {
@@ -260,7 +264,9 @@ export class AuthService implements OnModuleInit {
 
     verificationCode.consumedAt = new Date();
     await this.verificationCodesRepository.save(verificationCode);
-    const telegramLink = await this.telegramLinksRepository.findOneBy({ phone });
+    const telegramLink = await this.telegramLinksRepository.findOneBy({
+      phone,
+    });
 
     const user = await this.findOrCreateUser(
       AuthMethod.PHONE,
@@ -279,7 +285,10 @@ export class AuthService implements OnModuleInit {
 
     const normalizedMethod = dto.method ?? AuthMethod.PHONE;
     const normalizedContact = this.resolveContact(dto);
-    const demoAccount = this.findDemoAccount(normalizedMethod, normalizedContact);
+    const demoAccount = this.findDemoAccount(
+      normalizedMethod,
+      normalizedContact,
+    );
     const password = dto.password.trim();
 
     if (!demoAccount || password !== demoAccount.password) {
@@ -346,7 +355,7 @@ export class AuthService implements OnModuleInit {
     return users
       .filter(
         (user) =>
-        user.id === userID ||
+          user.id === userID ||
           !areDemoAccountsEnabled() ||
           demoContacts.has(user.contact),
       )
@@ -432,10 +441,7 @@ export class AuthService implements OnModuleInit {
     }
 
     let shouldSave = false;
-    if (
-      method === AuthMethod.PHONE &&
-      user.phone !== contact
-    ) {
+    if (method === AuthMethod.PHONE && user.phone !== contact) {
       user.phone = contact;
       shouldSave = true;
     }
@@ -465,11 +471,25 @@ export class AuthService implements OnModuleInit {
     method: AuthMethod,
     contact: string,
   ): Promise<UserEntity | null> {
-    return this.usersRepository.findOne({
-      where:
-        method === AuthMethod.PHONE
-          ? [{ method, contact }, { phone: contact }]
-          : { method, contact },
+    if (method === AuthMethod.PHONE) {
+      return this.findPhoneUser(contact);
+    }
+
+    return this.usersRepository.findOneBy({ method, contact });
+  }
+
+  private async findPhoneUser(contact: string): Promise<UserEntity | null> {
+    const userByPhone = await this.usersRepository.findOneBy({
+      method: AuthMethod.PHONE,
+      phone: contact,
+    });
+    if (userByPhone) {
+      return userByPhone;
+    }
+
+    return this.usersRepository.findOneBy({
+      method: AuthMethod.PHONE,
+      contact,
     });
   }
 

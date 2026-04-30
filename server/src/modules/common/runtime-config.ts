@@ -74,11 +74,7 @@ export type SmsProviderName =
   | "smsru"
   | "mock";
 
-export type VerificationProviderName =
-  | "telegram"
-  | "console"
-  | "mock"
-  | "sms";
+export type VerificationProviderName = "telegram" | "console" | "mock" | "sms";
 
 export function getVerificationProvider(): VerificationProviderName {
   const value = process.env.VERIFICATION_PROVIDER?.trim().toLowerCase();

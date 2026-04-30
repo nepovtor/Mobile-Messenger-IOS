@@ -42,7 +42,9 @@ export class AuthController {
           },
         );
       } catch {
-        this.authRateLimitService.consume(`${this.getRequestIP(request)}:verify`);
+        this.authRateLimitService.consume(
+          `${this.getRequestIP(request)}:verify`,
+        );
       }
     }
     return this.authService.verifyCode(dto);
