@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProfileView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var sessionStore: SessionStore
     @StateObject private var viewModel: ProfileViewModel
@@ -16,9 +17,12 @@ struct ProfileView: View {
                 VStack(spacing: 20) {
                     headerCard
                     accountSection
-                    realtimeSection
-                    securitySection
                     appearanceSection
+                    preferencesSection
+                    if container.showTechnicalDetailsInProfile {
+                        realtimeSection
+                        securitySection
+                    }
                     actionsSection
                 }
                 .padding(.horizontal, 16)
@@ -63,12 +67,15 @@ struct ProfileView: View {
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
 
-                    Text(viewModel.phone)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if container.showPhoneNumberInProfile {
+                        Text(viewModel.phone)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
 
-                    if let userIDFootnote = viewModel.userIDFootnote {
+                    if container.showTechnicalDetailsInProfile,
+                       let userIDFootnote = viewModel.userIDFootnote {
                         Text("\(userIDFootnote): \(viewModel.userIDText)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -109,26 +116,28 @@ struct ProfileView: View {
         .padding(22)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(headerCardBackgroundStyle)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                .stroke(headerCardBorderColor, lineWidth: 1)
         }
-        .shadow(color: Color.black.opacity(0.08), radius: 20, y: 12)
+        .shadow(color: Color.black.opacity(isHighContrastDarkActive ? 0.22 : 0.08), radius: 20, y: 12)
     }
 
     private var accountSection: some View {
         ProfileSectionCard(title: "Account") {
-            ProfileInfoRow(
-                systemImage: "phone.fill",
-                title: "Phone",
-                value: viewModel.phone,
-                detail: "Current account contact from the authenticated profile.",
-                tint: .blue
-            )
+            if container.showPhoneNumberInProfile {
+                ProfileInfoRow(
+                    systemImage: "phone.fill",
+                    title: "Phone",
+                    value: viewModel.phone,
+                    detail: "Current account contact from the authenticated profile.",
+                    tint: .blue
+                )
 
-            divider
+                divider
+            }
 
             VStack(alignment: .leading, spacing: 14) {
                 ProfileInfoRow(
@@ -148,7 +157,7 @@ struct ProfileView: View {
                             .padding(.vertical, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(Color.white.opacity(0.7))
+                                    .fill(displayNameFieldBackgroundColor)
                             )
 
                         if let message = viewModel.inlineMessage {
@@ -194,26 +203,28 @@ struct ProfileView: View {
                 }
             }
 
-            divider
+            if container.showTechnicalDetailsInProfile {
+                divider
 
-            ProfileInfoRow(
-                systemImage: "number.square.fill",
-                title: "User ID",
-                value: viewModel.userIDText,
-                detail: "Used to scope chat ownership and session identity.",
-                tint: .indigo,
-                monospaced: true
-            )
+                ProfileInfoRow(
+                    systemImage: "number.square.fill",
+                    title: "User ID",
+                    value: viewModel.userIDText,
+                    detail: "Used to scope chat ownership and session identity.",
+                    tint: .indigo,
+                    monospaced: true
+                )
 
-            divider
+                divider
 
-            ProfileInfoRow(
-                systemImage: "server.rack",
-                title: viewModel.environmentInfo.title,
-                value: viewModel.environmentInfo.badgeTitle,
-                detail: viewModel.environmentInfo.detail,
-                tint: .orange
-            )
+                ProfileInfoRow(
+                    systemImage: "server.rack",
+                    title: viewModel.environmentInfo.title,
+                    value: viewModel.environmentInfo.badgeTitle,
+                    detail: viewModel.environmentInfo.detail,
+                    tint: .orange
+                )
+            }
         }
     }
 
@@ -276,6 +287,38 @@ struct ProfileView: View {
         }
     }
 
+    private var preferencesSection: some View {
+        ProfileSectionCard(title: "Preferences") {
+            settingsToggleRow(
+                systemImage: "circle.lefthalf.filled",
+                title: "High contrast dark mode",
+                detail: "Makes cards and text easier to read when the app is in dark appearance.",
+                tint: .indigo,
+                isOn: highContrastDarkModeBinding
+            )
+
+            divider
+
+            settingsToggleRow(
+                systemImage: "phone.circle.fill",
+                title: "Show phone number",
+                detail: "Displays your phone in the profile header and account details.",
+                tint: .blue,
+                isOn: showPhoneNumberBinding
+            )
+
+            divider
+
+            settingsToggleRow(
+                systemImage: "gearshape.2.fill",
+                title: "Show technical details",
+                detail: "Shows realtime, security, environment, and user ID blocks in the profile.",
+                tint: .orange,
+                isOn: showTechnicalDetailsBinding
+            )
+        }
+    }
+
     private var actionsSection: some View {
         ProfileSectionCard(title: "Actions") {
             if !viewModel.isEditingDisplayName,
@@ -329,6 +372,27 @@ struct ProfileView: View {
         Binding(
             get: { container.appearanceMode },
             set: { container.updateAppearanceMode($0) }
+        )
+    }
+
+    private var highContrastDarkModeBinding: Binding<Bool> {
+        Binding(
+            get: { container.highContrastDarkMode },
+            set: { container.updateHighContrastDarkMode($0) }
+        )
+    }
+
+    private var showPhoneNumberBinding: Binding<Bool> {
+        Binding(
+            get: { container.showPhoneNumberInProfile },
+            set: { container.updateShowPhoneNumberInProfile($0) }
+        )
+    }
+
+    private var showTechnicalDetailsBinding: Binding<Bool> {
+        Binding(
+            get: { container.showTechnicalDetailsInProfile },
+            set: { container.updateShowTechnicalDetailsInProfile($0) }
         )
     }
 
@@ -402,13 +466,13 @@ struct ProfileView: View {
             .ignoresSafeArea(edges: .top)
 
             Circle()
-                .fill(Color.white.opacity(0.34))
+                .fill(isHighContrastDarkActive ? Color.blue.opacity(0.12) : Color.white.opacity(0.34))
                 .frame(width: 240, height: 240)
                 .blur(radius: 20)
                 .offset(x: -110, y: -80)
 
             Circle()
-                .fill(Color.cyan.opacity(0.14))
+                .fill(isHighContrastDarkActive ? Color.cyan.opacity(0.16) : Color.cyan.opacity(0.14))
                 .frame(width: 260, height: 260)
                 .blur(radius: 28)
                 .offset(x: 130, y: -90)
@@ -451,6 +515,69 @@ struct ProfileView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .contentShape(Rectangle())
+    }
+
+    private func settingsToggleRow(
+        systemImage: String,
+        title: String,
+        detail: String,
+        tint: Color,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(tint.opacity(0.14))
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(tint)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+    }
+
+    private var headerCardBackgroundStyle: AnyShapeStyle {
+        if isHighContrastDarkActive {
+            return AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+        }
+        return AnyShapeStyle(.ultraThinMaterial)
+    }
+
+    private var headerCardBorderColor: Color {
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.18)
+        }
+        return Color.white.opacity(0.24)
+    }
+
+    private var displayNameFieldBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .tertiarySystemBackground)
+        }
+        return Color(uiColor: .secondarySystemBackground)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
     }
 
     private func syncViewModel() {

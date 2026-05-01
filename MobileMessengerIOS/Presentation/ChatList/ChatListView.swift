@@ -119,6 +119,9 @@ struct ChatListView: View {
 }
 
 private struct ChatRowView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
+
     let chat: ChatListItem
 
     var body: some View {
@@ -137,8 +140,8 @@ private struct ChatRowView: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.white.opacity(0.65)))
-                            .foregroundStyle(Color.blue.opacity(0.9))
+                            .background(Capsule().fill(groupBadgeBackgroundColor))
+                            .foregroundStyle(groupBadgeTextColor)
                     }
 
                     Spacer(minLength: 8)
@@ -185,13 +188,13 @@ private struct ChatRowView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(cardBackgroundStyle)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.45), lineWidth: 1)
+                .stroke(cardBorderColor, lineWidth: 1)
         }
-        .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(isHighContrastDarkActive ? 0.18 : 0.06), radius: 16, x: 0, y: 10)
     }
 
     private var avatar: some View {
@@ -213,7 +216,7 @@ private struct ChatRowView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.95), Color.blue.opacity(0.18)],
+                            colors: incomingAvatarColors,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -221,14 +224,57 @@ private struct ChatRowView: View {
 
                 Text(chat.initials)
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.blue.opacity(0.85))
+                    .foregroundStyle(incomingAvatarTextColor)
             }
         }
         .frame(width: 54, height: 54)
     }
+
+    private var cardBackgroundStyle: AnyShapeStyle {
+        if isHighContrastDarkActive {
+            return AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+        }
+        return AnyShapeStyle(.ultraThinMaterial)
+    }
+
+    private var cardBorderColor: Color {
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.14)
+        }
+        return Color.white.opacity(0.45)
+    }
+
+    private var groupBadgeBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color.blue.opacity(0.24)
+        }
+        return Color.white.opacity(0.65)
+    }
+
+    private var groupBadgeTextColor: Color {
+        isHighContrastDarkActive ? .blue : Color.blue.opacity(0.9)
+    }
+
+    private var incomingAvatarColors: [Color] {
+        if isHighContrastDarkActive {
+            return [Color.blue.opacity(0.28), Color.cyan.opacity(0.18)]
+        }
+        return [Color.white.opacity(0.95), Color.blue.opacity(0.18)]
+    }
+
+    private var incomingAvatarTextColor: Color {
+        isHighContrastDarkActive ? .white : Color.blue.opacity(0.85)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
+    }
 }
 
 private struct ChatRowSkeleton: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
+
     var body: some View {
         HStack(spacing: 16) {
             SkeletonView(isActive: true)
@@ -246,8 +292,19 @@ private struct ChatRowSkeleton: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white.opacity(0.45))
+                .fill(backgroundColor)
         )
+    }
+
+    private var backgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        return Color.white.opacity(0.45)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
     }
 }
 
@@ -473,35 +530,84 @@ private struct SelectedContactChip: View {
 }
 
 private struct ChatListBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
+
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.94, green: 0.97, blue: 1.00),
-                    Color(red: 0.89, green: 0.95, blue: 0.98),
-                    Color(red: 0.96, green: 0.98, blue: 1.00)
+                    topColor,
+                    middleColor,
+                    bottomColor
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
             Circle()
-                .fill(Color.white.opacity(0.55))
+                .fill(highlightColor)
                 .frame(width: 240, height: 240)
                 .blur(radius: 10)
                 .offset(x: 130, y: -250)
 
             Circle()
-                .fill(Color.cyan.opacity(0.12))
+                .fill(accentColor)
                 .frame(width: 280, height: 280)
                 .offset(x: -150, y: 260)
 
             RoundedRectangle(cornerRadius: 48, style: .continuous)
-                .fill(Color.blue.opacity(0.06))
+                .fill(panelAccentColor)
                 .frame(width: 220, height: 220)
                 .rotationEffect(.degrees(18))
                 .offset(x: 160, y: 240)
         }
         .ignoresSafeArea()
+    }
+
+    private var topColor: Color {
+        if isHighContrastDarkActive {
+            return Color(red: 0.08, green: 0.12, blue: 0.18)
+        }
+        return Color(red: 0.94, green: 0.97, blue: 1.00)
+    }
+
+    private var middleColor: Color {
+        if isHighContrastDarkActive {
+            return Color(red: 0.09, green: 0.15, blue: 0.20)
+        }
+        return Color(red: 0.89, green: 0.95, blue: 0.98)
+    }
+
+    private var bottomColor: Color {
+        if isHighContrastDarkActive {
+            return Color(red: 0.05, green: 0.08, blue: 0.13)
+        }
+        return Color(red: 0.96, green: 0.98, blue: 1.00)
+    }
+
+    private var highlightColor: Color {
+        if isHighContrastDarkActive {
+            return Color.blue.opacity(0.14)
+        }
+        return Color.white.opacity(0.55)
+    }
+
+    private var accentColor: Color {
+        if isHighContrastDarkActive {
+            return Color.cyan.opacity(0.16)
+        }
+        return Color.cyan.opacity(0.12)
+    }
+
+    private var panelAccentColor: Color {
+        if isHighContrastDarkActive {
+            return Color.blue.opacity(0.10)
+        }
+        return Color.blue.opacity(0.06)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
     }
 }

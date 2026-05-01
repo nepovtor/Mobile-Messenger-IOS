@@ -94,6 +94,9 @@ public final class AppContainer: ObservableObject {
     public static let shared = AppContainer()
     private enum DefaultsKeys {
         static let appearanceMode = "ui.appearance_mode"
+        static let highContrastDarkMode = "ui.high_contrast_dark_mode"
+        static let showPhoneNumberInProfile = "profile.show_phone_number"
+        static let showTechnicalDetailsInProfile = "profile.show_technical_details"
     }
 
     private let configService: DefaultConfigService
@@ -117,6 +120,9 @@ public final class AppContainer: ObservableObject {
     @Published public private(set) var connectionStatus: ConnectionStatus = .offline
     @Published public private(set) var realtimeConnectionState: ChatRealtimeConnectionState = .disconnected
     @Published public private(set) var appearanceMode: AppearanceMode
+    @Published public private(set) var highContrastDarkMode: Bool
+    @Published public private(set) var showPhoneNumberInProfile: Bool
+    @Published public private(set) var showTechnicalDetailsInProfile: Bool
 
     @Published public private(set) var configurationRevision: Int = 0
 
@@ -126,6 +132,9 @@ public final class AppContainer: ObservableObject {
         appearanceMode = AppearanceMode(
             rawValue: defaults.string(forKey: DefaultsKeys.appearanceMode) ?? ""
         ) ?? .system
+        highContrastDarkMode = defaults.object(forKey: DefaultsKeys.highContrastDarkMode) as? Bool ?? true
+        showPhoneNumberInProfile = defaults.object(forKey: DefaultsKeys.showPhoneNumberInProfile) as? Bool ?? true
+        showTechnicalDetailsInProfile = defaults.object(forKey: DefaultsKeys.showTechnicalDetailsInProfile) as? Bool ?? true
 
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
@@ -147,6 +156,21 @@ public final class AppContainer: ObservableObject {
     public func updateAppearanceMode(_ mode: AppearanceMode) {
         appearanceMode = mode
         defaults.set(mode.rawValue, forKey: DefaultsKeys.appearanceMode)
+    }
+
+    public func updateHighContrastDarkMode(_ isEnabled: Bool) {
+        highContrastDarkMode = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKeys.highContrastDarkMode)
+    }
+
+    public func updateShowPhoneNumberInProfile(_ isEnabled: Bool) {
+        showPhoneNumberInProfile = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKeys.showPhoneNumberInProfile)
+    }
+
+    public func updateShowTechnicalDetailsInProfile(_ isEnabled: Bool) {
+        showTechnicalDetailsInProfile = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKeys.showTechnicalDetailsInProfile)
     }
 
     public var restBaseURLString: String {

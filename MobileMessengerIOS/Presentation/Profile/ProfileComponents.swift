@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ProfileSectionCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
+
     let title: String
     @ViewBuilder let content: Content
 
@@ -16,13 +19,31 @@ struct ProfileSectionCard<Content: View>: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .fill(cardBackgroundColor)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                    .stroke(cardBorderColor, lineWidth: 1)
             }
         }
+    }
+
+    private var cardBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .tertiarySystemBackground)
+        }
+        return Color(uiColor: .secondarySystemGroupedBackground)
+    }
+
+    private var cardBorderColor: Color {
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.16)
+        }
+        return Color.primary.opacity(0.06)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
     }
 }
 

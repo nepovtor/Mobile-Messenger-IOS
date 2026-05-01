@@ -4,6 +4,8 @@ import UIKit
 
 @MainActor
 struct DialogueView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
     let chat: ChatListItem
 
     @StateObject private var viewModel: ChatViewModel
@@ -22,7 +24,7 @@ struct DialogueView: View {
 
     var body: some View {
         ZStack {
-            ChatWallpaper()
+            ChatWallpaper(isHighContrastDarkActive: isHighContrastDarkActive)
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -93,12 +95,13 @@ struct DialogueView: View {
     private var messageInput: some View {
         let isSendingMedia = viewModel.isSendingMedia
         let isSendDisabled = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingMedia
+        let mediaBackgroundColor = mediaButtonBackgroundColor
 
         return HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.86))
+                        .fill(mediaBackgroundColor)
 
                     if isSendingMedia {
                         ProgressView()
@@ -161,13 +164,13 @@ struct DialogueView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(inputBackgroundStyle)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                    .stroke(inputBorderColor, lineWidth: 1)
             }
-            .shadow(color: Color.black.opacity(0.08), radius: 16, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(isHighContrastDarkActive ? 0.18 : 0.08), radius: 16, x: 0, y: 10)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
@@ -177,7 +180,7 @@ struct DialogueView: View {
                 .fill(.thinMaterial)
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(Color.white.opacity(0.45))
+                        .fill(toolbarDividerColor)
                         .frame(height: 1)
                 }
         )
@@ -219,9 +222,42 @@ struct DialogueView: View {
             proxy.scrollTo(last.id.messageID, anchor: .bottom)
         }
     }
+
+    private var mediaButtonBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        return Color.white.opacity(0.86)
+    }
+
+    private var inputBackgroundStyle: AnyShapeStyle {
+        if isHighContrastDarkActive {
+            return AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+        }
+        return AnyShapeStyle(.ultraThinMaterial)
+    }
+
+    private var inputBorderColor: Color {
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.14)
+        }
+        return Color.white.opacity(0.5)
+    }
+
+    private var toolbarDividerColor: Color {
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.10)
+        }
+        return Color.white.opacity(0.45)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
+    }
 }
 
 private struct NetworkStatusIndicator: View {
+    @Environment(\.colorScheme) private var colorScheme
     let isOnline: Bool
 
     var body: some View {
@@ -230,15 +266,21 @@ private struct NetworkStatusIndicator: View {
             .frame(width: 10, height: 10)
             .overlay {
                 Circle()
-                    .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                    .stroke(borderColor, lineWidth: 1)
             }
             .shadow(color: (isOnline ? Color.green : Color.orange).opacity(0.35), radius: 4, x: 0, y: 0)
             .accessibilityLabel(isOnline ? "Сеть доступна" : "Нет сети")
             .accessibilityHint("Индикатор состояния сети")
     }
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.35) : Color.white.opacity(0.9)
+    }
 }
 
 private struct ChatHeaderView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
     let chat: ChatListItem
 
     var body: some View {
@@ -259,11 +301,11 @@ private struct ChatHeaderView: View {
                         .foregroundStyle(.white)
                 } else {
                     Circle()
-                        .fill(Color.blue.opacity(0.14))
+                        .fill(avatarBackgroundColor)
 
                     Text(chat.initials)
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.blue.opacity(0.9))
+                        .foregroundStyle(avatarTextColor)
                 }
             }
             .frame(width: 32, height: 32)
@@ -287,9 +329,26 @@ private struct ChatHeaderView: View {
         }
         return "Личный чат"
     }
+
+    private var avatarBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color.blue.opacity(0.24)
+        }
+        return Color.blue.opacity(0.14)
+    }
+
+    private var avatarTextColor: Color {
+        isHighContrastDarkActive ? .white : Color.blue.opacity(0.9)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
+    }
 }
 
 private struct MessageBubbleView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
     let message: Message
     let isGroup: Bool
 
@@ -306,7 +365,7 @@ private struct MessageBubbleView: View {
                 if let repliedTo = message.repliedTo {
                     Text("Ответ на сообщение \(repliedTo.messageID.uuidString.prefix(4))…")
                         .font(.caption)
-                        .foregroundStyle(message.isOutgoing ? Color.white.opacity(0.85) : .secondary)
+                        .foregroundStyle(replyTextColor)
                 }
 
                 if let imageAttachment = message.attachments.first(where: { $0.kind == .image }) {
@@ -358,16 +417,42 @@ private struct MessageBubbleView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                : AnyShapeStyle(Color.white.opacity(0.74))
+                : AnyShapeStyle(incomingBubbleBackgroundColor)
             )
     }
 
     private var borderColor: Color {
-        message.isOutgoing ? Color.white.opacity(0.16) : Color.white.opacity(0.55)
+        if message.isOutgoing {
+            return Color.white.opacity(0.16)
+        }
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.12)
+        }
+        return Color.white.opacity(0.55)
+    }
+
+    private var replyTextColor: AnyShapeStyle {
+        if message.isOutgoing {
+            return AnyShapeStyle(Color.white.opacity(0.85))
+        }
+        return AnyShapeStyle(.secondary)
+    }
+
+    private var incomingBubbleBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        return Color.white.opacity(0.74)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
     }
 }
 
 private struct MessageAttachmentImageView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
     let attachment: MessageAttachment
 
     var body: some View {
@@ -396,13 +481,26 @@ private struct MessageAttachmentImageView: View {
     private var placeholder: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.28))
+                .fill(placeholderBackgroundColor)
             ProgressView()
         }
+    }
+
+    private var placeholderBackgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        return Color.white.opacity(0.28)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
     }
 }
 
 private struct MessageSkeletonBubble: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var container: AppContainer
     let isOutgoing: Bool
 
     var body: some View {
@@ -421,22 +519,35 @@ private struct MessageSkeletonBubble: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.white.opacity(0.55))
+                    .fill(backgroundColor)
             )
 
             if !isOutgoing { Spacer(minLength: 54) }
         }
     }
+
+    private var backgroundColor: Color {
+        if isHighContrastDarkActive {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        return Color.white.opacity(0.55)
+    }
+
+    private var isHighContrastDarkActive: Bool {
+        colorScheme == .dark && container.highContrastDarkMode
+    }
 }
 
 private struct ChatWallpaper: View {
+    let isHighContrastDarkActive: Bool
+
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.89, green: 0.95, blue: 1.00),
-                    Color(red: 0.94, green: 0.98, blue: 0.98),
-                    Color(red: 0.92, green: 0.96, blue: 1.00)
+                    topColor,
+                    middleColor,
+                    bottomColor
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -444,7 +555,7 @@ private struct ChatWallpaper: View {
 
             ForEach(0..<14, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(index.isMultiple(of: 2) ? Color.white.opacity(0.15) : Color.cyan.opacity(0.08))
+                    .fill(index.isMultiple(of: 2) ? tilePrimaryColor : tileSecondaryColor)
                     .frame(width: CGFloat(60 + (index % 4) * 18), height: CGFloat(60 + (index % 4) * 18))
                     .rotationEffect(.degrees(Double(index * 17)))
                     .offset(
@@ -454,17 +565,66 @@ private struct ChatWallpaper: View {
             }
 
             Circle()
-                .fill(Color.white.opacity(0.32))
+                .fill(highlightColor)
                 .frame(width: 260, height: 260)
                 .blur(radius: 16)
                 .offset(x: 150, y: -320)
 
             Circle()
-                .fill(Color.blue.opacity(0.08))
+                .fill(accentColor)
                 .frame(width: 280, height: 280)
                 .offset(x: -160, y: 280)
         }
         .ignoresSafeArea()
+    }
+
+    private var topColor: Color {
+        if isHighContrastDarkActive {
+            return Color(red: 0.05, green: 0.09, blue: 0.14)
+        }
+        return Color(red: 0.89, green: 0.95, blue: 1.00)
+    }
+
+    private var middleColor: Color {
+        if isHighContrastDarkActive {
+            return Color(red: 0.07, green: 0.12, blue: 0.18)
+        }
+        return Color(red: 0.94, green: 0.98, blue: 0.98)
+    }
+
+    private var bottomColor: Color {
+        if isHighContrastDarkActive {
+            return Color(red: 0.04, green: 0.07, blue: 0.12)
+        }
+        return Color(red: 0.92, green: 0.96, blue: 1.00)
+    }
+
+    private var tilePrimaryColor: Color {
+        if isHighContrastDarkActive {
+            return Color.white.opacity(0.05)
+        }
+        return Color.white.opacity(0.15)
+    }
+
+    private var tileSecondaryColor: Color {
+        if isHighContrastDarkActive {
+            return Color.cyan.opacity(0.08)
+        }
+        return Color.cyan.opacity(0.08)
+    }
+
+    private var highlightColor: Color {
+        if isHighContrastDarkActive {
+            return Color.blue.opacity(0.10)
+        }
+        return Color.white.opacity(0.32)
+    }
+
+    private var accentColor: Color {
+        if isHighContrastDarkActive {
+            return Color.blue.opacity(0.12)
+        }
+        return Color.blue.opacity(0.08)
     }
 }
 
