@@ -39,6 +39,7 @@ public enum ConfigError: LocalizedError {
 public final class DefaultConfigService: ObservableObject, ConfigService {
     private enum Constants {
         static let restBaseURLOverrideKey = "debug.rest_base_url_override"
+        static let defaultTelegramBotUsername = "verificMobileMessengerIOSbot"
     }
 
     @Published public private(set) var restBaseURL: URL
@@ -97,13 +98,13 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     private static func readTelegramBotUsername(from bundle: Bundle) -> String? {
         guard let value = bundle.object(forInfoDictionaryKey: "TELEGRAM_BOT_USERNAME") as? String else {
-            return nil
+            return Constants.defaultTelegramBotUsername
         }
 
         let normalized = value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
-        return normalized.isEmpty ? nil : normalized
+        return normalized.isEmpty ? Constants.defaultTelegramBotUsername : normalized
     }
 
     private static func readFeatures(from bundle: Bundle) -> FeatureFlags {

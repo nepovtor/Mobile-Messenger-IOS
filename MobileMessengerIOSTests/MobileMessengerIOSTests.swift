@@ -426,6 +426,18 @@ final class TransportDecodingTests: XCTestCase {
     }
 
     @MainActor
+    func testDefaultConfigUsesFallbackTelegramBotUsername() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let config = DefaultConfigService(
+            bundle: Bundle(for: Self.self),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(config.telegramBotUsername, "verificMobileMessengerIOSbot")
+        XCTAssertEqual(config.telegramBotURL?.absoluteString, "https://t.me/verificMobileMessengerIOSbot")
+    }
+
+    @MainActor
     func testSessionStoreLogoutClearsTokenAndSession() {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let tokenStore = InMemoryTokenStore()
