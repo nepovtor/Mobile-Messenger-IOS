@@ -5,6 +5,7 @@ import { WsAdapter } from "@nestjs/platform-ws";
 import type { CustomOrigin } from "@nestjs/common/interfaces/external/cors-options.interface";
 import { AppModule } from "./modules/app.module";
 import { getCorsOrigins } from "./modules/common/runtime-config";
+import { GlobalExceptionFilter } from "./modules/common/global-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
@@ -39,6 +40,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   const port = process.env.PORT ? Number(process.env.PORT) : 8080;
   await app.listen(port, "0.0.0.0");
