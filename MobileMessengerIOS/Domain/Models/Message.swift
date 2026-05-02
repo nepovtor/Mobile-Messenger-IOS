@@ -28,6 +28,7 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
     public let attachments: [MessageAttachment]
     public let repliedTo: Identifier?
     public let editedAt: Date?
+    public let deletedAt: Date?
 
     public init(
         id: Identifier,
@@ -41,7 +42,8 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
         status: MessageStatus,
         attachments: [MessageAttachment] = [],
         repliedTo: Identifier? = nil,
-        editedAt: Date? = nil
+        editedAt: Date? = nil,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.localID = localID
@@ -55,6 +57,7 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
         self.attachments = attachments
         self.repliedTo = repliedTo
         self.editedAt = editedAt
+        self.deletedAt = deletedAt
     }
 
     public var isOutgoing: Bool {
@@ -74,7 +77,32 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
             status: status,
             attachments: attachments,
             repliedTo: repliedTo,
-            editedAt: editedAt
+            editedAt: editedAt,
+            deletedAt: deletedAt
+        )
+    }
+
+    public func replacingContent(
+        text: String,
+        mediaID: UUID? = nil,
+        attachments: [MessageAttachment]? = nil,
+        editedAt: Date? = nil,
+        deletedAt: Date? = nil
+    ) -> Message {
+        Message(
+            id: id,
+            localID: localID,
+            authorID: authorID,
+            authorName: authorName,
+            kind: kind,
+            text: text,
+            mediaID: mediaID,
+            createdAt: createdAt,
+            status: status,
+            attachments: attachments ?? self.attachments,
+            repliedTo: repliedTo,
+            editedAt: editedAt,
+            deletedAt: deletedAt
         )
     }
 

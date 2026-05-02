@@ -24,5 +24,8 @@ export declare class MessageEntity {
     mediaId: string | null;
     media: MediaEntity | null;
     status: MessageStatus;
+    editedAt: Date | null;
+    deletedAt: Date | null;
     createdAt: Date;
+    updatedAt: Date;
 }

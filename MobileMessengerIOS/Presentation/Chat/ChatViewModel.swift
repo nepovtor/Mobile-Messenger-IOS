@@ -25,12 +25,15 @@ public final class ChatViewModel: ObservableObject {
     @Published public private(set) var isNetworkReachable = true
     @Published public var banner: Banner?
     @Published public var isLoadingHistory = true
+    @Published public var activeEditMessage: Message?
 
     private let chatID: UUID
     private let observeMessages: ObserveChatMessagesUseCase
     private let loadHistory: LoadChatHistoryUseCase
     private let sendMessageUseCase: SendMessageUseCase
     private let sendImageMessageUseCase: SendImageMessageUseCase
+    private let editMessageUseCase: EditMessageUseCase
+    private let deleteMessageUseCase: DeleteMessageUseCase
     private let setTypingUseCase: SetTypingUseCase
     private let retryPending: RetryPendingMessagesUseCase
     private let markStatus: MarkMessageStatusUseCase
@@ -48,6 +51,8 @@ public final class ChatViewModel: ObservableObject {
         loadHistory: LoadChatHistoryUseCase,
         sendMessage: SendMessageUseCase,
         sendImageMessage: SendImageMessageUseCase,
+        editMessage: EditMessageUseCase,
+        deleteMessage: DeleteMessageUseCase,
         setTyping: SetTypingUseCase,
         retryPending: RetryPendingMessagesUseCase,
         markStatus: MarkMessageStatusUseCase,
@@ -61,6 +66,8 @@ public final class ChatViewModel: ObservableObject {
         self.loadHistory = loadHistory
         self.sendMessageUseCase = sendMessage
         self.sendImageMessageUseCase = sendImageMessage
+        self.editMessageUseCase = editMessage
+        self.deleteMessageUseCase = deleteMessage
         self.setTypingUseCase = setTyping
         self.retryPending = retryPending
         self.markStatus = markStatus
@@ -156,6 +163,65 @@ public final class ChatViewModel: ObservableObject {
 
     public func markAsRead(messageID: UUID) {
         Task { try? await markStatus(chatID: chatID, messageID: messageID, status: .read) }
+    }
+
+    public func beginEditing(_ message: Message) {
+        guard message.isOutgoing, message.kind == .text, message.deletedAt == nil else { return }
+        activeEditMessage = message
+    }
+
+    public func cancelEditing() {
+        activeEditMessage = nil
+    }
+
+    public func saveEdit(text: String) {
+        guard let activeEditMessage else { return }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            banner = .error("Сообщение не может быть пустым.")
+            return
+        }
+
+        Task {
+            do {
+                let updated = try await editMessageUseCase(
+                    chatID: chatID,
+                    messageID: activeEditMessage.id.messageID,
+                    text: trimmed
+                )
+                await MainActor.run {
+                    upsert(message: updated)
+                    self.activeEditMessage = nil
+                }
+            } catch {
+                await MainActor.run {
+                    banner = .error("Не удалось изменить сообщение.")
+                }
+                analytics.track(error: error, context: "edit_message")
+            }
+        }
+    }
+
+    public func deleteMessage(_ message: Message) {
+        guard message.isOutgoing, message.deletedAt == nil else { return }
+
+        Task {
+            do {
+                let deleted = try await deleteMessageUseCase(
+                    chatID: chatID,
+                    messageID: message.id.messageID
+                )
+                await MainActor.run {
+                    upsert(message: deleted)
+                }
+            } catch {
+                await MainActor.run {
+                    banner = .error("Не удалось удалить сообщение.")
+                }
+                analytics.track(error: error, context: "delete_message")
+            }
+        }
     }
 
     private func loadInitialHistory() async {

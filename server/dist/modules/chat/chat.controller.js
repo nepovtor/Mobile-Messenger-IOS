@@ -20,6 +20,7 @@ const chat_service_1 = require("./chat.service");
 const create_chat_dto_1 = require("./dto/create-chat.dto");
 const send_message_dto_1 = require("./dto/send-message.dto");
 const set_typing_dto_1 = require("./dto/set-typing.dto");
+const update_message_dto_1 = require("./dto/update-message.dto");
 let ChatController = class ChatController {
     constructor(chatService) {
         this.chatService = chatService;
@@ -45,6 +46,12 @@ let ChatController = class ChatController {
     }
     markRead(chatID, messageID, user) {
         return this.chatService.markRead(chatID, messageID, user);
+    }
+    updateMessage(chatID, messageID, dto, user) {
+        return this.chatService.updateMessage(chatID, messageID, dto, user);
+    }
+    deleteMessage(chatID, messageID, user) {
+        return this.chatService.deleteMessage(chatID, messageID, user);
     }
     setTyping(chatID, dto, user) {
         return this.chatService.setTyping(chatID, dto, user);
@@ -95,6 +102,25 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", void 0)
 ], ChatController.prototype, "markRead", null);
+__decorate([
+    (0, common_1.Patch)(":chatID/messages/:messageID"),
+    __param(0, (0, common_1.Param)("chatID", new common_1.ParseUUIDPipe())),
+    __param(1, (0, common_1.Param)("messageID", new common_1.ParseUUIDPipe())),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_message_dto_1.UpdateMessageDto, Object]),
+    __metadata("design:returntype", void 0)
+], ChatController.prototype, "updateMessage", null);
+__decorate([
+    (0, common_1.Delete)(":chatID/messages/:messageID"),
+    __param(0, (0, common_1.Param)("chatID", new common_1.ParseUUIDPipe())),
+    __param(1, (0, common_1.Param)("messageID", new common_1.ParseUUIDPipe())),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], ChatController.prototype, "deleteMessage", null);
 __decorate([
     (0, common_1.Post)(":chatID/typing"),
     __param(0, (0, common_1.Param)("chatID", new common_1.ParseUUIDPipe())),

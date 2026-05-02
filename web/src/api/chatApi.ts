@@ -28,6 +28,17 @@ export const chatApi = {
       }),
     });
   },
+  updateMessage(chatId: string, messageId: string, text: string) {
+    return httpRequest<Message>(`/chats/${chatId}/messages/${messageId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ text }),
+    });
+  },
+  deleteMessage(chatId: string, messageId: string) {
+    return httpRequest<Message>(`/chats/${chatId}/messages/${messageId}`, {
+      method: "DELETE",
+    });
+  },
   markRead(chatId: string, messageId: string) {
     return httpRequest<{ ok: true }>(
       `/chats/${chatId}/messages/${messageId}/read`,

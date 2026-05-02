@@ -23,6 +23,7 @@ import { RealtimeService } from "../realtime/realtime.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { SetTypingDto } from "./dto/set-typing.dto";
+import { UpdateMessageDto } from "./dto/update-message.dto";
 
 export type Chat = ChatSummary;
 export type Message = MessageResponse;
@@ -50,6 +51,8 @@ export interface MessageResponse {
   mediaURL: string | null;
   status: MessageStatus;
   createdAt: Date;
+  editedAt: Date | null;
+  deletedAt: Date | null;
 }
 
 interface RealtimeSendMessageDto {
@@ -393,6 +396,81 @@ export class ChatService implements OnModuleInit {
     return { ok: true };
   }
 
+  async updateMessage(
+    chatID: string,
+    messageID: string,
+    dto: UpdateMessageDto,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
+    await this.getParticipantOrFail(chatID, user.sub);
+    const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
+
+    if (message.deletedAt) {
+      throw new BadRequestException("Deleted message cannot be edited");
+    }
+    if (message.kind !== MessageKind.TEXT) {
+      throw new BadRequestException("Only text messages can be edited");
+    }
+
+    const trimmedText = dto.text.trim();
+    if (!trimmedText) {
+      throw new BadRequestException("Text message must contain text");
+    }
+
+    message.text = trimmedText;
+    message.editedAt = new Date();
+    const savedMessage = await this.messagesRepository.save(message);
+    await this.refreshChatMetadata(chatID);
+
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chatID },
+    });
+    const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
+    const payload = await this.mapMessage(hydratedMessage);
+    this.realtimeService.broadcastToChatParticipants(participants, {
+      event: "message.updated",
+      data: {
+        chatID,
+        message: payload,
+      },
+    });
+    return payload;
+  }
+
+  async deleteMessage(
+    chatID: string,
+    messageID: string,
+    user: AuthenticatedUser,
+  ): Promise<MessageResponse> {
+    await this.getParticipantOrFail(chatID, user.sub);
+    const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
+
+    if (message.deletedAt) {
+      return this.mapMessage(await this.requireHydratedMessage(message.id));
+    }
+
+    message.text = "Сообщение удалено";
+    message.mediaId = null;
+    message.media = null;
+    message.deletedAt = new Date();
+    const savedMessage = await this.messagesRepository.save(message);
+    await this.refreshChatMetadata(chatID);
+
+    const participants = await this.participantsRepository.find({
+      where: { chatId: chatID },
+    });
+    const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
+    const payload = await this.mapMessage(hydratedMessage);
+    this.realtimeService.broadcastToChatParticipants(participants, {
+      event: "message.deleted",
+      data: {
+        chatID,
+        message: payload,
+      },
+    });
+    return payload;
+  }
+
   async setTyping(
     chatID: string,
     dto: SetTypingDto,
@@ -615,7 +693,69 @@ export class ChatService implements OnModuleInit {
       mediaURL: await this.mediaService.buildDownloadUrl(message.media),
       status: message.status,
       createdAt: message.createdAt,
+      editedAt: message.editedAt,
+      deletedAt: message.deletedAt,
     };
+  }
+
+  private async getOwnMessageOrFail(
+    chatID: string,
+    messageID: string,
+    userID: string,
+  ): Promise<MessageEntity> {
+    const message = await this.messagesRepository.findOne({
+      where: {
+        id: messageID as MessageEntity["id"],
+        chatId: chatID,
+        authorId: userID,
+      },
+      relations: { author: true, media: true },
+    });
+    if (!message) {
+      throw new NotFoundException("Message not found for current user");
+    }
+    return message;
+  }
+
+  private async requireHydratedMessage(messageID: string): Promise<MessageEntity> {
+    const message = await this.messagesRepository.findOne({
+      where: { id: messageID as MessageEntity["id"] },
+      relations: { author: true, media: true },
+    });
+    if (!message) {
+      throw new NotFoundException("Message not found");
+    }
+    return message;
+  }
+
+  private async refreshChatMetadata(chatID: string): Promise<void> {
+    const chat = await this.chatsRepository.findOneBy({
+      id: chatID as ChatEntity["id"],
+    });
+    if (!chat) {
+      throw new NotFoundException("Chat not found");
+    }
+
+    const latestMessage = await this.messagesRepository.findOne({
+      where: { chatId: chatID },
+      order: { createdAt: "DESC" },
+    });
+
+    chat.lastActivity = latestMessage?.createdAt ?? chat.lastActivity;
+    chat.lastMessagePreview = latestMessage
+      ? this.messagePreview(latestMessage)
+      : null;
+    await this.chatsRepository.save(chat);
+  }
+
+  private messagePreview(message: MessageEntity): string | null {
+    if (message.deletedAt) {
+      return "Сообщение удалено";
+    }
+    if (message.kind === MessageKind.IMAGE) {
+      return "Фото";
+    }
+    return message.text?.trim() || null;
   }
 
   private async findExistingDirectChat(

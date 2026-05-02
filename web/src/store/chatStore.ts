@@ -25,6 +25,8 @@ function createLocalMessage(
     mediaURL: null,
     status: "sending",
     createdAt: new Date().toISOString(),
+    editedAt: null,
+    deletedAt: null,
     error: null,
     isLocal: true,
   };
@@ -51,6 +53,14 @@ type ChatStore = {
     currentUser: { userID: string; displayName: string },
   ) => Promise<void>;
   upsertMessage: (chatId: string, message: Message) => void;
+  updateMessage: (chatId: string, message: Message) => void;
+  removeMessage: (chatId: string, message: Message) => void;
+  editMessage: (
+    chatId: string,
+    messageId: string,
+    text: string,
+  ) => Promise<void>;
+  deleteMessage: (chatId: string, messageId: string) => Promise<void>;
   markMessageFailed: (
     chatId: string,
     clientMessageId: string,
@@ -172,34 +182,25 @@ export const chatStore = create<ChatStore>((set, get) => ({
     await get().sendMessage(chatId, message.text, currentUser);
   },
   upsertMessage(chatId, message) {
-    set((state) => {
-      const messages = upsertMessage(state.messagesByChatId[chatId] ?? [], {
-        ...message,
-        clientMessageId: message.clientMessageId ?? message.messageID,
-      });
-      const chats = state.chats.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              lastMessagePreview:
-                message.kind === "image" ? "Photo" : message.text,
-              lastActivity: message.createdAt,
-            }
-          : chat,
-      );
-
-      return {
-        messagesByChatId: {
-          ...state.messagesByChatId,
-          [chatId]: messages,
-        },
-        chats: chats.sort(
-          (left, right) =>
-            new Date(right.lastActivity).getTime() -
-            new Date(left.lastActivity).getTime(),
-        ),
-      };
-    });
+    set((state) => buildMessageState(state, chatId, message));
+  },
+  updateMessage(chatId, message) {
+    set((state) => buildMessageState(state, chatId, message));
+  },
+  removeMessage(chatId, message) {
+    set((state) => buildMessageState(state, chatId, message));
+  },
+  async editMessage(chatId, messageId, text) {
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return;
+    }
+    const updated = await chatApi.updateMessage(chatId, messageId, trimmedText);
+    get().updateMessage(chatId, updated);
+  },
+  async deleteMessage(chatId, messageId) {
+    const deleted = await chatApi.deleteMessage(chatId, messageId);
+    get().removeMessage(chatId, deleted);
   },
   markMessageFailed(chatId, clientMessageId, reason) {
     set((state) => ({
@@ -248,3 +249,42 @@ export const chatStore = create<ChatStore>((set, get) => ({
     });
   },
 }));
+
+function buildMessageState(
+  state: ChatStore,
+  chatId: string,
+  message: Message,
+): Pick<ChatStore, "messagesByChatId" | "chats"> {
+  const messages = upsertMessage(state.messagesByChatId[chatId] ?? [], {
+    ...message,
+    clientMessageId: message.clientMessageId ?? message.messageID,
+  });
+  const lastMessage = messages[messages.length - 1] ?? null;
+  const chats = state.chats.map((chat) =>
+    chat.id === chatId
+      ? {
+          ...chat,
+          lastMessagePreview: lastMessage
+            ? lastMessage.deletedAt
+              ? "Message deleted"
+              : lastMessage.kind === "image"
+                ? "Photo"
+                : lastMessage.text
+            : chat.lastMessagePreview,
+          lastActivity: lastMessage?.createdAt ?? chat.lastActivity,
+        }
+      : chat,
+  );
+
+  return {
+    messagesByChatId: {
+      ...state.messagesByChatId,
+      [chatId]: messages,
+    },
+    chats: chats.sort(
+      (left, right) =>
+        new Date(right.lastActivity).getTime() -
+        new Date(left.lastActivity).getTime(),
+    ),
+  };
+}

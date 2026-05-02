@@ -15,6 +15,8 @@ const baseMessage: Message = {
   mediaURL: null,
   status: "sending",
   createdAt: "2026-04-28T09:00:00.000Z",
+  editedAt: null,
+  deletedAt: null,
 };
 
 describe("messageDedup", () => {

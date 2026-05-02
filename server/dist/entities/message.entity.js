@@ -89,9 +89,21 @@ __decorate([
     __metadata("design:type", String)
 ], MessageEntity.prototype, "status", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: "edited_at", type: "timestamptz", nullable: true }),
+    __metadata("design:type", Object)
+], MessageEntity.prototype, "editedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "deleted_at", type: "timestamptz", nullable: true }),
+    __metadata("design:type", Object)
+], MessageEntity.prototype, "deletedAt", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: "created_at", type: "timestamptz" }),
     __metadata("design:type", Date)
 ], MessageEntity.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ name: "updated_at", type: "timestamptz" }),
+    __metadata("design:type", Date)
+], MessageEntity.prototype, "updatedAt", void 0);
 exports.MessageEntity = MessageEntity = __decorate([
     (0, typeorm_1.Entity)({ name: "messages" })
 ], MessageEntity);

@@ -257,18 +257,79 @@ let ChatService = class ChatService {
         });
         return { ok: true };
     }
-    async setTyping(chatID, dto, user) {
+    async updateMessage(chatID, messageID, dto, user) {
         await this.getParticipantOrFail(chatID, user.sub);
+        const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
+        if (message.deletedAt) {
+            throw new common_1.BadRequestException("Deleted message cannot be edited");
+        }
+        if (message.kind !== message_entity_1.MessageKind.TEXT) {
+            throw new common_1.BadRequestException("Only text messages can be edited");
+        }
+        const trimmedText = dto.text.trim();
+        if (!trimmedText) {
+            throw new common_1.BadRequestException("Text message must contain text");
+        }
+        message.text = trimmedText;
+        message.editedAt = new Date();
+        const savedMessage = await this.messagesRepository.save(message);
+        await this.refreshChatMetadata(chatID);
         const participants = await this.participantsRepository.find({
             where: { chatId: chatID },
         });
-        const typingParticipants = this.realtimeService.setTyping(chatID, user.sub, user.displayName, dto.isTyping);
+        const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
+        const payload = await this.mapMessage(hydratedMessage);
+        this.realtimeService.broadcastToChatParticipants(participants, {
+            event: "message.updated",
+            data: {
+                chatID,
+                message: payload,
+            },
+        });
+        return payload;
+    }
+    async deleteMessage(chatID, messageID, user) {
+        await this.getParticipantOrFail(chatID, user.sub);
+        const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
+        if (message.deletedAt) {
+            return this.mapMessage(await this.requireHydratedMessage(message.id));
+        }
+        message.text = "Сообщение удалено";
+        message.mediaId = null;
+        message.media = null;
+        message.deletedAt = new Date();
+        const savedMessage = await this.messagesRepository.save(message);
+        await this.refreshChatMetadata(chatID);
+        const participants = await this.participantsRepository.find({
+            where: { chatId: chatID },
+        });
+        const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
+        const payload = await this.mapMessage(hydratedMessage);
+        this.realtimeService.broadcastToChatParticipants(participants, {
+            event: "message.deleted",
+            data: {
+                chatID,
+                message: payload,
+            },
+        });
+        return payload;
+    }
+    async setTyping(chatID, dto, user) {
+        await this.getParticipantOrFail(chatID, user.sub);
+        const currentUser = await this.usersRepository.findOneBy({
+            id: user.sub,
+        });
+        const participants = await this.participantsRepository.find({
+            where: { chatId: chatID },
+        });
+        const displayName = currentUser?.displayName ?? user.displayName;
+        const typingParticipants = this.realtimeService.setTyping(chatID, user.sub, displayName, dto.isTyping);
         this.realtimeService.broadcastToChatParticipants(participants, {
             event: dto.isTyping ? "typing.started" : "typing.stopped",
             data: {
                 chatID,
                 userID: user.sub,
-                displayName: user.displayName,
+                displayName,
                 isTyping: dto.isTyping,
                 typingParticipants,
             },
@@ -279,6 +340,35 @@ let ChatService = class ChatService {
             isTyping: dto.isTyping,
             typingParticipants,
         };
+    }
+    async findExistingDirectChatByUsers(firstUserID, secondUserID) {
+        return this.findExistingDirectChat([firstUserID, secondUserID].sort());
+    }
+    async findOrCreateDirectChat(firstUserID, secondUserID) {
+        const participantIDs = [firstUserID, secondUserID].sort();
+        const existingDirectChat = await this.findExistingDirectChat(participantIDs);
+        if (existingDirectChat) {
+            return this.getChatSummary(existingDirectChat.id, firstUserID);
+        }
+        const currentUser = await this.usersRepository.findOneBy({
+            id: firstUserID,
+        });
+        const otherUser = await this.usersRepository.findOneBy({
+            id: secondUserID,
+        });
+        if (!currentUser || !otherUser) {
+            throw new common_1.BadRequestException("User not found");
+        }
+        return this.createChat({
+            title: otherUser.displayName,
+            participantIDs: [otherUser.id],
+        }, {
+            sub: currentUser.id,
+            displayName: currentUser.displayName,
+            contact: currentUser.contact,
+            method: currentUser.method,
+            phone: currentUser.phone ?? currentUser.contact,
+        });
     }
     async resolveParticipants(dto) {
         const byID = dto.participantIDs?.length
@@ -379,7 +469,59 @@ let ChatService = class ChatService {
             mediaURL: await this.mediaService.buildDownloadUrl(message.media),
             status: message.status,
             createdAt: message.createdAt,
+            editedAt: message.editedAt,
+            deletedAt: message.deletedAt,
         };
+    }
+    async getOwnMessageOrFail(chatID, messageID, userID) {
+        const message = await this.messagesRepository.findOne({
+            where: {
+                id: messageID,
+                chatId: chatID,
+                authorId: userID,
+            },
+            relations: { author: true, media: true },
+        });
+        if (!message) {
+            throw new common_1.NotFoundException("Message not found for current user");
+        }
+        return message;
+    }
+    async requireHydratedMessage(messageID) {
+        const message = await this.messagesRepository.findOne({
+            where: { id: messageID },
+            relations: { author: true, media: true },
+        });
+        if (!message) {
+            throw new common_1.NotFoundException("Message not found");
+        }
+        return message;
+    }
+    async refreshChatMetadata(chatID) {
+        const chat = await this.chatsRepository.findOneBy({
+            id: chatID,
+        });
+        if (!chat) {
+            throw new common_1.NotFoundException("Chat not found");
+        }
+        const latestMessage = await this.messagesRepository.findOne({
+            where: { chatId: chatID },
+            order: { createdAt: "DESC" },
+        });
+        chat.lastActivity = latestMessage?.createdAt ?? chat.lastActivity;
+        chat.lastMessagePreview = latestMessage
+            ? this.messagePreview(latestMessage)
+            : null;
+        await this.chatsRepository.save(chat);
+    }
+    messagePreview(message) {
+        if (message.deletedAt) {
+            return "Сообщение удалено";
+        }
+        if (message.kind === message_entity_1.MessageKind.IMAGE) {
+            return "Фото";
+        }
+        return message.text?.trim() || null;
     }
     async findExistingDirectChat(participantIDs) {
         if (participantIDs.length !== 2) {

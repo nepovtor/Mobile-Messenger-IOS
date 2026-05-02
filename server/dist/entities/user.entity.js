@@ -13,6 +13,7 @@ exports.UserEntity = exports.AuthMethod = void 0;
 const node_crypto_1 = require("node:crypto");
 const typeorm_1 = require("typeorm");
 const chat_participant_entity_1 = require("./chat-participant.entity");
+const contact_entity_1 = require("./contact.entity");
 const media_entity_1 = require("./media.entity");
 const message_entity_1 = require("./message.entity");
 var AuthMethod;
@@ -66,6 +67,14 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => chat_participant_entity_1.ChatParticipantEntity, (participant) => participant.user),
     __metadata("design:type", Array)
 ], UserEntity.prototype, "chatParticipants", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => contact_entity_1.ContactEntity, (contact) => contact.ownerUser),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "ownedContacts", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => contact_entity_1.ContactEntity, (contact) => contact.contactUser),
+    __metadata("design:type", Array)
+], UserEntity.prototype, "contactOfUsers", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => message_entity_1.MessageEntity, (message) => message.author),
     __metadata("design:type", Array)

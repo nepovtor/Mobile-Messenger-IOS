@@ -3,7 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Repository } from "typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
-import { AuthMethod, UserEntity } from "../../entities/user.entity";
+import { UserEntity } from "../../entities/user.entity";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
@@ -55,17 +55,10 @@ export declare class AuthService implements OnModuleInit {
         telegramChatId: string | null;
         telegramUsername: string | null;
     }>;
-    listContacts(userID: string): Promise<Array<{
-        userID: string;
-        displayName: string;
-        contact: string;
-        method: AuthMethod;
-        phone: string | null;
-        isCurrentUser: boolean;
-    }>>;
     private findDemoAccount;
     private findOrCreateUser;
     private findUserByMethodAndContact;
+    private findPhoneUser;
     private buildAuthResult;
     private generateVerificationCode;
     private resolvePhone;

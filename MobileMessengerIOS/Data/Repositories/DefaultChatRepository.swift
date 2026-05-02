@@ -142,6 +142,18 @@ public final class DefaultChatRepository: ChatRepository {
         return optimistic
     }
 
+    public func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> Message {
+        let updated = try await remote.editMessage(chatID: chatID, messageID: messageID, text: text).asDomainMessage()
+        try await store.append(message: updated, for: chatID)
+        return updated
+    }
+
+    public func deleteMessage(chatID: UUID, messageID: UUID) async throws -> Message {
+        let deleted = try await remote.deleteMessage(chatID: chatID, messageID: messageID).asDomainMessage()
+        try await store.append(message: deleted, for: chatID)
+        return deleted
+    }
+
     public func setTyping(chatID: UUID, isTyping: Bool) async {
         await realtime.setTyping(chatID: chatID, isTyping: isTyping)
     }
@@ -256,6 +268,12 @@ public final class DefaultChatRepository: ChatRepository {
         for await envelope in realtime.observeAllEvents() {
             switch envelope.event {
             case .message(let message):
+                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
+                try? await store.append(message: message, for: envelope.chatID)
+            case .messageUpdated(let message):
+                try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
+                try? await store.append(message: message, for: envelope.chatID)
+            case .messageDeleted(let message):
                 try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.append(message: message, for: envelope.chatID)
             case .messageRead(let messageID):

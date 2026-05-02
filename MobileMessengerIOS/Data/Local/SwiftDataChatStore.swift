@@ -368,6 +368,9 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         }
 
         private static func preview(for message: Message) -> String? {
+            if message.deletedAt != nil {
+                return "Сообщение удалено"
+            }
             if !message.text.isEmpty {
                 return message.text
             }

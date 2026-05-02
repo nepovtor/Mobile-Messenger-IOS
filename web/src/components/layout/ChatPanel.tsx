@@ -15,6 +15,8 @@ export function ChatPanel({
   onBack,
   onSend,
   onRetry,
+  onEditMessage,
+  onDeleteMessage,
   onTypingStart,
   onTypingStop,
 }: {
@@ -25,6 +27,8 @@ export function ChatPanel({
   onBack: () => void;
   onSend: (text: string) => Promise<void>;
   onRetry: (clientMessageId: string) => void;
+  onEditMessage: (messageId: string, text: string) => Promise<void>;
+  onDeleteMessage: (messageId: string) => Promise<void>;
   onTypingStart: () => void;
   onTypingStop: () => void;
 }) {
@@ -62,6 +66,8 @@ export function ChatPanel({
           messages={messages}
           currentUserId={currentUser.userID}
           onRetry={onRetry}
+          onEditMessage={onEditMessage}
+          onDeleteMessage={onDeleteMessage}
         />
       </div>
       <MessageInput

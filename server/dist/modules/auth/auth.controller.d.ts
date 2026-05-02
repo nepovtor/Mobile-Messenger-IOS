@@ -37,14 +37,6 @@ export declare class AuthController {
         telegramChatId: string | null;
         telegramUsername: string | null;
     }>;
-    listContacts(user: AuthenticatedUser): Promise<{
-        userID: string;
-        displayName: string;
-        contact: string;
-        method: import("../../entities/user.entity").AuthMethod;
-        phone: string | null;
-        isCurrentUser: boolean;
-    }[]>;
     private getRequestIP;
     private getUserAgent;
 }

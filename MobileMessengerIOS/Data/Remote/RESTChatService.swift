@@ -77,6 +77,8 @@ public struct ServerMessage: Decodable, Sendable {
     public let mediaURL: URL?
     public let status: MessageStatus
     public let createdAt: Date
+    public let editedAt: Date?
+    public let deletedAt: Date?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -93,6 +95,8 @@ public struct ServerMessage: Decodable, Sendable {
         case mediaURL
         case status
         case createdAt
+        case editedAt
+        case deletedAt
     }
 
     public init(
@@ -106,7 +110,9 @@ public struct ServerMessage: Decodable, Sendable {
         mediaID: UUID?,
         mediaURL: URL?,
         status: MessageStatus,
-        createdAt: Date
+        createdAt: Date,
+        editedAt: Date?,
+        deletedAt: Date?
     ) {
         self.id = id
         self.messageID = messageID
@@ -119,6 +125,8 @@ public struct ServerMessage: Decodable, Sendable {
         self.mediaURL = mediaURL
         self.status = status
         self.createdAt = createdAt
+        self.editedAt = editedAt
+        self.deletedAt = deletedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -142,6 +150,8 @@ public struct ServerMessage: Decodable, Sendable {
         mediaURL = try container.decodeIfPresent(URL.self, forKey: .mediaURL)
         status = try container.decodeIfPresent(MessageStatus.self, forKey: .status) ?? .delivered
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 
     public func asDomainMessage(localID: UUID? = nil) -> Message {
@@ -171,7 +181,9 @@ public struct ServerMessage: Decodable, Sendable {
             mediaID: mediaID,
             createdAt: createdAt,
             status: status,
-            attachments: attachments
+            attachments: deletedAt == nil ? attachments : [],
+            editedAt: editedAt,
+            deletedAt: deletedAt
         )
     }
 }
@@ -187,6 +199,8 @@ public protocol ChatNetworking: Sendable {
     func createChat(title: String, participantContacts: [String]) async throws -> ServerChat
     func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage]
     func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage
+    func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> ServerMessage
+    func deleteMessage(chatID: UUID, messageID: UUID) async throws -> ServerMessage
     func markRead(chatID: UUID, messageID: UUID) async throws
     func setTyping(chatID: UUID, isTyping: Bool) async throws
     func requestUploadURL(mimeType: String, sizeBytes: Int, width: Int?, height: Int?) async throws -> MediaUploadTarget
@@ -260,6 +274,25 @@ public struct RESTChatService: ChatNetworking {
             "text": text,
             "mediaID": mediaID?.uuidString
         ])
+        return try await perform(request: request)
+    }
+
+    public func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> ServerMessage {
+        var request = try await authorizedRequest(
+            path: "chats/\(chatID.uuidString)/messages/\(messageID.uuidString)",
+            method: "PATCH"
+        )
+        request.httpBody = try encode([
+            "text": text
+        ])
+        return try await perform(request: request)
+    }
+
+    public func deleteMessage(chatID: UUID, messageID: UUID) async throws -> ServerMessage {
+        let request = try await authorizedRequest(
+            path: "chats/\(chatID.uuidString)/messages/\(messageID.uuidString)",
+            method: "DELETE"
+        )
         return try await perform(request: request)
     }
 

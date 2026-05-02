@@ -10,6 +10,8 @@ struct DialogueView: View {
 
     @StateObject private var viewModel: ChatViewModel
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var editDraft = ""
+    @State private var pendingDeleteMessage: Message?
 
     @MainActor
     init(chat: ChatListItem) {
@@ -36,6 +38,20 @@ struct DialogueView: View {
                         } else {
                             ForEach(viewModel.messages, id: \._id) { message in
                                 MessageBubbleView(message: message, isGroup: chat.isGroup)
+                                    .contextMenu {
+                                        if message.isOutgoing && message.deletedAt == nil {
+                                            if message.kind == .text {
+                                                Button("Изменить") {
+                                                    editDraft = message.text
+                                                    viewModel.beginEditing(message)
+                                                }
+                                            }
+
+                                            Button("Удалить", role: .destructive) {
+                                                pendingDeleteMessage = message
+                                            }
+                                        }
+                                    }
                                     .id(message.id.messageID)
                                     .onAppear {
                                         if message == viewModel.messages.last {
@@ -88,6 +104,68 @@ struct DialogueView: View {
                   let image = UIImage(data: data) else { return }
             viewModel.sendImage(image)
             self.selectedPhotoItem = nil
+        }
+        .sheet(item: $viewModel.activeEditMessage) { message in
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Изменить сообщение")
+                        .font(.headline)
+
+                    TextEditor(text: $editDraft)
+                        .frame(minHeight: 140)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color(uiColor: .secondarySystemBackground))
+                        )
+
+                    Text("Можно изменить только своё текстовое сообщение.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+                }
+                .padding(20)
+                .navigationTitle("Редактирование")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Отмена") {
+                            viewModel.cancelEditing()
+                        }
+                    }
+
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Сохранить") {
+                            viewModel.saveEdit(text: editDraft)
+                        }
+                        .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .onAppear {
+                    editDraft = message.text
+                }
+            }
+        }
+        .alert("Удалить сообщение?", isPresented: Binding(
+            get: { pendingDeleteMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteMessage = nil
+                }
+            }
+        )) {
+            Button("Отмена", role: .cancel) {
+                pendingDeleteMessage = nil
+            }
+            Button("Удалить", role: .destructive) {
+                if let pendingDeleteMessage {
+                    viewModel.deleteMessage(pendingDeleteMessage)
+                }
+                pendingDeleteMessage = nil
+            }
+        } message: {
+            Text("Сообщение будет заменено на пометку об удалении.")
         }
     }
 
@@ -376,6 +454,7 @@ private struct MessageBubbleView: View {
                     Text(message.text)
                         .foregroundStyle(message.isOutgoing ? .white : .primary)
                         .multilineTextAlignment(.leading)
+                        .italic(message.deletedAt != nil)
                 }
             }
             .padding(.horizontal, 14)
@@ -390,6 +469,11 @@ private struct MessageBubbleView: View {
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                if message.editedAt != nil {
+                    Text("изменено")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 if message.isOutgoing {
                     MessageStatusView(status: message.status)
                 }

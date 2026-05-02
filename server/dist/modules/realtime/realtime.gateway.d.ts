@@ -24,6 +24,15 @@ type ReadPayload = {
     chatID: string;
     messageID: string;
 };
+type UpdateMessagePayload = {
+    chatID: string;
+    messageID: string;
+    text: string;
+};
+type DeleteMessagePayload = {
+    chatID: string;
+    messageID: string;
+};
 export declare class RealtimeGateway implements OnGatewayConnection<RealtimeSocket>, OnGatewayDisconnect<RealtimeSocket> {
     private readonly jwtService;
     private readonly realtimeService;
@@ -72,6 +81,20 @@ export declare class RealtimeGateway implements OnGatewayConnection<RealtimeSock
         data: {
             chatID: string;
             messageID: string;
+        };
+    }>;
+    handleMessageUpdate(client: RealtimeSocket, body: UpdateMessagePayload): Promise<{
+        event: string;
+        data: {
+            chatID: string;
+            message: import("../chat/chat.service").MessageResponse;
+        };
+    }>;
+    handleMessageDelete(client: RealtimeSocket, body: DeleteMessagePayload): Promise<{
+        event: string;
+        data: {
+            chatID: string;
+            message: import("../chat/chat.service").MessageResponse;
         };
     }>;
     private requireUser;

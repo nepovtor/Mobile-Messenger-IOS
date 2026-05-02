@@ -10,6 +10,8 @@ public protocol ChatRepository {
     func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message]
     func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message
     func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message
+    func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> Message
+    func deleteMessage(chatID: UUID, messageID: UUID) async throws -> Message
     func setTyping(chatID: UUID, isTyping: Bool) async
     func retryPendingMessages(for chatID: UUID) async
     func refreshForForeground() async

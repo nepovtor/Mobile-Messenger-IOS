@@ -944,6 +944,142 @@ test("duplicate clientMessageId does not create duplicate message", async (t) =>
   assert.equal(messagesResponse.body[0].messageID, clientMessageId);
 });
 
+test("message author can edit and delete own message with realtime updates", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const annaClient = await openRealtimeSocket(app, anna.token);
+  const borisClient = await openRealtimeSocket(app, boris.token);
+  t.after(() => {
+    annaClient.socket.close();
+    borisClient.socket.close();
+  });
+
+  await annaClient.nextEvent("connection.ready");
+  await borisClient.nextEvent("connection.ready");
+
+  const messageResponse = await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Первая версия",
+    })
+    .expect(201);
+
+  const messageID = messageResponse.body.id as string;
+
+  const updatedResponse = await request(app.getHttpServer())
+    .patch(`/api/chats/${chatID}/messages/${messageID}`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      text: "Исправленная версия",
+    })
+    .expect(200);
+
+  assert.equal(updatedResponse.body.text, "Исправленная версия");
+  assert.equal(typeof updatedResponse.body.editedAt, "string");
+
+  const updatedEvent = await borisClient.nextEvent<{
+    chatID: string;
+    message: { id: string; text: string; editedAt: string };
+  }>("message.updated");
+  assert.equal(updatedEvent.data.chatID, chatID);
+  assert.equal(updatedEvent.data.message.id, messageID);
+  assert.equal(updatedEvent.data.message.text, "Исправленная версия");
+  assert.equal(typeof updatedEvent.data.message.editedAt, "string");
+
+  const deletedResponse = await request(app.getHttpServer())
+    .delete(`/api/chats/${chatID}/messages/${messageID}`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .expect(200);
+
+  assert.equal(deletedResponse.body.text, "Сообщение удалено");
+  assert.equal(typeof deletedResponse.body.deletedAt, "string");
+  assert.equal(deletedResponse.body.mediaID, null);
+  assert.equal(deletedResponse.body.mediaURL, null);
+
+  const deletedEvent = await borisClient.nextEvent<{
+    chatID: string;
+    message: { id: string; text: string; deletedAt: string; mediaURL: null };
+  }>("message.deleted");
+  assert.equal(deletedEvent.data.chatID, chatID);
+  assert.equal(deletedEvent.data.message.id, messageID);
+  assert.equal(deletedEvent.data.message.text, "Сообщение удалено");
+  assert.equal(typeof deletedEvent.data.message.deletedAt, "string");
+  assert.equal(deletedEvent.data.message.mediaURL, null);
+
+  const messagesResponse = await request(app.getHttpServer())
+    .get(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(messagesResponse.body[0].text, "Сообщение удалено");
+  assert.equal(typeof messagesResponse.body[0].editedAt, "string");
+  assert.equal(typeof messagesResponse.body[0].deletedAt, "string");
+});
+
+test("non-author cannot edit or delete another user's message", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const messageResponse = await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Только автор может менять",
+    })
+    .expect(201);
+
+  const messageID = messageResponse.body.id as string;
+
+  await request(app.getHttpServer())
+    .patch(`/api/chats/${chatID}/messages/${messageID}`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .send({
+      text: "Чужое изменение",
+    })
+    .expect(404);
+
+  await request(app.getHttpServer())
+    .delete(`/api/chats/${chatID}/messages/${messageID}`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(404);
+});
+
 test("auth endpoints are rate limited", async (t) => {
   const app = await createTestApp({
     allowPasswordLogin: true,

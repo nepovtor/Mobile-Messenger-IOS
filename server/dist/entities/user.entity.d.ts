@@ -1,4 +1,5 @@
 import { ChatParticipantEntity } from "./chat-participant.entity";
+import { ContactEntity } from "./contact.entity";
 import { MediaEntity } from "./media.entity";
 import { MessageEntity } from "./message.entity";
 export declare enum AuthMethod {
@@ -16,6 +17,8 @@ export declare class UserEntity {
     createdAt: Date;
     updatedAt: Date;
     chatParticipants?: ChatParticipantEntity[];
+    ownedContacts?: ContactEntity[];
+    contactOfUsers?: ContactEntity[];
     messages?: MessageEntity[];
     uploadedMedia?: MediaEntity[];
 }

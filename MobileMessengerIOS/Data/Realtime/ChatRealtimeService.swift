@@ -12,6 +12,8 @@ public enum ChatRealtimeEvent: Sendable {
     case connected
     case disconnected(Error?)
     case message(Message)
+    case messageUpdated(Message)
+    case messageDeleted(Message)
     case messageRead(messageID: UUID)
     case typing(participants: [String])
 }

@@ -39,6 +39,17 @@ type ReadPayload = {
   messageID: string;
 };
 
+type UpdateMessagePayload = {
+  chatID: string;
+  messageID: string;
+  text: string;
+};
+
+type DeleteMessagePayload = {
+  chatID: string;
+  messageID: string;
+};
+
 @WebSocketGateway({
   path: "/realtime",
   cors: false,
@@ -172,6 +183,45 @@ export class RealtimeGateway
       data: {
         chatID: body.chatID,
         messageID: body.messageID,
+      },
+    };
+  }
+
+  @SubscribeMessage("message.update")
+  async handleMessageUpdate(
+    @ConnectedSocket() client: RealtimeSocket,
+    @MessageBody() body: UpdateMessagePayload,
+  ) {
+    const user = this.requireUser(client);
+    return {
+      event: "message.updated",
+      data: {
+        chatID: body.chatID,
+        message: await this.chatService.updateMessage(
+          body.chatID,
+          body.messageID,
+          { text: body.text },
+          user,
+        ),
+      },
+    };
+  }
+
+  @SubscribeMessage("message.delete")
+  async handleMessageDelete(
+    @ConnectedSocket() client: RealtimeSocket,
+    @MessageBody() body: DeleteMessagePayload,
+  ) {
+    const user = this.requireUser(client);
+    return {
+      event: "message.deleted",
+      data: {
+        chatID: body.chatID,
+        message: await this.chatService.deleteMessage(
+          body.chatID,
+          body.messageID,
+          user,
+        ),
       },
     };
   }

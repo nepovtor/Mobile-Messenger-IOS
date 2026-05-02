@@ -20,6 +20,47 @@ describe("chatStore", () => {
     });
   });
 
+  it("message updates keep edited marker fields", () => {
+    chatStore.getState().upsertMessage("chat-1", {
+      id: "server-1",
+      messageID: "client-1",
+      chatID: "chat-1",
+      authorID: "user-1",
+      authorName: "Anna",
+      kind: "text",
+      text: "Before",
+      mediaID: null,
+      mediaURL: null,
+      status: "sent",
+      createdAt: "2026-04-28T09:00:00.000Z",
+      editedAt: null,
+      deletedAt: null,
+    });
+
+    chatStore.getState().updateMessage("chat-1", {
+      id: "server-1",
+      messageID: "client-1",
+      chatID: "chat-1",
+      authorID: "user-1",
+      authorName: "Anna",
+      kind: "text",
+      text: "After",
+      mediaID: null,
+      mediaURL: null,
+      status: "sent",
+      createdAt: "2026-04-28T09:00:00.000Z",
+      editedAt: "2026-04-28T09:05:00.000Z",
+      deletedAt: null,
+    });
+
+    expect(chatStore.getState().messagesByChatId["chat-1"][0].text).toBe(
+      "After",
+    );
+    expect(chatStore.getState().messagesByChatId["chat-1"][0].editedAt).toBe(
+      "2026-04-28T09:05:00.000Z",
+    );
+  });
+
   it("ack updates message state to sent", () => {
     chatStore.getState().upsertMessage("chat-1", {
       id: "client-1",
@@ -34,6 +75,8 @@ describe("chatStore", () => {
       mediaURL: null,
       status: "sending",
       createdAt: "2026-04-28T09:00:00.000Z",
+      editedAt: null,
+      deletedAt: null,
     });
     chatStore.getState().upsertMessage("chat-1", {
       id: "server-1",
@@ -48,6 +91,8 @@ describe("chatStore", () => {
       mediaURL: null,
       status: "sent",
       createdAt: "2026-04-28T09:00:01.000Z",
+      editedAt: null,
+      deletedAt: null,
     });
 
     expect(chatStore.getState().messagesByChatId["chat-1"]).toHaveLength(1);
@@ -70,6 +115,8 @@ describe("chatStore", () => {
       mediaURL: null,
       status: "sending",
       createdAt: "2026-04-28T09:00:00.000Z",
+      editedAt: null,
+      deletedAt: null,
     });
     chatStore
       .getState()

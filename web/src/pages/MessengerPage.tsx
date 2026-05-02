@@ -20,6 +20,8 @@ export function MessengerPage() {
   const {
     loadChats,
     upsertMessage,
+    updateMessage,
+    removeMessage,
     markMessageFailed,
     markMessageRead,
     updateTyping,
@@ -75,6 +77,18 @@ export function MessengerPage() {
         markMessageRead(data.chatID, data.messageID);
       }
 
+      if (event.event === "message.updated") {
+        const data = event.data as { chatID: string; message: Message };
+        updateMessage(data.chatID, data.message);
+        void loadChats();
+      }
+
+      if (event.event === "message.deleted") {
+        const data = event.data as { chatID: string; message: Message };
+        removeMessage(data.chatID, data.message);
+        void loadChats();
+      }
+
       if (
         event.event === "typing.started" ||
         event.event === "typing.stopped"
@@ -98,8 +112,10 @@ export function MessengerPage() {
     markMessageFailed,
     markMessageRead,
     navigate,
+    removeMessage,
     token,
     updateTyping,
+    updateMessage,
     upsertMessage,
   ]);
 

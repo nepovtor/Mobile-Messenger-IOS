@@ -3,6 +3,7 @@ import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { SetTypingDto } from "./dto/set-typing.dto";
+import { UpdateMessageDto } from "./dto/update-message.dto";
 export declare class ChatController {
     private readonly chatService;
     constructor(chatService: ChatService);
@@ -13,6 +14,8 @@ export declare class ChatController {
     markRead(chatID: string, messageID: string, user: AuthenticatedUser): Promise<{
         ok: true;
     }>;
+    updateMessage(chatID: string, messageID: string, dto: UpdateMessageDto, user: AuthenticatedUser): Promise<import("./chat.service").MessageResponse>;
+    deleteMessage(chatID: string, messageID: string, user: AuthenticatedUser): Promise<import("./chat.service").MessageResponse>;
     setTyping(chatID: string, dto: SetTypingDto, user: AuthenticatedUser): Promise<{
         chatID: string;
         userID: string;

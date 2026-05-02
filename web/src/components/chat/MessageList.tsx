@@ -6,10 +6,14 @@ export function MessageList({
   messages,
   currentUserId,
   onRetry,
+  onEditMessage,
+  onDeleteMessage,
 }: {
   messages: Message[];
   currentUserId: string;
   onRetry: (clientMessageId: string) => void;
+  onEditMessage: (messageId: string, text: string) => Promise<void>;
+  onDeleteMessage: (messageId: string) => Promise<void>;
 }) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -44,6 +48,12 @@ export function MessageList({
           message={message}
           isOwn={isOwn}
           showAuthor={showAuthor}
+          onEditMessage={
+            isOwn && !message.deletedAt ? (text) => onEditMessage(message.id, text) : undefined
+          }
+          onDeleteMessage={
+            isOwn && !message.deletedAt ? () => onDeleteMessage(message.id) : undefined
+          }
           onRetry={
             message.clientMessageId
               ? () => onRetry(message.clientMessageId!)

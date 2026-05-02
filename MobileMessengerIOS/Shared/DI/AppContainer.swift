@@ -234,6 +234,8 @@ public final class AppContainer: ObservableObject {
             loadHistory: LoadChatHistoryUseCase(repository: chatRepository),
             sendMessage: SendMessageUseCase(repository: chatRepository),
             sendImageMessage: SendImageMessageUseCase(repository: chatRepository),
+            editMessage: EditMessageUseCase(repository: chatRepository),
+            deleteMessage: DeleteMessageUseCase(repository: chatRepository),
             setTyping: SetTypingUseCase(repository: chatRepository),
             retryPending: RetryPendingMessagesUseCase(repository: chatRepository),
             markStatus: MarkMessageStatusUseCase(repository: chatRepository),

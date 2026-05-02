@@ -364,6 +364,12 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         case "message.created":
             let payload = try decoder.decode(MessageCreatedEvent.self, from: eventData)
             deliver(chatID: payload.chatID, event: .message(payload.message.asDomainMessage()))
+        case "message.updated":
+            let payload = try decoder.decode(MessageCreatedEvent.self, from: eventData)
+            deliver(chatID: payload.chatID, event: .messageUpdated(payload.message.asDomainMessage()))
+        case "message.deleted":
+            let payload = try decoder.decode(MessageCreatedEvent.self, from: eventData)
+            deliver(chatID: payload.chatID, event: .messageDeleted(payload.message.asDomainMessage()))
         case "message.read":
             let payload = try decoder.decode(MessageReadEvent.self, from: eventData)
             deliver(chatID: payload.chatID, event: .messageRead(messageID: payload.messageID))

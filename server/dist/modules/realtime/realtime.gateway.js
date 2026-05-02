@@ -110,6 +110,26 @@ let RealtimeGateway = RealtimeGateway_1 = class RealtimeGateway {
             },
         };
     }
+    async handleMessageUpdate(client, body) {
+        const user = this.requireUser(client);
+        return {
+            event: "message.updated",
+            data: {
+                chatID: body.chatID,
+                message: await this.chatService.updateMessage(body.chatID, body.messageID, { text: body.text }, user),
+            },
+        };
+    }
+    async handleMessageDelete(client, body) {
+        const user = this.requireUser(client);
+        return {
+            event: "message.deleted",
+            data: {
+                chatID: body.chatID,
+                message: await this.chatService.deleteMessage(body.chatID, body.messageID, user),
+            },
+        };
+    }
     requireUser(client) {
         if (!client.user) {
             throw new Error("Unauthorized");
@@ -183,6 +203,22 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], RealtimeGateway.prototype, "handleMessageRead", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)("message.update"),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], RealtimeGateway.prototype, "handleMessageUpdate", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)("message.delete"),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], RealtimeGateway.prototype, "handleMessageDelete", null);
 exports.RealtimeGateway = RealtimeGateway = RealtimeGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({
         path: "/realtime",

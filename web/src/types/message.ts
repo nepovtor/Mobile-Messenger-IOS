@@ -18,6 +18,8 @@ export type Message = {
   mediaURL: string | null;
   status: MessageStatus;
   createdAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
   clientMessageId?: string;
   error?: string | null;
   isLocal?: boolean;

@@ -30,6 +30,8 @@ final class ChatViewModelTests: XCTestCase {
             loadHistory: LoadChatHistoryUseCase(repository: repository),
             sendMessage: SendMessageUseCase(repository: repository),
             sendImageMessage: SendImageMessageUseCase(repository: repository),
+            editMessage: EditMessageUseCase(repository: repository),
+            deleteMessage: DeleteMessageUseCase(repository: repository),
             setTyping: SetTypingUseCase(repository: repository),
             retryPending: RetryPendingMessagesUseCase(repository: repository),
             markStatus: MarkMessageStatusUseCase(repository: repository),
@@ -1371,6 +1373,14 @@ private final class ChatRepositorySpy: ChatRepository {
         sendMessageResult
     }
 
+    func editMessage(chatID _: UUID, messageID _: UUID, text _: String) async throws -> Message {
+        sendMessageResult
+    }
+
+    func deleteMessage(chatID _: UUID, messageID _: UUID) async throws -> Message {
+        sendMessageResult
+    }
+
     func setTyping(chatID _: UUID, isTyping _: Bool) async {}
 
     func retryPendingMessages(for _: UUID) async {}
@@ -1649,6 +1659,19 @@ private struct ChatNetworkingStub: ChatNetworking {
         _ = text
         _ = mediaID
         _ = localID
+        throw AppError.unknown
+    }
+
+    func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> ServerMessage {
+        _ = chatID
+        _ = messageID
+        _ = text
+        throw AppError.unknown
+    }
+
+    func deleteMessage(chatID: UUID, messageID: UUID) async throws -> ServerMessage {
+        _ = chatID
+        _ = messageID
         throw AppError.unknown
     }
 

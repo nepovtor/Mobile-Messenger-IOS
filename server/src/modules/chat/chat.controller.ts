@@ -2,9 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -16,6 +18,7 @@ import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { SetTypingDto } from "./dto/set-typing.dto";
+import { UpdateMessageDto } from "./dto/update-message.dto";
 
 @Controller("chats")
 @UseGuards(AuthGuard)
@@ -74,6 +77,25 @@ export class ChatController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.chatService.markRead(chatID, messageID, user);
+  }
+
+  @Patch(":chatID/messages/:messageID")
+  updateMessage(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @Param("messageID", new ParseUUIDPipe()) messageID: string,
+    @Body() dto: UpdateMessageDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.chatService.updateMessage(chatID, messageID, dto, user);
+  }
+
+  @Delete(":chatID/messages/:messageID")
+  deleteMessage(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @Param("messageID", new ParseUUIDPipe()) messageID: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.chatService.deleteMessage(chatID, messageID, user);
   }
 
   @Post(":chatID/typing")

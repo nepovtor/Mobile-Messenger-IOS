@@ -34,6 +34,8 @@ export function AppShell({
     loadMessages,
     sendMessage,
     retryMessage,
+    editMessage,
+    deleteMessage,
   } = chatStore();
   const connectionState = realtimeStore((state) => state.connectionState);
   const realtimeError = realtimeStore((state) => state.lastError);
@@ -252,6 +254,12 @@ export function AppShell({
                     clientMessageId,
                     currentUser,
                   )
+                }
+                onEditMessage={(messageId, text) =>
+                  editMessage(selectedChat.id, messageId, text)
+                }
+                onDeleteMessage={(messageId) =>
+                  deleteMessage(selectedChat.id, messageId)
                 }
                 onTypingStart={() => {
                   try {

@@ -11,6 +11,7 @@ import { RealtimeService } from "../realtime/realtime.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { SetTypingDto } from "./dto/set-typing.dto";
+import { UpdateMessageDto } from "./dto/update-message.dto";
 export type Chat = ChatSummary;
 export type Message = MessageResponse;
 export interface ChatSummary {
@@ -35,6 +36,8 @@ export interface MessageResponse {
     mediaURL: string | null;
     status: MessageStatus;
     createdAt: Date;
+    editedAt: Date | null;
+    deletedAt: Date | null;
 }
 interface RealtimeSendMessageDto {
     clientMessageId: string;
@@ -67,18 +70,26 @@ export declare class ChatService implements OnModuleInit {
     markRead(chatID: string, messageID: string, user: AuthenticatedUser): Promise<{
         ok: true;
     }>;
+    updateMessage(chatID: string, messageID: string, dto: UpdateMessageDto, user: AuthenticatedUser): Promise<MessageResponse>;
+    deleteMessage(chatID: string, messageID: string, user: AuthenticatedUser): Promise<MessageResponse>;
     setTyping(chatID: string, dto: SetTypingDto, user: AuthenticatedUser): Promise<{
         chatID: string;
         userID: string;
         isTyping: boolean;
         typingParticipants: string[];
     }>;
+    findExistingDirectChatByUsers(firstUserID: string, secondUserID: string): Promise<ChatEntity | null>;
+    findOrCreateDirectChat(firstUserID: string, secondUserID: string): Promise<ChatSummary>;
     private resolveParticipants;
     private resolveParticipantsByContact;
     private getParticipantOrFail;
     private getChatSummary;
     private buildChatSummaryEnvelope;
     private mapMessage;
+    private getOwnMessageOrFail;
+    private requireHydratedMessage;
+    private refreshChatMetadata;
+    private messagePreview;
     private findExistingDirectChat;
     private seedDemoChats;
 }
