@@ -20,6 +20,9 @@ The project keeps the existing backend contract, Telegram verification flow, dem
 - native WebSocket realtime, typing, read state, delivery state
 - contacts screen with add-by-phone, empty/loading/error states, and direct chat opening
 - profile display name editing via `PATCH /api/users/me/profile`
+- map page with opt-in location sharing
+- contacts can see only shared locations
+- location is requested only when the user chooses to share or update
 - Keychain token storage
 - logout cleanup and user-switch cleanup
 
@@ -30,6 +33,8 @@ The project keeps the existing backend contract, Telegram verification flow, dem
 - native WebSocket realtime
 - contacts tab with add-by-phone and direct chat opening
 - profile display name editing in the user menu
+- map page with Leaflet + OpenStreetMap
+- opt-in location sharing with browser permission prompt
 - auth/chat cleanup on logout
 
 ### Backend
@@ -38,6 +43,7 @@ The project keeps the existing backend contract, Telegram verification flow, dem
 - native WebSocket realtime gateway
 - contacts API
 - profile API
+- location API with latest-point storage only
 - Telegram verification provider support
 - auth rate limiting
 - automated tests
@@ -60,8 +66,21 @@ These endpoints are used by both clients:
 - `POST /api/contacts`
 - `DELETE /api/contacts/:identifier`
 - `PATCH /api/users/me/profile`
+- `GET /api/location/me`
+- `POST /api/location/me`
+- `DELETE /api/location/me`
+- `GET /api/location/contacts`
 
 Realtime remains WebSocket-based through the existing gateway.
+
+## Privacy Notes
+
+- location sharing is off by default
+- the app requests geolocation only when the user taps share/update
+- the user can stop sharing anytime
+- only the latest location point is stored
+- no location history is kept
+- contacts can see only locations that were explicitly shared with them
 
 ## Demo Accounts
 
@@ -82,6 +101,7 @@ Place screenshots here:
 - `docs/screenshots/chat-thread.png`
 - `docs/screenshots/contacts.png`
 - `docs/screenshots/profile.png`
+- `docs/screenshots/map.png`
 
 Sections expected in portfolio docs:
 
@@ -90,6 +110,7 @@ Sections expected in portfolio docs:
 - Chat thread
 - Contacts
 - Profile
+- Map
 
 If screenshots are not available yet, keep the placeholders above and add the real images into `docs/screenshots/`.
 

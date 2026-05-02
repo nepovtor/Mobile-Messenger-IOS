@@ -10,6 +10,7 @@ import request from "supertest";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
 import { ContactEntity } from "../src/entities/contact.entity";
+import { LocationShareEntity } from "../src/entities/location-share.entity";
 import { MediaEntity } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
 import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
@@ -19,6 +20,7 @@ import { AuthModule } from "../src/modules/auth/auth.module";
 import { ChatModule } from "../src/modules/chat/chat.module";
 import { ContactsModule } from "../src/modules/contacts/contacts.module";
 import { MediaModule } from "../src/modules/media/media.module";
+import { LocationModule } from "../src/modules/location/location.module";
 import { RealtimeModule } from "../src/modules/realtime/realtime.module";
 import { UsersModule } from "../src/modules/users/users.module";
 
@@ -50,6 +52,7 @@ async function createTestApp(): Promise<INestApplication> {
           entities: [
             UserEntity,
             ContactEntity,
+            LocationShareEntity,
             PhoneVerificationCodeEntity,
             TelegramLinkEntity,
             ChatEntity,
@@ -83,6 +86,7 @@ async function createTestApp(): Promise<INestApplication> {
       AuthModule,
       UsersModule,
       ContactsModule,
+      LocationModule,
       MediaModule,
       ChatModule,
     ],
@@ -413,4 +417,164 @@ test("profile: demo user can update displayName without breaking login", async (
   );
   assert.equal(me.status, 200);
   assert.equal(me.body.displayName, "Анна Updated");
+});
+
+test("location: user can update own location", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const user = await authenticateUser(app, "+15550100019", "Locator");
+  const api = authedRequest(app, user.token);
+
+  const updateResponse = await api.post("/api/location/me").send({
+    latitude: 53.9,
+    longitude: 27.56,
+    accuracy: 25,
+    sharingEnabled: true,
+  });
+  const readResponse = await api.get("/api/location/me");
+
+  assert.equal(updateResponse.status, 201);
+  assert.equal(updateResponse.body.sharingEnabled, true);
+  assert.equal(updateResponse.body.latitude, 53.9);
+  assert.equal(updateResponse.body.longitude, 27.56);
+  assert.equal(updateResponse.body.accuracy, 25);
+  assert.equal(readResponse.status, 200);
+  assert.equal(readResponse.body.latitude, 53.9);
+});
+
+test("location: invalid coordinates rejected", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const user = await authenticateUser(app, "+15550100020", "Locator");
+  const response = await authedRequest(app, user.token)
+    .post("/api/location/me")
+    .send({
+      latitude: 120,
+      longitude: 27.56,
+      accuracy: -1,
+      sharingEnabled: true,
+    });
+
+  assert.equal(response.status, 400);
+});
+
+test("location: user can disable location sharing", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const user = await authenticateUser(app, "+15550100021", "Locator");
+  const api = authedRequest(app, user.token);
+
+  await api.post("/api/location/me").send({
+    latitude: 53.9,
+    longitude: 27.56,
+    accuracy: 25,
+    sharingEnabled: true,
+  });
+
+  const disableResponse = await api.delete("/api/location/me");
+  const readResponse = await api.get("/api/location/me");
+
+  assert.equal(disableResponse.status, 200);
+  assert.equal(disableResponse.body.ok, true);
+  assert.equal(readResponse.status, 200);
+  assert.equal(readResponse.body.sharingEnabled, false);
+  assert.equal(readResponse.body.latitude, null);
+  assert.equal(readResponse.body.longitude, null);
+});
+
+test("location: contacts see only sharing contacts", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const owner = await authenticateUser(app, "+15550100022", "Owner");
+  const visibleContact = await authenticateUser(
+    app,
+    "+15550100023",
+    "Visible Contact",
+  );
+  await authenticateUser(app, "+15550100024", "Hidden Contact");
+  const ownerApi = authedRequest(app, owner.token);
+
+  await ownerApi.post("/api/contacts").send({ phone: "+15550100023" });
+  await ownerApi.post("/api/contacts").send({ phone: "+15550100024" });
+  await authedRequest(app, visibleContact.token)
+    .post("/api/location/me")
+    .send({
+      latitude: 53.91,
+      longitude: 27.57,
+      accuracy: 18,
+      sharingEnabled: true,
+    });
+
+  const response = await ownerApi.get("/api/location/contacts");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.length, 1);
+  assert.equal(response.body[0].displayName, "Visible Contact");
+  assert.equal(response.body[0].phone, "+15550100023");
+});
+
+test("location: contacts do not see users without consent or non-contacts", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const owner = await authenticateUser(app, "+15550100025", "Owner");
+  const visibleContact = await authenticateUser(
+    app,
+    "+15550100026",
+    "Visible Contact",
+  );
+  const outsider = await authenticateUser(app, "+15550100027", "Outsider");
+  const ownerApi = authedRequest(app, owner.token);
+
+  await ownerApi.post("/api/contacts").send({ phone: "+15550100026" });
+
+  await authedRequest(app, visibleContact.token)
+    .post("/api/location/me")
+    .send({
+      latitude: 53.92,
+      longitude: 27.58,
+      accuracy: 11,
+      sharingEnabled: false,
+    });
+
+  await authedRequest(app, outsider.token)
+    .post("/api/location/me")
+    .send({
+      latitude: 53.93,
+      longitude: 27.59,
+      accuracy: 9,
+      sharingEnabled: true,
+    });
+
+  const response = await ownerApi.get("/api/location/contacts");
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, []);
+});
+
+test("location: unauthenticated request rejected", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const response = await request(app.getHttpServer()).get(
+    "/api/location/contacts",
+  );
+
+  assert.equal(response.status, 401);
 });

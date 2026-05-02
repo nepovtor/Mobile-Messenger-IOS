@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ContactEntity } from "../entities/contact.entity";
+import { LocationShareEntity } from "../entities/location-share.entity";
 import { PhoneVerificationCodeEntity } from "../entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../entities/telegram-link.entity";
 import { isDatabaseSynchronizationEnabled } from "./common/runtime-config";
@@ -10,6 +11,7 @@ import { ContactsModule } from "./contacts/contacts.module";
 import { DocsModule } from "./docs/docs.module";
 import { HealthModule } from "./health/health.module";
 import { MediaModule } from "./media/media.module";
+import { LocationModule } from "./location/location.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { UsersModule } from "./users/users.module";
 import { VersionModule } from "./version/version.module";
@@ -29,6 +31,7 @@ import { VersionModule } from "./version/version.module";
       retryDelay: 2000,
       entities: [
         ContactEntity,
+        LocationShareEntity,
         PhoneVerificationCodeEntity,
         TelegramLinkEntity,
       ],
@@ -39,6 +42,7 @@ import { VersionModule } from "./version/version.module";
     AuthModule,
     UsersModule,
     ContactsModule,
+    LocationModule,
     RealtimeModule,
     MediaModule,
     ChatModule,

@@ -50,6 +50,8 @@
 	</dict>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Нужно для выбора фотографии и отправки ее в чат.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Нужно, чтобы по вашему запросу показать вас на карте и поделиться локацией с контактами.</string>
 	<key>REST_BASE_URL</key>
 	<string>$(REST_BASE_URL)</string>
 	<key>TELEGRAM_BOT_USERNAME</key>

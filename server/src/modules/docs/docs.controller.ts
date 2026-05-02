@@ -103,6 +103,34 @@ function buildLandingPage(input: {
     },
     {
       method: "GET",
+      path: "/location/me",
+      description:
+        "Текущий opt-in статус шаринга локации и последняя сохраненная точка.",
+      auth: "bearer",
+    },
+    {
+      method: "POST",
+      path: "/location/me",
+      description:
+        "Обновление последней точки текущего пользователя без хранения истории.",
+      auth: "bearer",
+    },
+    {
+      method: "DELETE",
+      path: "/location/me",
+      description:
+        "Мгновенное отключение sharing и скрытие координат от контактов.",
+      auth: "bearer",
+    },
+    {
+      method: "GET",
+      path: "/location/contacts",
+      description:
+        "Локации только тех контактов, которые явно включили sharing.",
+      auth: "bearer",
+    },
+    {
+      method: "GET",
       path: "/chats",
       description: "Список чатов, поиск и последние активности.",
       auth: "bearer",

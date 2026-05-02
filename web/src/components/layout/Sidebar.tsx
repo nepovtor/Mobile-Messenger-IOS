@@ -8,6 +8,7 @@ import { Input } from "../ui/Input";
 import type { ConnectionState } from "../../realtime/realtimeTypes";
 import { useMemo, useState } from "react";
 import { Button } from "../ui/Button";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function Sidebar({
   user,
@@ -82,6 +83,7 @@ export function Sidebar({
         onUpdateDisplayName={onUpdateDisplayName}
         onLogout={onLogout}
       />
+      <WorkspaceSwitcher />
       <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/6 p-1">
         <button
           className={`rounded-xl px-3 py-2 text-sm font-medium transition ${

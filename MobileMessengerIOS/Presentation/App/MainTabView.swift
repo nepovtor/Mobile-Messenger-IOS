@@ -14,6 +14,11 @@ struct MainTabView: View {
                     Label("Контакты", systemImage: "person.2")
                 }
 
+            MapView(container: container)
+                .tabItem {
+                    Label("Карта", systemImage: "map")
+                }
+
             ChatListView(container: container)
                 .tabItem {
                     Label("Чаты", systemImage: "message")

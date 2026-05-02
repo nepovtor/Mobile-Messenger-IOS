@@ -23,6 +23,18 @@
 		D1000000000000000000000B /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010B /* ContactsView.swift */; };
 		D1000000000000000000000C /* ContactsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010C /* ContactsViewModel.swift */; };
 		D1000000000000000000000D /* ContactsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010D /* ContactsComponents.swift */; };
+		D1000000000000000000000E /* RESTLocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010E /* RESTLocationService.swift */; };
+		D1000000000000000000000F /* SharedLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010F /* SharedLocation.swift */; };
+		D10000000000000000000010 /* LocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000110 /* LocationRepository.swift */; };
+		D10000000000000000000011 /* DefaultLocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000111 /* DefaultLocationRepository.swift */; };
+		D10000000000000000000012 /* LoadContactLocationsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000112 /* LoadContactLocationsUseCase.swift */; };
+		D10000000000000000000013 /* LoadMyLocationUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000113 /* LoadMyLocationUseCase.swift */; };
+		D10000000000000000000014 /* UpdateMyLocationUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000114 /* UpdateMyLocationUseCase.swift */; };
+		D10000000000000000000015 /* StopLocationSharingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000115 /* StopLocationSharingUseCase.swift */; };
+		D10000000000000000000016 /* LocationPermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000116 /* LocationPermissionManager.swift */; };
+		D10000000000000000000017 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000117 /* MapView.swift */; };
+		D10000000000000000000018 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000118 /* MapViewModel.swift */; };
+		D10000000000000000000019 /* MapComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000119 /* MapComponents.swift */; };
 		CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5B2F815CAE000D87A4 /* ReachabilityService.swift */; };
 		CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA4F2F815CAE000D87A4 /* AppContainer.swift */; };
 		CA58DA642F815CAE000D87A4 /* PushNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5A2F815CAE000D87A4 /* PushNotificationManager.swift */; };
@@ -103,6 +115,18 @@
 		D1000000000000000000010B /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
 		D1000000000000000000010C /* ContactsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsViewModel.swift; sourceTree = "<group>"; };
 		D1000000000000000000010D /* ContactsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsComponents.swift; sourceTree = "<group>"; };
+		D1000000000000000000010E /* RESTLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTLocationService.swift; sourceTree = "<group>"; };
+		D1000000000000000000010F /* SharedLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLocation.swift; sourceTree = "<group>"; };
+		D10000000000000000000110 /* LocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000111 /* DefaultLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultLocationRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000112 /* LoadContactLocationsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadContactLocationsUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000113 /* LoadMyLocationUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadMyLocationUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000114 /* UpdateMyLocationUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateMyLocationUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000115 /* StopLocationSharingUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopLocationSharingUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000116 /* LocationPermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionManager.swift; sourceTree = "<group>"; };
+		D10000000000000000000117 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
+		D10000000000000000000118 /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		D10000000000000000000119 /* MapComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapComponents.swift; sourceTree = "<group>"; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		CA58DA1E2F815CAE000D87A4 /* ChatLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalStore.swift; sourceTree = "<group>"; };
@@ -242,6 +266,7 @@
 			children = (
 				CA58DA242F815CAE000D87A4 /* RESTAuthService.swift */,
 				CA58DA912F815CAE000D87A4 /* RESTChatService.swift */,
+				D1000000000000000000010E /* RESTLocationService.swift */,
 			);
 			path = Remote;
 			sourceTree = "<group>";
@@ -251,6 +276,7 @@
 			children = (
 				CA58DA262F815CAE000D87A4 /* DefaultChatRepository.swift */,
 				D10000000000000000000104 /* DefaultContactsRepository.swift */,
+				D10000000000000000000111 /* DefaultLocationRepository.swift */,
 				D10000000000000000000105 /* DefaultProfileRepository.swift */,
 			);
 			path = Repositories;
@@ -275,6 +301,7 @@
 				CA58DA2A2F815CAE000D87A4 /* Message.swift */,
 				CA58DA2B2F815CAE000D87A4 /* MessageAttachment.swift */,
 				CA58DA2C2F815CAE000D87A4 /* MessageStatus.swift */,
+				D1000000000000000000010F /* SharedLocation.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -284,6 +311,7 @@
 			children = (
 				CA58DA2E2F815CAE000D87A4 /* ChatRepository.swift */,
 				D10000000000000000000102 /* ContactsRepository.swift */,
+				D10000000000000000000110 /* LocationRepository.swift */,
 				D10000000000000000000103 /* ProfileRepository.swift */,
 			);
 			path = Repositories;
@@ -295,9 +323,11 @@
 				D10000000000000000000107 /* AddContactUseCase.swift */,
 				CA58DA922F815CAE000D87A4 /* CreateChatUseCase.swift */,
 				D10000000000000000000109 /* FetchProfileUseCase.swift */,
+				D10000000000000000000112 /* LoadContactLocationsUseCase.swift */,
 				D10000000000000000000106 /* LoadContactsUseCase.swift */,
 				CA58DA302F815CAE000D87A4 /* LoadChatHistoryUseCase.swift */,
 				CA58DA312F815CAE000D87A4 /* LoadChatListUseCase.swift */,
+				D10000000000000000000113 /* LoadMyLocationUseCase.swift */,
 				CA58DA322F815CAE000D87A4 /* MarkMessageStatusUseCase.swift */,
 				CA58DA332F815CAE000D87A4 /* ObserveChatMessagesUseCase.swift */,
 				D10000000000000000000108 /* RemoveContactUseCase.swift */,
@@ -305,6 +335,8 @@
 				CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */,
 				CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */,
 				CA58DA352F815CAE000D87A4 /* SendMessageUseCase.swift */,
+				D10000000000000000000115 /* StopLocationSharingUseCase.swift */,
+				D10000000000000000000114 /* UpdateMyLocationUseCase.swift */,
 				D1000000000000000000010A /* UpdateProfileUseCase.swift */,
 			);
 			path = UseCases;
@@ -386,6 +418,17 @@
 			path = Contacts;
 			sourceTree = "<group>";
 		};
+		D10000000000000000000121 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000116 /* LocationPermissionManager.swift */,
+				D10000000000000000000117 /* MapView.swift */,
+				D10000000000000000000118 /* MapViewModel.swift */,
+				D10000000000000000000119 /* MapComponents.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
 		CA58DA492F815CAE000D87A4 /* Presentation */ = {
 			isa = PBXGroup;
 			children = (
@@ -395,6 +438,7 @@
 				CA58DA452F815CAE000D87A4 /* ChatList */,
 				CA58DA482F815CAE000D87A4 /* Common */,
 				D10000000000000000000120 /* Contacts */,
+				D10000000000000000000121 /* Map */,
 				CA58DA9B2F815CAE000D87A4 /* Profile */,
 			);
 			path = Presentation;
@@ -620,6 +664,18 @@
 				D1000000000000000000000B /* ContactsView.swift in Sources */,
 				D1000000000000000000000C /* ContactsViewModel.swift in Sources */,
 				D1000000000000000000000D /* ContactsComponents.swift in Sources */,
+				D1000000000000000000000E /* RESTLocationService.swift in Sources */,
+				D1000000000000000000000F /* SharedLocation.swift in Sources */,
+				D10000000000000000000010 /* LocationRepository.swift in Sources */,
+				D10000000000000000000011 /* DefaultLocationRepository.swift in Sources */,
+				D10000000000000000000012 /* LoadContactLocationsUseCase.swift in Sources */,
+				D10000000000000000000013 /* LoadMyLocationUseCase.swift in Sources */,
+				D10000000000000000000014 /* UpdateMyLocationUseCase.swift in Sources */,
+				D10000000000000000000015 /* StopLocationSharingUseCase.swift in Sources */,
+				D10000000000000000000016 /* LocationPermissionManager.swift in Sources */,
+				D10000000000000000000017 /* MapView.swift in Sources */,
+				D10000000000000000000018 /* MapViewModel.swift in Sources */,
+				D10000000000000000000019 /* MapComponents.swift in Sources */,
 				CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */,
 				CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */,
 				CA58DA642F815CAE000D87A4 /* PushNotificationManager.swift in Sources */,

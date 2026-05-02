@@ -110,8 +110,10 @@ public final class AppContainer: ObservableObject {
     private var chatService: ChatNetworking!
     private var contactsService: ContactsNetworking!
     private var profileService: ProfileNetworking!
+    private var locationService: LocationNetworking!
     private var contactsRepository: ContactsRepository!
     private var profileRepository: ProfileRepository!
+    private var locationRepository: LocationRepository!
     private var realtimeService: ChatRealtimeService!
     private var sessionStateCancellable: AnyCancellable?
     private var connectionStateTask: Task<Void, Never>?
@@ -278,6 +280,17 @@ public final class AppContainer: ObservableObject {
         )
     }
 
+    func makeMapViewModel() -> MapViewModel {
+        MapViewModel(
+            loadMyLocation: LoadMyLocationUseCase(repository: locationRepository),
+            loadContactLocations: LoadContactLocationsUseCase(repository: locationRepository),
+            updateMyLocation: UpdateMyLocationUseCase(repository: locationRepository),
+            stopLocationSharing: StopLocationSharingUseCase(repository: locationRepository),
+            createChat: CreateChatUseCase(repository: chatRepository),
+            analytics: analytics
+        )
+    }
+
     /// Creates and returns a new AuthViewModel.
     public func makeAuthViewModel() -> AuthViewModel {
         AuthViewModel(
@@ -309,8 +322,16 @@ public final class AppContainer: ObservableObject {
                 await MainActor.run { sessionStore.logout() }
             }
         )
+        locationService = RESTLocationService(
+            baseURL: configService.restBaseURL,
+            authTokenProvider: authTokenProvider,
+            unauthorizedHandler: { [sessionStore] in
+                await MainActor.run { sessionStore.logout() }
+            }
+        )
         contactsRepository = DefaultContactsRepository(service: contactsService)
         profileRepository = DefaultProfileRepository(service: profileService)
+        locationRepository = DefaultLocationRepository(service: locationService)
         realtimeService = DefaultChatRealtimeService(
             websocketURL: configService.websocketURL,
             authTokenProvider: authTokenProvider,

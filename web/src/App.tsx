@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "./pages/LoginPage";
+import { MapPage } from "./pages/MapPage";
 import { MessengerPage } from "./pages/MessengerPage";
 import { authStore } from "./store/authStore";
+import { locationStore } from "./store/locationStore";
 
 export default function App() {
   const { restoreSession, isAuthenticated, isLoading } = authStore();
@@ -10,6 +12,12 @@ export default function App() {
   useEffect(() => {
     void restoreSession();
   }, [restoreSession]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      locationStore.getState().clear();
+    }
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (
@@ -32,6 +40,10 @@ export default function App() {
         element={
           isAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />
         }
+      />
+      <Route
+        path="/map"
+        element={isAuthenticated ? <MapPage /> : <Navigate to="/" replace />}
       />
     </Routes>
   );
