@@ -9,7 +9,10 @@ const labelByState: Record<ConnectionState, string> = {
   failed: "Connection issue",
 };
 
-const toneByState: Record<ConnectionState, "neutral" | "success" | "warning" | "danger"> = {
+const toneByState: Record<
+  ConnectionState,
+  "neutral" | "success" | "warning" | "danger"
+> = {
   connected: "success",
   connecting: "neutral",
   reconnecting: "warning",

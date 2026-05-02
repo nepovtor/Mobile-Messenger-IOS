@@ -38,14 +38,19 @@ export function MessageBubble({
           isOwn
             ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-slate-950"
             : "border border-white/10 bg-white/8 text-white",
-          message.status === "failed" && "border border-rose-400/30 bg-rose-500/15 text-rose-50",
+          message.status === "failed" &&
+            "border border-rose-400/30 bg-rose-500/15 text-rose-50",
           message.status === "sending" && "opacity-75",
         )}
       >
         {showAuthor && !isOwn ? (
-          <p className="mb-1 text-xs font-medium text-cyan-200">{message.authorName}</p>
+          <p className="mb-1 text-xs font-medium text-cyan-200">
+            {message.authorName}
+          </p>
         ) : null}
-        <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>
+        <p className="whitespace-pre-wrap break-words text-sm">
+          {message.text}
+        </p>
         <div
           className={clsx(
             "mt-2 flex items-center gap-2 text-[11px]",
@@ -55,7 +60,11 @@ export function MessageBubble({
           <span>{formatMessageTimestamp(message.createdAt)}</span>
           <span>{statusLabel(message)}</span>
           {message.status === "failed" && onRetry ? (
-            <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={onRetry}>
+            <Button
+              variant="ghost"
+              className="px-2 py-1 text-[11px]"
+              onClick={onRetry}
+            >
               Retry
             </Button>
           ) : null}

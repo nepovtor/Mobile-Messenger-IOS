@@ -51,7 +51,11 @@ type ChatStore = {
     currentUser: { userID: string; displayName: string },
   ) => Promise<void>;
   upsertMessage: (chatId: string, message: Message) => void;
-  markMessageFailed: (chatId: string, clientMessageId: string, reason: string) => void;
+  markMessageFailed: (
+    chatId: string,
+    clientMessageId: string,
+    reason: string,
+  ) => void;
   markMessageRead: (chatId: string, messageId: string) => void;
   updateTyping: (chatId: string, typingParticipants: string[]) => void;
   clear: () => void;
@@ -177,7 +181,8 @@ export const chatStore = create<ChatStore>((set, get) => ({
         chat.id === chatId
           ? {
               ...chat,
-              lastMessagePreview: message.kind === "image" ? "Photo" : message.text,
+              lastMessagePreview:
+                message.kind === "image" ? "Photo" : message.text,
               lastActivity: message.createdAt,
             }
           : chat,

@@ -27,7 +27,11 @@ import { VersionModule } from "./version/version.module";
       synchronize: isDatabaseSynchronizationEnabled(),
       retryAttempts: 5,
       retryDelay: 2000,
-      entities: [ContactEntity, PhoneVerificationCodeEntity, TelegramLinkEntity],
+      entities: [
+        ContactEntity,
+        PhoneVerificationCodeEntity,
+        TelegramLinkEntity,
+      ],
     }),
     DocsModule,
     HealthModule,

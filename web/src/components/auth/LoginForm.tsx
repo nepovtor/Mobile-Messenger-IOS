@@ -90,7 +90,12 @@ export function LoginForm({
         </div>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Button block disabled={isLoading || !phone.trim()} type="button" onClick={() => void onRequestCode({ phone })}>
+        <Button
+          block
+          disabled={isLoading || !phone.trim()}
+          type="button"
+          onClick={() => void onRequestCode({ phone })}
+        >
           {isLoading && !codeSent ? "Sending…" : "Get code"}
         </Button>
         <Button block disabled={isLoading || !phone.trim() || !code.trim()}>
@@ -98,7 +103,8 @@ export function LoginForm({
         </Button>
       </div>
       <div className="text-xs leading-5 text-slate-400">
-        Enter the same international phone number in Telegram and in the app. Demo accounts stay available below.
+        Enter the same international phone number in Telegram and in the app.
+        Demo accounts stay available below.
       </div>
     </form>
   );

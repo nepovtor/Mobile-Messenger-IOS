@@ -34,7 +34,7 @@ public enum AppError: LocalizedError, Sendable {
             case "USER_NOT_FOUND":
                 return "Пользователь с таким номером не найден."
             case "CANNOT_ADD_SELF":
-                return "Нельзя добавить свой собственный аккаунт."
+                return "Нельзя добавить самого себя."
             default:
                 break
             }

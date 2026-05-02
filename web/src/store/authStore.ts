@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { authApi } from "../api/authApi";
 import { ApiError } from "../api/httpClient";
+import { profileApi } from "../api/profileApi";
 import type {
   AuthCodeResponse,
   AuthResponse,
@@ -8,6 +9,7 @@ import type {
   LoginPayload,
 } from "../types/auth";
 import { storage } from "../utils/storage";
+import { validateDisplayName } from "../utils/displayName";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
 
@@ -117,23 +119,21 @@ export const authStore = create<AuthStore>((set, get) => ({
   },
   async updateDisplayName(displayName) {
     const trimmed = displayName.trim();
-    if (trimmed.length < 2) {
-      throw new Error("Display name must be at least 2 characters.");
-    }
-    if (trimmed.length > 40) {
-      throw new Error("Display name must be 40 characters or fewer.");
+    const validationMessage = validateDisplayName(trimmed);
+    if (validationMessage) {
+      throw new Error(validationMessage);
     }
 
     set({ isLoading: true, error: null });
     try {
-      const result = await authApi.updateProfile(trimmed);
+      const result = await profileApi.updateProfile(trimmed);
       const existingUser = get().currentUser;
       if (!existingUser) {
         throw new Error("No authenticated user.");
       }
       const currentUser = {
         ...existingUser,
-        displayName: trimmed,
+        displayName: result.displayName,
         contact: result.phone ?? existingUser.contact,
         phone: result.phone ?? existingUser.phone ?? existingUser.contact,
       };
@@ -145,7 +145,9 @@ export const authStore = create<AuthStore>((set, get) => ({
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not update display name.";
+        error instanceof Error
+          ? error.message
+          : "Could not update display name.";
       set({ isLoading: false, error: message });
       throw error;
     }

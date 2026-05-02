@@ -10,6 +10,19 @@
 		11D6DCCADCCD144C3C1F1237 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25ACC1AABD3AC5F12D308989 /* XCTest.framework */; };
 		579479C98A319213F0A5A273 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C60C7925F3F560E1F97B5D83 /* Foundation.framework */; };
 		CA58DA612F815CAE000D87A4 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA542F815CAE000D87A4 /* AnalyticsService.swift */; };
+		D10000000000000000000001 /* Contact.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000101 /* Contact.swift */; };
+		D10000000000000000000002 /* ContactsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000102 /* ContactsRepository.swift */; };
+		D10000000000000000000003 /* ProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* ProfileRepository.swift */; };
+		D10000000000000000000004 /* DefaultContactsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000104 /* DefaultContactsRepository.swift */; };
+		D10000000000000000000005 /* DefaultProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000105 /* DefaultProfileRepository.swift */; };
+		D10000000000000000000006 /* LoadContactsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000106 /* LoadContactsUseCase.swift */; };
+		D10000000000000000000007 /* AddContactUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000107 /* AddContactUseCase.swift */; };
+		D10000000000000000000008 /* RemoveContactUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000108 /* RemoveContactUseCase.swift */; };
+		D10000000000000000000009 /* FetchProfileUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000109 /* FetchProfileUseCase.swift */; };
+		D1000000000000000000000A /* UpdateProfileUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010A /* UpdateProfileUseCase.swift */; };
+		D1000000000000000000000B /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010B /* ContactsView.swift */; };
+		D1000000000000000000000C /* ContactsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010C /* ContactsViewModel.swift */; };
+		D1000000000000000000000D /* ContactsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010D /* ContactsComponents.swift */; };
 		CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5B2F815CAE000D87A4 /* ReachabilityService.swift */; };
 		CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA4F2F815CAE000D87A4 /* AppContainer.swift */; };
 		CA58DA642F815CAE000D87A4 /* PushNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5A2F815CAE000D87A4 /* PushNotificationManager.swift */; };
@@ -77,6 +90,19 @@
 		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
 		A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		D10000000000000000000101 /* Contact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Contact.swift; sourceTree = "<group>"; };
+		D10000000000000000000102 /* ContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000103 /* ProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000104 /* DefaultContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultContactsRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000105 /* DefaultProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultProfileRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000106 /* LoadContactsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadContactsUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000107 /* AddContactUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddContactUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000108 /* RemoveContactUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveContactUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000109 /* FetchProfileUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FetchProfileUseCase.swift; sourceTree = "<group>"; };
+		D1000000000000000000010A /* UpdateProfileUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateProfileUseCase.swift; sourceTree = "<group>"; };
+		D1000000000000000000010B /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
+		D1000000000000000000010C /* ContactsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsViewModel.swift; sourceTree = "<group>"; };
+		D1000000000000000000010D /* ContactsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsComponents.swift; sourceTree = "<group>"; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		CA58DA1E2F815CAE000D87A4 /* ChatLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalStore.swift; sourceTree = "<group>"; };
@@ -224,6 +250,8 @@
 			isa = PBXGroup;
 			children = (
 				CA58DA262F815CAE000D87A4 /* DefaultChatRepository.swift */,
+				D10000000000000000000104 /* DefaultContactsRepository.swift */,
+				D10000000000000000000105 /* DefaultProfileRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -243,6 +271,7 @@
 			isa = PBXGroup;
 			children = (
 				CA58DA292F815CAE000D87A4 /* Chat.swift */,
+				D10000000000000000000101 /* Contact.swift */,
 				CA58DA2A2F815CAE000D87A4 /* Message.swift */,
 				CA58DA2B2F815CAE000D87A4 /* MessageAttachment.swift */,
 				CA58DA2C2F815CAE000D87A4 /* MessageStatus.swift */,
@@ -254,6 +283,8 @@
 			isa = PBXGroup;
 			children = (
 				CA58DA2E2F815CAE000D87A4 /* ChatRepository.swift */,
+				D10000000000000000000102 /* ContactsRepository.swift */,
+				D10000000000000000000103 /* ProfileRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -261,15 +292,20 @@
 		CA58DA362F815CAE000D87A4 /* UseCases */ = {
 			isa = PBXGroup;
 			children = (
+				D10000000000000000000107 /* AddContactUseCase.swift */,
 				CA58DA922F815CAE000D87A4 /* CreateChatUseCase.swift */,
+				D10000000000000000000109 /* FetchProfileUseCase.swift */,
+				D10000000000000000000106 /* LoadContactsUseCase.swift */,
 				CA58DA302F815CAE000D87A4 /* LoadChatHistoryUseCase.swift */,
 				CA58DA312F815CAE000D87A4 /* LoadChatListUseCase.swift */,
 				CA58DA322F815CAE000D87A4 /* MarkMessageStatusUseCase.swift */,
 				CA58DA332F815CAE000D87A4 /* ObserveChatMessagesUseCase.swift */,
+				D10000000000000000000108 /* RemoveContactUseCase.swift */,
 				CA58DA342F815CAE000D87A4 /* RetryPendingMessagesUseCase.swift */,
 				CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */,
 				CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */,
 				CA58DA352F815CAE000D87A4 /* SendMessageUseCase.swift */,
+				D1000000000000000000010A /* UpdateProfileUseCase.swift */,
 			);
 			path = UseCases;
 			sourceTree = "<group>";
@@ -340,6 +376,16 @@
 			path = Common;
 			sourceTree = "<group>";
 		};
+		D10000000000000000000120 /* Contacts */ = {
+			isa = PBXGroup;
+			children = (
+				D1000000000000000000010B /* ContactsView.swift */,
+				D1000000000000000000010C /* ContactsViewModel.swift */,
+				D1000000000000000000010D /* ContactsComponents.swift */,
+			);
+			path = Contacts;
+			sourceTree = "<group>";
+		};
 		CA58DA492F815CAE000D87A4 /* Presentation */ = {
 			isa = PBXGroup;
 			children = (
@@ -348,6 +394,7 @@
 				CA58DA422F815CAE000D87A4 /* Chat */,
 				CA58DA452F815CAE000D87A4 /* ChatList */,
 				CA58DA482F815CAE000D87A4 /* Common */,
+				D10000000000000000000120 /* Contacts */,
 				CA58DA9B2F815CAE000D87A4 /* Profile */,
 			);
 			path = Presentation;
@@ -560,6 +607,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				CA58DA612F815CAE000D87A4 /* AnalyticsService.swift in Sources */,
+				D10000000000000000000001 /* Contact.swift in Sources */,
+				D10000000000000000000002 /* ContactsRepository.swift in Sources */,
+				D10000000000000000000003 /* ProfileRepository.swift in Sources */,
+				D10000000000000000000004 /* DefaultContactsRepository.swift in Sources */,
+				D10000000000000000000005 /* DefaultProfileRepository.swift in Sources */,
+				D10000000000000000000006 /* LoadContactsUseCase.swift in Sources */,
+				D10000000000000000000007 /* AddContactUseCase.swift in Sources */,
+				D10000000000000000000008 /* RemoveContactUseCase.swift in Sources */,
+				D10000000000000000000009 /* FetchProfileUseCase.swift in Sources */,
+				D1000000000000000000000A /* UpdateProfileUseCase.swift in Sources */,
+				D1000000000000000000000B /* ContactsView.swift in Sources */,
+				D1000000000000000000000C /* ContactsViewModel.swift in Sources */,
+				D1000000000000000000000D /* ContactsComponents.swift in Sources */,
 				CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */,
 				CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */,
 				CA58DA642F815CAE000D87A4 /* PushNotificationManager.swift in Sources */,

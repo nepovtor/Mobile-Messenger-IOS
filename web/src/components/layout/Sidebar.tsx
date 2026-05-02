@@ -20,6 +20,7 @@ export function Sidebar({
   contactsError,
   contactsNotice,
   isAddingContact,
+  openingContactId,
   removingContactId,
   onSelectChat,
   onOpenContact,
@@ -38,6 +39,7 @@ export function Sidebar({
   contactsError: string | null;
   contactsNotice: string | null;
   isAddingContact: boolean;
+  openingContactId: string | null;
   removingContactId: string | null;
   onSelectChat: (chatId: string) => void;
   onOpenContact: (contact: ContactEntry) => void;
@@ -91,7 +93,9 @@ export function Sidebar({
         </button>
         <button
           className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
-            activeTab === "contacts" ? "bg-white/12 text-white" : "text-slate-400"
+            activeTab === "contacts"
+              ? "bg-white/12 text-white"
+              : "text-slate-400"
           }`}
           onClick={() => setActiveTab("contacts")}
         >
@@ -102,7 +106,9 @@ export function Sidebar({
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         <Input
           className="pl-10"
-          placeholder={activeTab === "chats" ? "Search chats" : "Search contacts"}
+          placeholder={
+            activeTab === "chats" ? "Search chats" : "Search contacts"
+          }
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -118,7 +124,9 @@ export function Sidebar({
         ) : (
           <div className="space-y-3">
             <div className="rounded-2xl border border-white/10 bg-white/6 p-3">
-              <p className="mb-2 text-sm font-semibold text-white">Add contact by phone</p>
+              <p className="mb-2 text-sm font-semibold text-white">
+                Add contact by phone
+              </p>
               <Input
                 placeholder="+375291234567"
                 value={phone}
@@ -129,7 +137,8 @@ export function Sidebar({
                 className="mt-3"
                 disabled={isAddingContact || !phone.trim()}
                 onClick={() => {
-                  void onAddContact(phone.trim());
+                  const trimmed = phone.trim();
+                  void onAddContact(trimmed);
                   setPhone("");
                 }}
               >
@@ -169,19 +178,29 @@ export function Sidebar({
                     className="rounded-2xl border border-white/10 bg-white/6 p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">
                           {contact.displayName}
                         </p>
-                        <p className="truncate text-xs text-slate-400">{contact.phone}</p>
+                        <p className="truncate text-xs text-slate-400">
+                          {contact.phone}
+                        </p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-cyan-200/70">
+                          {contact.directChatID
+                            ? "Direct chat ready"
+                            : "Chat opens on demand"}
+                        </p>
                       </div>
                       <div className="flex gap-2">
                         <Button
                           variant="secondary"
                           className="px-3 py-2"
+                          disabled={openingContactId === contact.id}
                           onClick={() => onOpenContact(contact)}
                         >
-                          Open
+                          {openingContactId === contact.id
+                            ? "Opening..."
+                            : "Open"}
                         </Button>
                         <Button
                           variant="ghost"

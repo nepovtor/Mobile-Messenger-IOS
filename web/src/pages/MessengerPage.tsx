@@ -8,10 +8,22 @@ import type { Message } from "../types/message";
 
 export function MessengerPage() {
   const navigate = useNavigate();
-  const { currentUser, token, isAuthenticated, logout, error, clearError, updateDisplayName } =
-    authStore();
-  const { loadChats, upsertMessage, markMessageFailed, markMessageRead, updateTyping } =
-    chatStore();
+  const {
+    currentUser,
+    token,
+    isAuthenticated,
+    logout,
+    error,
+    clearError,
+    updateDisplayName,
+  } = authStore();
+  const {
+    loadChats,
+    upsertMessage,
+    markMessageFailed,
+    markMessageRead,
+    updateTyping,
+  } = chatStore();
 
   useEffect(() => {
     if (!isAuthenticated || !token || !currentUser) {
@@ -63,7 +75,10 @@ export function MessengerPage() {
         markMessageRead(data.chatID, data.messageID);
       }
 
-      if (event.event === "typing.started" || event.event === "typing.stopped") {
+      if (
+        event.event === "typing.started" ||
+        event.event === "typing.stopped"
+      ) {
         const data = event.data as {
           chatID: string;
           typingParticipants: string[];

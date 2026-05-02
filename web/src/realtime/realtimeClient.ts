@@ -63,7 +63,10 @@ export class RealtimeClient {
 
   private openSocket() {
     if (!this.token) {
-      this.handlers.onConnectionStateChange?.("failed", "Missing session token.");
+      this.handlers.onConnectionStateChange?.(
+        "failed",
+        "Missing session token.",
+      );
       return;
     }
 

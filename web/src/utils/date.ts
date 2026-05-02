@@ -1,4 +1,9 @@
-import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
+import {
+  format,
+  formatDistanceToNowStrict,
+  isToday,
+  isYesterday,
+} from "date-fns";
 
 export function formatChatTimestamp(value: string): string {
   const date = new Date(value);

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authApi } from "../api/authApi";
 import { ApiError } from "../api/httpClient";
+import { profileApi } from "../api/profileApi";
 import { authStore } from "./authStore";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
@@ -11,6 +12,11 @@ vi.mock("../api/authApi", () => ({
     verifyCode: vi.fn(),
     login: vi.fn(),
     getMe: vi.fn(),
+  },
+}));
+
+vi.mock("../api/profileApi", () => ({
+  profileApi: {
     updateProfile: vi.fn(),
   },
 }));
@@ -156,13 +162,15 @@ describe("authStore", () => {
       ),
     );
 
-    await expect(authStore.getState().requestCode("+15550005")).rejects.toBeDefined();
+    await expect(
+      authStore.getState().requestCode("+15550005"),
+    ).rejects.toBeDefined();
 
     expect(authStore.getState().error).toMatch(/Telegram bot/i);
   });
 
   it("updateDisplayName refreshes currentUser without clearing the session", async () => {
-    vi.mocked(authApi.updateProfile).mockResolvedValue({
+    vi.mocked(profileApi.updateProfile).mockResolvedValue({
       userID: "user-1",
       displayName: "Anna Updated",
       phone: "+1555",

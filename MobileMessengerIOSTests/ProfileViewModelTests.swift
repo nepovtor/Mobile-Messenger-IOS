@@ -109,7 +109,12 @@ final class ProfileViewModelTests: XCTestCase {
             )
         )
         let viewModel = ProfileViewModel(
-            profileService: profileService,
+            fetchProfile: FetchProfileUseCase(
+                repository: DefaultProfileRepository(service: profileService)
+            ),
+            updateProfile: UpdateProfileUseCase(
+                repository: DefaultProfileRepository(service: profileService)
+            ),
             updateDisplayNameAction: { updatedDisplayName = $0 },
             logoutAction: {}
         )
@@ -137,7 +142,12 @@ final class ProfileViewModelTests: XCTestCase {
     func testSaveDisplayNameValidationFailureDoesNotCallBackend() async {
         let profileService = ProfileServiceStub()
         let viewModel = ProfileViewModel(
-            profileService: profileService,
+            fetchProfile: FetchProfileUseCase(
+                repository: DefaultProfileRepository(service: profileService)
+            ),
+            updateProfile: UpdateProfileUseCase(
+                repository: DefaultProfileRepository(service: profileService)
+            ),
             updateDisplayNameAction: { _ in },
             logoutAction: {}
         )
@@ -165,8 +175,14 @@ final class ProfileViewModelTests: XCTestCase {
         profile: UserProfileDTOStub = UserProfileDTOStub(),
         logoutAction: @escaping @MainActor () -> Void = {}
     ) -> ProfileViewModel {
-        ProfileViewModel(
-            profileService: ProfileServiceStub(profile: profile),
+        let service = ProfileServiceStub(profile: profile)
+        return ProfileViewModel(
+            fetchProfile: FetchProfileUseCase(
+                repository: DefaultProfileRepository(service: service)
+            ),
+            updateProfile: UpdateProfileUseCase(
+                repository: DefaultProfileRepository(service: service)
+            ),
             updateDisplayNameAction: { _ in },
             logoutAction: logoutAction
         )

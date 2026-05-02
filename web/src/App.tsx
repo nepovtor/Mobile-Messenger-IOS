@@ -23,11 +23,15 @@ export default function App() {
     <Routes>
       <Route
         path="/"
-        element={isAuthenticated ? <Navigate to="/messenger" replace /> : <LoginPage />}
+        element={
+          isAuthenticated ? <Navigate to="/messenger" replace /> : <LoginPage />
+        }
       />
       <Route
         path="/messenger"
-        element={isAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />}
+        element={
+          isAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />
+        }
       />
     </Routes>
   );

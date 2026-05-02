@@ -39,7 +39,9 @@ export function ChatPanel({
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold text-white">{chat.title}</h2>
+            <h2 className="truncate text-lg font-semibold text-white">
+              {chat.title}
+            </h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <span className="inline-flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />

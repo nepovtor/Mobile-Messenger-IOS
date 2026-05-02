@@ -59,11 +59,13 @@ export function LoginPage() {
                 Mobile Messenger Web
               </p>
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-6xl">
-                Production-ready messenger with Telegram verification and demo mode.
+                Production-ready messenger with Telegram verification and demo
+                mode.
               </h1>
               <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-                Enter a real phone number, receive a verification code in Telegram,
-                and continue straight into chats. Demo accounts remain available for portfolio flows.
+                Enter a real phone number, receive a verification code in
+                Telegram, and continue straight into chats. Demo accounts remain
+                available for portfolio flows.
               </p>
             </div>
 
@@ -97,10 +99,12 @@ export function LoginPage() {
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/60 to-transparent" />
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-semibold text-white">Phone verification</h2>
+                <h2 className="text-2xl font-semibold text-white">
+                  Phone verification
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Request a one-time Telegram code, verify it, and restore your session
-                  without exposing realtime or token details in the UI.
+                  Request a one-time Telegram code, verify it, and restore your
+                  session without exposing realtime or token details in the UI.
                 </p>
               </div>
               <LoginForm
@@ -124,7 +128,9 @@ export function LoginPage() {
                 }}
               />
               <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-                <div className="mb-3 text-sm font-medium text-white">Demo accounts</div>
+                <div className="mb-3 text-sm font-medium text-white">
+                  Demo accounts
+                </div>
                 <DemoPasswordForm
                   isLoading={isLoading}
                   error={null}
@@ -138,8 +144,9 @@ export function LoginPage() {
                 />
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-400">
-                Different demo users see different chats. Logout fully clears session,
-                local state, and realtime connection before the next sign-in.
+                Different demo users see different chats. Logout fully clears
+                session, local state, and realtime connection before the next
+                sign-in.
               </div>
             </div>
           </Card>

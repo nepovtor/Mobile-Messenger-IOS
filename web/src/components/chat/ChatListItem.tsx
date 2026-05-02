@@ -23,7 +23,9 @@ export function ChatListItem({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{chat.title}</p>
+          <p className="truncate text-sm font-semibold text-white">
+            {chat.title}
+          </p>
           <p className="mt-1 truncate text-xs text-slate-400">
             {chat.typingParticipants.length > 0
               ? `${chat.typingParticipants.join(", ")} typing…`

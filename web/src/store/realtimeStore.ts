@@ -1,6 +1,12 @@
 import { create } from "zustand";
-import { RealtimeClient, decodeRealtimeEvent } from "../realtime/realtimeClient";
-import type { ConnectionState, RealtimeEnvelope } from "../realtime/realtimeTypes";
+import {
+  RealtimeClient,
+  decodeRealtimeEvent,
+} from "../realtime/realtimeClient";
+import type {
+  ConnectionState,
+  RealtimeEnvelope,
+} from "../realtime/realtimeTypes";
 
 type RealtimeStore = {
   client: RealtimeClient | null;

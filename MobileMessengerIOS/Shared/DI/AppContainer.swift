@@ -110,6 +110,8 @@ public final class AppContainer: ObservableObject {
     private var chatService: ChatNetworking!
     private var contactsService: ContactsNetworking!
     private var profileService: ProfileNetworking!
+    private var contactsRepository: ContactsRepository!
+    private var profileRepository: ProfileRepository!
     private var realtimeService: ChatRealtimeService!
     private var sessionStateCancellable: AnyCancellable?
     private var connectionStateTask: Task<Void, Never>?
@@ -253,7 +255,10 @@ public final class AppContainer: ObservableObject {
     /// Creates and returns a new ContactsViewModel.
     func makeContactsViewModel() -> ContactsViewModel {
         ContactsViewModel(
-            contactsService: contactsService,
+            loadContacts: LoadContactsUseCase(repository: contactsRepository),
+            addContact: AddContactUseCase(repository: contactsRepository),
+            removeContact: RemoveContactUseCase(repository: contactsRepository),
+            loadChats: LoadChatListUseCase(repository: chatRepository),
             createChat: CreateChatUseCase(repository: chatRepository),
             analytics: analytics
         )
@@ -262,7 +267,8 @@ public final class AppContainer: ObservableObject {
     /// Creates and returns a new ProfileViewModel.
     func makeProfileViewModel() -> ProfileViewModel {
         ProfileViewModel(
-            profileService: profileService,
+            fetchProfile: FetchProfileUseCase(repository: profileRepository),
+            updateProfile: UpdateProfileUseCase(repository: profileRepository),
             updateDisplayNameAction: { [sessionStore] displayName in
                 sessionStore.updateDisplayName(displayName)
             },
@@ -303,6 +309,8 @@ public final class AppContainer: ObservableObject {
                 await MainActor.run { sessionStore.logout() }
             }
         )
+        contactsRepository = DefaultContactsRepository(service: contactsService)
+        profileRepository = DefaultProfileRepository(service: profileService)
         realtimeService = DefaultChatRealtimeService(
             websocketURL: configService.websocketURL,
             authTokenProvider: authTokenProvider,

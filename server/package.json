@@ -8,6 +8,8 @@
     "start": "node dist/main.js",
     "build": "tsc -p tsconfig.json",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "eslint --ext .ts src test",
     "test": "npm run test:e2e",
     "test:e2e": "node --require ts-node/register --test test/**/*.test.ts"

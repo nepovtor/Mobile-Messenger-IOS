@@ -6,6 +6,10 @@ import { chatStore } from "../../store/chatStore";
 import { realtimeStore } from "../../store/realtimeStore";
 import type { CurrentUser } from "../../types/auth";
 import type { ContactEntry } from "../../types/contact";
+import {
+  mapContactErrorMessage,
+  validateContactPhone,
+} from "../../utils/contacts";
 import { ChatPanel } from "./ChatPanel";
 import { EmptyState } from "./EmptyState";
 import { Sidebar } from "./Sidebar";
@@ -40,7 +44,10 @@ export function AppShell({
   const [contactsNotice, setContactsNotice] = useState<string | null>(null);
   const [isLoadingContacts, setLoadingContacts] = useState(false);
   const [isAddingContact, setAddingContact] = useState(false);
-  const [removingContactId, setRemovingContactId] = useState<string | null>(null);
+  const [openingContactId, setOpeningContactId] = useState<string | null>(null);
+  const [removingContactId, setRemovingContactId] = useState<string | null>(
+    null,
+  );
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) ?? null,
@@ -49,6 +56,9 @@ export function AppShell({
 
   useEffect(() => {
     let isCancelled = false;
+    setContacts([]);
+    setContactsError(null);
+    setContactsNotice(null);
     setLoadingContacts(true);
     void contactsApi
       .getContacts()
@@ -58,12 +68,15 @@ export function AppShell({
         }
         setContacts(result);
         setContactsError(null);
+        setContactsNotice(null);
       })
-      .catch((error: Error) => {
+      .catch((error: unknown) => {
         if (isCancelled) {
           return;
         }
-        setContactsError(error.message);
+        setContactsError(
+          mapContactErrorMessage(error, "Could not load contacts."),
+        );
       })
       .finally(() => {
         if (!isCancelled) {
@@ -107,18 +120,29 @@ export function AppShell({
   }, [currentUser.userID, messagesByChatId, selectedChat]);
 
   async function handleAddContact(phone: string) {
+    const validationMessage = validateContactPhone(phone);
+    if (validationMessage) {
+      setContactsNotice(null);
+      setContactsError(validationMessage);
+      return;
+    }
+
     setAddingContact(true);
     setContactsNotice(null);
     try {
       const result = await contactsApi.addContact(phone);
       setContacts((existing) => {
-        const withoutDuplicate = existing.filter((item) => item.id !== result.id);
-        return result.alreadyExists ? withoutDuplicate : [result, ...withoutDuplicate];
+        const withoutDuplicate = existing.filter(
+          (item) => item.id !== result.id,
+        );
+        return [result, ...withoutDuplicate];
       });
       setContactsError(null);
-      setContactsNotice(result.alreadyExists ? "Contact already added." : "Contact added.");
-    } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Could not add contact.");
+      setContactsNotice(
+        result.alreadyExists ? "Contact already added." : "Contact added.",
+      );
+    } catch (error: unknown) {
+      setContactsError(mapContactErrorMessage(error, "Could not add contact."));
     } finally {
       setAddingContact(false);
     }
@@ -129,27 +153,38 @@ export function AppShell({
     setContactsNotice(null);
     try {
       await contactsApi.removeContact(contact.id);
-      setContacts((existing) => existing.filter((item) => item.id !== contact.id));
+      setContacts((existing) =>
+        existing.filter((item) => item.id !== contact.id),
+      );
       setContactsError(null);
       setContactsNotice("Contact removed.");
-    } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Could not remove contact.");
+    } catch (error: unknown) {
+      setContactsError(
+        mapContactErrorMessage(error, "Could not remove contact."),
+      );
     } finally {
       setRemovingContactId(null);
     }
   }
 
   async function handleOpenContact(contact: ContactEntry) {
+    setOpeningContactId(contact.id);
     try {
+      const existingDirectChat = contact.directChatID
+        ? chats.find((item) => item.id === contact.directChatID)
+        : null;
       const chat =
-        contact.directChatID && chats.find((item) => item.id === contact.directChatID)
-          ? chats.find((item) => item.id === contact.directChatID)!
-          : await chatApi.createChat(contact.displayName, [contact.phone]);
+        existingDirectChat ??
+        (await chatApi.createChat(contact.displayName, [contact.phone]));
       await loadChats();
       selectChat(chat.id);
       setSidebarOpen(false);
-    } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Could not open direct chat.");
+    } catch (error: unknown) {
+      setContactsError(
+        mapContactErrorMessage(error, "Could not open direct chat."),
+      );
+    } finally {
+      setOpeningContactId(null);
     }
   }
 
@@ -176,6 +211,7 @@ export function AppShell({
             contactsError={contactsError}
             contactsNotice={contactsNotice}
             isAddingContact={isAddingContact}
+            openingContactId={openingContactId}
             removingContactId={removingContactId}
             onSelectChat={(chatId) => {
               selectChat(chatId);
@@ -190,7 +226,11 @@ export function AppShell({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-3 flex items-center justify-between md:hidden">
-            <Button variant="secondary" className="px-3 py-2" onClick={() => setSidebarOpen(true)}>
+            <Button
+              variant="secondary"
+              className="px-3 py-2"
+              onClick={() => setSidebarOpen(true)}
+            >
               <Menu className="mr-2 h-4 w-4" />
               Chats
             </Button>
@@ -203,9 +243,15 @@ export function AppShell({
                 currentUser={currentUser}
                 connectionState={connectionState}
                 onBack={() => setSidebarOpen(true)}
-                onSend={(text) => sendMessage(selectedChat.id, text, currentUser)}
+                onSend={(text) =>
+                  sendMessage(selectedChat.id, text, currentUser)
+                }
                 onRetry={(clientMessageId) =>
-                  void retryMessage(selectedChat.id, clientMessageId, currentUser)
+                  void retryMessage(
+                    selectedChat.id,
+                    clientMessageId,
+                    currentUser,
+                  )
                 }
                 onTypingStart={() => {
                   try {
@@ -249,6 +295,7 @@ export function AppShell({
               contactsError={contactsError}
               contactsNotice={contactsNotice}
               isAddingContact={isAddingContact}
+              openingContactId={openingContactId}
               removingContactId={removingContactId}
               onSelectChat={(chatId) => {
                 selectChat(chatId);

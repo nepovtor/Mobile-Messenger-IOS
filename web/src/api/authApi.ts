@@ -8,13 +8,16 @@ import { httpRequest } from "./httpClient";
 
 export const authApi = {
   async requestCode(phone: string) {
-    const payload = await httpRequest<Partial<AuthCodeResponse>>("/auth/request", {
-      method: "POST",
-      body: JSON.stringify({
-        method: "phone",
-        contact: phone,
-      }),
-    });
+    const payload = await httpRequest<Partial<AuthCodeResponse>>(
+      "/auth/request",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          method: "phone",
+          contact: phone,
+        }),
+      },
+    );
 
     return {
       status: "code_sent",
@@ -42,15 +45,5 @@ export const authApi = {
   },
   getMe() {
     return httpRequest<CurrentUser>("/auth/me");
-  },
-  updateProfile(displayName: string) {
-    return httpRequest<{
-      userID: string;
-      displayName: string;
-      phone: string;
-    }>("/users/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({ displayName }),
-    });
   },
 };

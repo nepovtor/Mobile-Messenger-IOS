@@ -11,8 +11,8 @@ export const contactsApi = {
       body: JSON.stringify({ phone }),
     });
   },
-  removeContact(id: string) {
-    return httpRequest<{ ok: true }>(`/contacts/${id}`, {
+  removeContact(identifier: string) {
+    return httpRequest<{ ok: true }>(`/contacts/${identifier}`, {
       method: "DELETE",
     });
   },

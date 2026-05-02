@@ -84,13 +84,15 @@ function buildLandingPage(input: {
     {
       method: "POST",
       path: "/contacts",
-      description: "Добавление контакта по номеру телефона с переиспользованием direct chat.",
+      description:
+        "Добавление контакта по номеру телефона с переиспользованием direct chat.",
       auth: "bearer",
     },
     {
       method: "DELETE",
       path: "/contacts/:identifier",
-      description: "Удаление контакта без удаления пользователя или истории чата.",
+      description:
+        "Удаление контакта без удаления пользователя или истории чата.",
       auth: "bearer",
     },
     {

@@ -1,4 +1,9 @@
-export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed";
+export type MessageStatus =
+  | "sending"
+  | "sent"
+  | "delivered"
+  | "read"
+  | "failed";
 export type MessageKind = "text" | "image";
 
 export type Message = {

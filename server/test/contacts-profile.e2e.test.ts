@@ -116,11 +116,13 @@ async function authenticateUser(
     });
   assert.equal(requestCodeResponse.status, 201);
 
-  const response = await request(app.getHttpServer()).post("/api/auth/verify").send({
-    method: "phone",
-    contact: phone,
-    code: "123456",
-  });
+  const response = await request(app.getHttpServer())
+    .post("/api/auth/verify")
+    .send({
+      method: "phone",
+      contact: phone,
+      code: "123456",
+    });
 
   assert.equal(response.status, 201);
   const token = response.body.token as string;
@@ -143,13 +145,21 @@ async function authenticateUser(
 function authedRequest(app: INestApplication, token: string) {
   return {
     get: (path: string) =>
-      request(app.getHttpServer()).get(path).set("Authorization", `Bearer ${token}`),
+      request(app.getHttpServer())
+        .get(path)
+        .set("Authorization", `Bearer ${token}`),
     post: (path: string) =>
-      request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${token}`),
+      request(app.getHttpServer())
+        .post(path)
+        .set("Authorization", `Bearer ${token}`),
     patch: (path: string) =>
-      request(app.getHttpServer()).patch(path).set("Authorization", `Bearer ${token}`),
+      request(app.getHttpServer())
+        .patch(path)
+        .set("Authorization", `Bearer ${token}`),
     delete: (path: string) =>
-      request(app.getHttpServer()).delete(path).set("Authorization", `Bearer ${token}`),
+      request(app.getHttpServer())
+        .delete(path)
+        .set("Authorization", `Bearer ${token}`),
   };
 }
 
@@ -198,8 +208,12 @@ test("contacts: adding same contact twice does not create duplicate", async (t) 
   await authenticateUser(app, "+15550100005", "Repeat");
   const api = authedRequest(app, owner.token);
 
-  const firstAdd = await api.post("/api/contacts").send({ phone: "+15550100005" });
-  const secondAdd = await api.post("/api/contacts").send({ phone: "+15550100005" });
+  const firstAdd = await api
+    .post("/api/contacts")
+    .send({ phone: "+15550100005" });
+  const secondAdd = await api
+    .post("/api/contacts")
+    .send({ phone: "+15550100005" });
   const list = await api.get("/api/contacts");
 
   assert.equal(firstAdd.status, 201);
@@ -223,7 +237,9 @@ test("contacts: user cannot see contacts of another user", async (t) => {
     .post("/api/contacts")
     .send({ phone: "+15550100008" });
 
-  const response = await authedRequest(app, stranger.token).get("/api/contacts");
+  const response = await authedRequest(app, stranger.token).get(
+    "/api/contacts",
+  );
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, []);
@@ -369,11 +385,13 @@ test("profile: demo user can update displayName without breaking login", async (
     await app.close();
   });
 
-  const login = await request(app.getHttpServer()).post("/api/auth/login").send({
-    method: "phone",
-    contact: "+15551230011",
-    password: "demo1111",
-  });
+  const login = await request(app.getHttpServer())
+    .post("/api/auth/login")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      password: "demo1111",
+    });
   assert.equal(login.status, 201);
 
   const updated = await authedRequest(app, login.body.token as string)
@@ -381,14 +399,18 @@ test("profile: demo user can update displayName without breaking login", async (
     .send({ displayName: "Анна Updated" });
   assert.equal(updated.status, 200);
 
-  const secondLogin = await request(app.getHttpServer()).post("/api/auth/login").send({
-    method: "phone",
-    contact: "+15551230011",
-    password: "demo1111",
-  });
+  const secondLogin = await request(app.getHttpServer())
+    .post("/api/auth/login")
+    .send({
+      method: "phone",
+      contact: "+15551230011",
+      password: "demo1111",
+    });
   assert.equal(secondLogin.status, 201);
 
-  const me = await authedRequest(app, secondLogin.body.token as string).get("/api/auth/me");
+  const me = await authedRequest(app, secondLogin.body.token as string).get(
+    "/api/auth/me",
+  );
   assert.equal(me.status, 200);
   assert.equal(me.body.displayName, "Анна Updated");
 });

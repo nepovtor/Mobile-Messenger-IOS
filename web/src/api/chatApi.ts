@@ -29,9 +29,12 @@ export const chatApi = {
     });
   },
   markRead(chatId: string, messageId: string) {
-    return httpRequest<{ ok: true }>(`/chats/${chatId}/messages/${messageId}/read`, {
-      method: "POST",
-    });
+    return httpRequest<{ ok: true }>(
+      `/chats/${chatId}/messages/${messageId}/read`,
+      {
+        method: "POST",
+      },
+    );
   },
   setTyping(chatId: string, isTyping: boolean) {
     return httpRequest<{

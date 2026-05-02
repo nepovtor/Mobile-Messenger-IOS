@@ -449,7 +449,8 @@ export class ChatService implements OnModuleInit {
     secondUserID: string,
   ): Promise<ChatSummary> {
     const participantIDs = [firstUserID, secondUserID].sort();
-    const existingDirectChat = await this.findExistingDirectChat(participantIDs);
+    const existingDirectChat =
+      await this.findExistingDirectChat(participantIDs);
     if (existingDirectChat) {
       return this.getChatSummary(existingDirectChat.id, firstUserID);
     }

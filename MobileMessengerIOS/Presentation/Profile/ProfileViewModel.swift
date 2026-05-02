@@ -84,18 +84,21 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var inlineMessage: String?
     @Published private(set) var didSaveDisplayName = false
 
-    private let profileService: ProfileNetworking
+    private let fetchProfileUseCase: FetchProfileUseCase
+    private let updateProfileUseCase: UpdateProfileUseCase
     private let updateDisplayNameAction: @MainActor (String) -> Void
     private let logoutAction: @MainActor () -> Void
     private var currentUserID: UUID?
     private var lastLoadedUserID: UUID?
 
     init(
-        profileService: ProfileNetworking,
+        fetchProfile: FetchProfileUseCase,
+        updateProfile: UpdateProfileUseCase,
         updateDisplayNameAction: @escaping @MainActor (String) -> Void,
         logoutAction: @escaping @MainActor () -> Void
     ) {
-        self.profileService = profileService
+        self.fetchProfileUseCase = fetchProfile
+        self.updateProfileUseCase = updateProfile
         self.updateDisplayNameAction = updateDisplayNameAction
         self.logoutAction = logoutAction
     }
@@ -165,7 +168,7 @@ final class ProfileViewModel: ObservableObject {
         defer { isLoadingProfile = false }
 
         do {
-            let profile = try await profileService.fetchProfile()
+            let profile = try await fetchProfileUseCase()
             phone = Self.phoneText(from: profile.phone)
             displayName = profile.displayName.isEmpty ? displayName : profile.displayName
             initials = Self.makeInitials(from: displayName)
@@ -196,7 +199,7 @@ final class ProfileViewModel: ObservableObject {
             defer { isSavingDisplayName = false }
 
             do {
-                let profile = try await profileService.updateProfile(displayName: trimmed)
+                let profile = try await updateProfileUseCase(displayName: trimmed)
                 displayName = profile.displayName
                 editedDisplayName = profile.displayName
                 phone = Self.phoneText(from: profile.phone)

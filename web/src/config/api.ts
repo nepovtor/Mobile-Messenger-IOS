@@ -15,9 +15,8 @@ export const appConfig = {
   websocketUrl: normalizeBaseUrl(
     import.meta.env.VITE_WEBSOCKET_URL || PRODUCTION_WEBSOCKET_URL,
   ),
-  telegramBotUsername:
-    (import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
-      PRODUCTION_TELEGRAM_BOT_USERNAME) as string,
+  telegramBotUsername: (import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
+    PRODUCTION_TELEGRAM_BOT_USERNAME) as string,
   get telegramBotUrl() {
     const username = this.telegramBotUsername.trim().replace(/^@+/, "");
     return username ? `https://t.me/${username}` : null;

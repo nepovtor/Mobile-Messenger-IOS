@@ -107,7 +107,10 @@ export class ContactsService {
     return this.mapContact(hydrated, ownerUserId);
   }
 
-  async removeContact(ownerUserId: string, identifier: string): Promise<{
+  async removeContact(
+    ownerUserId: string,
+    identifier: string,
+  ): Promise<{
     ok: true;
   }> {
     const deleteById = await this.contactsRepository.delete({

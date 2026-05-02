@@ -45,7 +45,9 @@ export function MessageList({
           isOwn={isOwn}
           showAuthor={showAuthor}
           onRetry={
-            message.clientMessageId ? () => onRetry(message.clientMessageId!) : undefined
+            message.clientMessageId
+              ? () => onRetry(message.clientMessageId!)
+              : undefined
           }
         />
       ))}

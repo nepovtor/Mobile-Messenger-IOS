@@ -5,6 +5,7 @@ import { ConnectionBadge } from "./ConnectionBadge";
 import { Button } from "../ui/Button";
 import type { ConnectionState } from "../../realtime/realtimeTypes";
 import { Input } from "../ui/Input";
+import { validateDisplayName } from "../../utils/displayName";
 
 export function UserMenu({
   user,
@@ -30,7 +31,9 @@ export function UserMenu({
     <div className="rounded-2xl border border-white/10 bg-white/6 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{user.displayName}</p>
+          <p className="truncate text-sm font-semibold text-white">
+            {user.displayName}
+          </p>
           <p className="truncate text-xs text-slate-400">{user.contact}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -43,7 +46,10 @@ export function UserMenu({
 
       {isEditing ? (
         <div className="mt-3 space-y-2">
-          <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+          <Input
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
           {message ? <p className="text-xs text-slate-300">{message}</p> : null}
           <div className="flex gap-2">
             <Button
@@ -62,12 +68,9 @@ export function UserMenu({
               disabled={isSaving}
               onClick={async () => {
                 const trimmed = displayName.trim();
-                if (trimmed.length < 2) {
-                  setMessage("Display name must be at least 2 characters.");
-                  return;
-                }
-                if (trimmed.length > 40) {
-                  setMessage("Display name must be 40 characters or fewer.");
+                const validationMessage = validateDisplayName(trimmed);
+                if (validationMessage) {
+                  setMessage(validationMessage);
                   return;
                 }
                 setSaving(true);
@@ -77,7 +80,9 @@ export function UserMenu({
                   setEditing(false);
                 } catch (error) {
                   setMessage(
-                    error instanceof Error ? error.message : "Could not update display name.",
+                    error instanceof Error
+                      ? error.message
+                      : "Could not update display name.",
                   );
                 } finally {
                   setSaving(false);
@@ -102,7 +107,9 @@ export function UserMenu({
           </Button>
         </div>
       )}
-      {!isEditing && message ? <p className="mt-2 text-xs text-slate-300">{message}</p> : null}
+      {!isEditing && message ? (
+        <p className="mt-2 text-xs text-slate-300">{message}</p>
+      ) : null}
     </div>
   );
 }

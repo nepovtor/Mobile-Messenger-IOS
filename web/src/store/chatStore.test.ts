@@ -51,7 +51,9 @@ describe("chatStore", () => {
     });
 
     expect(chatStore.getState().messagesByChatId["chat-1"]).toHaveLength(1);
-    expect(chatStore.getState().messagesByChatId["chat-1"][0].status).toBe("sent");
+    expect(chatStore.getState().messagesByChatId["chat-1"][0].status).toBe(
+      "sent",
+    );
   });
 
   it("failed messages are marked failed with reason", () => {
@@ -69,9 +71,13 @@ describe("chatStore", () => {
       status: "sending",
       createdAt: "2026-04-28T09:00:00.000Z",
     });
-    chatStore.getState().markMessageFailed("chat-1", "client-2", "Network down");
+    chatStore
+      .getState()
+      .markMessageFailed("chat-1", "client-2", "Network down");
 
-    expect(chatStore.getState().messagesByChatId["chat-1"][0].status).toBe("failed");
+    expect(chatStore.getState().messagesByChatId["chat-1"][0].status).toBe(
+      "failed",
+    );
     expect(chatStore.getState().messagesByChatId["chat-1"][0].error).toBe(
       "Network down",
     );

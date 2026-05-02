@@ -83,18 +83,4 @@ describe("authApi", () => {
       code: "TELEGRAM_NOT_LINKED",
     });
   });
-
-  it("updateProfile sends the trimmed display name payload", async () => {
-    await authApi.updateProfile("Новое имя");
-
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/users/me/profile"),
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({
-          displayName: "Новое имя",
-        }),
-      }),
-    );
-  });
 });

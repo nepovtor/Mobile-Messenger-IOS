@@ -25,7 +25,9 @@ export class UsersService {
     const trimmedDisplayName = dto.displayName.trim();
     const length = Array.from(trimmedDisplayName).length;
     if (length < 2) {
-      throw new BadRequestException("Display name must be at least 2 characters");
+      throw new BadRequestException(
+        "Display name must be at least 2 characters",
+      );
     }
     if (length > 40) {
       throw new BadRequestException(

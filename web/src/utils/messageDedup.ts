@@ -20,7 +20,10 @@ export function dedupeMessages(messages: Message[]): Message[] {
   );
 }
 
-export function upsertMessage(messages: Message[], incoming: Message): Message[] {
+export function upsertMessage(
+  messages: Message[],
+  incoming: Message,
+): Message[] {
   return dedupeMessages([...messages, incoming]);
 }
 
@@ -35,7 +38,9 @@ function mergeMessages(existing: Message | null, incoming: Message): Message {
     id: incoming.id || existing.id,
     messageID: incoming.messageID || existing.messageID,
     clientMessageId:
-      incoming.clientMessageId || existing.clientMessageId || existing.messageID,
+      incoming.clientMessageId ||
+      existing.clientMessageId ||
+      existing.messageID,
     error: incoming.error ?? existing.error ?? null,
   };
 }
