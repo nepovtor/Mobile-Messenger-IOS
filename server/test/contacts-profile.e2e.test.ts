@@ -508,14 +508,12 @@ test("location: contacts see only sharing contacts", async (t) => {
 
   await ownerApi.post("/api/contacts").send({ phone: "+15550100023" });
   await ownerApi.post("/api/contacts").send({ phone: "+15550100024" });
-  await authedRequest(app, visibleContact.token)
-    .post("/api/location/me")
-    .send({
-      latitude: 53.91,
-      longitude: 27.57,
-      accuracy: 18,
-      sharingEnabled: true,
-    });
+  await authedRequest(app, visibleContact.token).post("/api/location/me").send({
+    latitude: 53.91,
+    longitude: 27.57,
+    accuracy: 18,
+    sharingEnabled: true,
+  });
 
   const response = await ownerApi.get("/api/location/contacts");
 
@@ -542,23 +540,19 @@ test("location: contacts do not see users without consent or non-contacts", asyn
 
   await ownerApi.post("/api/contacts").send({ phone: "+15550100026" });
 
-  await authedRequest(app, visibleContact.token)
-    .post("/api/location/me")
-    .send({
-      latitude: 53.92,
-      longitude: 27.58,
-      accuracy: 11,
-      sharingEnabled: false,
-    });
+  await authedRequest(app, visibleContact.token).post("/api/location/me").send({
+    latitude: 53.92,
+    longitude: 27.58,
+    accuracy: 11,
+    sharingEnabled: false,
+  });
 
-  await authedRequest(app, outsider.token)
-    .post("/api/location/me")
-    .send({
-      latitude: 53.93,
-      longitude: 27.59,
-      accuracy: 9,
-      sharingEnabled: true,
-    });
+  await authedRequest(app, outsider.token).post("/api/location/me").send({
+    latitude: 53.93,
+    longitude: 27.59,
+    accuracy: 9,
+    sharingEnabled: true,
+  });
 
   const response = await ownerApi.get("/api/location/contacts");
 

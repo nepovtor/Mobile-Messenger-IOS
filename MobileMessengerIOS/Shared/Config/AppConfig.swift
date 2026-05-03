@@ -40,6 +40,8 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
     private enum Constants {
         static let restBaseURLOverrideKey = "debug.rest_base_url_override"
         static let defaultTelegramBotUsername = "verificMobileMessengerIOSbot"
+        static let fallbackRESTBaseURLString = "https://mobile-messenger-ios-production.up.railway.app/api"
+        static let fallbackWebSocketURLString = "wss://mobile-messenger-ios-production.up.railway.app/realtime"
     }
 
     @Published public private(set) var restBaseURL: URL
@@ -56,9 +58,11 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
         self.features = Self.readFeatures(from: bundle)
 
         if let overrideValue = defaults.string(forKey: Constants.restBaseURLOverrideKey),
-           let overrideURL = try? Self.normalizeRESTBaseURL(overrideValue) {
+           let overrideURL = try? Self.normalizeRESTBaseURL(overrideValue),
+           !Self.isPlaceholderRESTBaseURL(overrideURL) {
             self.restBaseURL = overrideURL
         } else {
+            defaults.removeObject(forKey: Constants.restBaseURLOverrideKey)
             self.restBaseURL = self.defaultRESTBaseURL
         }
     }
@@ -78,6 +82,9 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     public func updateRESTBaseURL(_ rawValue: String) throws {
         let normalizedURL = try Self.normalizeRESTBaseURL(rawValue)
+        guard !Self.isPlaceholderRESTBaseURL(normalizedURL) else {
+            throw ConfigError.invalidRESTBaseURL(rawValue)
+        }
         restBaseURL = normalizedURL
         defaults.set(normalizedURL.absoluteString, forKey: Constants.restBaseURLOverrideKey)
     }
@@ -89,11 +96,12 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     private static func readRESTBaseURL(from bundle: Bundle) -> URL {
         if let string = bundle.object(forInfoDictionaryKey: "REST_BASE_URL") as? String,
-           let url = try? normalizeRESTBaseURL(string) {
+           let url = try? normalizeRESTBaseURL(string),
+           !isPlaceholderRESTBaseURL(url) {
             return url
         }
 
-        return URL(string: "https://api.example.com/api")!
+        return URL(string: Constants.fallbackRESTBaseURLString)!
     }
 
     private static func readTelegramBotUsername(from bundle: Bundle) -> String? {
@@ -168,7 +176,7 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
 
     private static func makeWebSocketURL(from restBaseURL: URL) -> URL {
         guard var components = URLComponents(url: restBaseURL, resolvingAgainstBaseURL: false) else {
-            return URL(string: "wss://ws.example.com/realtime")!
+            return URL(string: Constants.fallbackWebSocketURLString)!
         }
 
         components.scheme = components.scheme == "https" ? "wss" : "ws"
@@ -176,6 +184,14 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
         components.fragment = nil
         components.path = "/realtime"
 
-        return components.url ?? URL(string: "wss://ws.example.com/realtime")!
+        return components.url ?? URL(string: Constants.fallbackWebSocketURLString)!
+    }
+
+    private static func isPlaceholderRESTBaseURL(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased(), !host.isEmpty else {
+            return true
+        }
+
+        return host.contains("example.com") || host.contains("your-production-domain.com")
     }
 }

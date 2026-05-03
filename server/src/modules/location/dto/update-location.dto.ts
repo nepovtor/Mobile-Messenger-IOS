@@ -1,10 +1,4 @@
-import {
-  IsBoolean,
-  IsNumber,
-  IsOptional,
-  Max,
-  Min,
-} from "class-validator";
+import { IsBoolean, IsNumber, IsOptional, Max, Min } from "class-validator";
 
 export class UpdateLocationDto {
   @IsNumber()

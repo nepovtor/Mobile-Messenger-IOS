@@ -1041,7 +1041,7 @@ final class RealtimeServiceTests: XCTestCase {
             switch value.event {
             case .connected, .disconnected:
                 continue
-            case .message, .messageRead, .typing:
+            case .message, .messageUpdated, .messageDeleted, .messageRead, .typing:
                 return value
             }
         }

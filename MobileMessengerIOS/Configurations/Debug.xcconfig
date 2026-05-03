@@ -1,11 +1,11 @@
 SLASH = /
 PUBLIC_API_SCHEME = https
-PUBLIC_API_HOST = api.staging.example.com
+PUBLIC_API_HOST = mobile-messenger-ios-production.up.railway.app
 PUBLIC_API_PREFIX = api
-PUBLIC_WS_HOST = ws.staging.example.com
+PUBLIC_WS_HOST = mobile-messenger-ios-production.up.railway.app
 #include? "Debug.public.xcconfig"
 REST_BASE_URL = $(PUBLIC_API_SCHEME):$(SLASH)$(SLASH)$(PUBLIC_API_HOST)$(SLASH)$(PUBLIC_API_PREFIX)
-WEBSOCKET_URL = wss:$(SLASH)$(SLASH)$(PUBLIC_WS_HOST)
+WEBSOCKET_URL = wss:$(SLASH)$(SLASH)$(PUBLIC_WS_HOST)$(SLASH)realtime
 TELEGRAM_BOT_USERNAME = verificMobileMessengerIOSbot
 FEATURE_REALTIME = YES
 FEATURE_PUSH = YES

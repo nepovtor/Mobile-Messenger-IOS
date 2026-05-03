@@ -33,7 +33,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof Error) {
       this.logger.error(
         `Unhandled error: ${exception.message}`,
-        exception.stack
+        exception.stack,
       );
       response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,

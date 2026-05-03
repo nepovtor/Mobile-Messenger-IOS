@@ -717,7 +717,9 @@ export class ChatService implements OnModuleInit {
     return message;
   }
 
-  private async requireHydratedMessage(messageID: string): Promise<MessageEntity> {
+  private async requireHydratedMessage(
+    messageID: string,
+  ): Promise<MessageEntity> {
     const message = await this.messagesRepository.findOne({
       where: { id: messageID as MessageEntity["id"] },
       relations: { author: true, media: true },

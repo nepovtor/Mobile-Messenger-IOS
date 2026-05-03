@@ -83,6 +83,7 @@
 		CA58DA902F815CAE000D87A4 /* SetTypingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */; };
 		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */; };
 		FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */; };
+		FD728651F5C71B50F190D101 /* AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470911DE789761C6C36CB /* AppConfigTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -101,6 +102,7 @@
 		7B1BDB0D7A65535E6E00803C /* MobileMessengerIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MobileMessengerIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
 		A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		A72470911DE789761C6C36CB /* AppConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AppConfigTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		D10000000000000000000101 /* Contact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Contact.swift; sourceTree = "<group>"; };
 		D10000000000000000000102 /* ContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsRepository.swift; sourceTree = "<group>"; };
@@ -220,6 +222,7 @@
 		79BFD70436D0191426B2AB6F /* MobileMessengerIOSTests */ = {
 			isa = PBXGroup;
 			children = (
+				A72470911DE789761C6C36CB /* AppConfigTests.swift */,
 				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */,
 				A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */,
 			);
@@ -726,6 +729,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FD728651F5C71B50F190D101 /* AppConfigTests.swift in Sources */,
 				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */,
 				FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */,
 			);

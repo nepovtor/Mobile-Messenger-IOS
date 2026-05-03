@@ -95,7 +95,9 @@ export class LocationService {
     return { ok: true };
   }
 
-  async getContactLocations(userId: string): Promise<ContactLocationResponse[]> {
+  async getContactLocations(
+    userId: string,
+  ): Promise<ContactLocationResponse[]> {
     const contacts = await this.contactsRepository.find({
       where: { ownerUserId: userId },
       relations: { contactUser: true },
