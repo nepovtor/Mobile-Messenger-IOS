@@ -1300,10 +1300,7 @@ test("Telegram text phone linking is rejected when TELEGRAM_ALLOW_TEXT_PHONE_LIN
   const link = await repository.findOneBy({ phone: "+79991234567" });
 
   assert.equal(link, null);
-  assert.match(
-    String(sentMessages[0]?.text),
-    /Откройте приложение и нажмите/i,
-  );
+  assert.match(String(sentMessages[0]?.text), /Откройте приложение и нажмите/i);
 });
 
 test("Telegram text phone linking is allowed only when TELEGRAM_ALLOW_TEXT_PHONE_LINKING=true", async (t) => {
@@ -1710,9 +1707,9 @@ test("contact phone must match pairing phone", async (t) => {
   const linksRepository = app.get<Repository<TelegramLinkEntity>>(
     getRepositoryToken(TelegramLinkEntity),
   );
-  const pairingTokensRepository = app.get<Repository<TelegramPairingTokenEntity>>(
-    getRepositoryToken(TelegramPairingTokenEntity),
-  );
+  const pairingTokensRepository = app.get<
+    Repository<TelegramPairingTokenEntity>
+  >(getRepositoryToken(TelegramPairingTokenEntity));
   const link = await linksRepository.findOneBy({ phone: "+375291234567" });
   const token = await pairingTokensRepository.findOneByOrFail({
     phone: "+375291234567",
@@ -1775,10 +1772,12 @@ test("secure pairing stores telegramUserId and chatId on TelegramLink", async (t
   const linksRepository = app.get<Repository<TelegramLinkEntity>>(
     getRepositoryToken(TelegramLinkEntity),
   );
-  const pairingTokensRepository = app.get<Repository<TelegramPairingTokenEntity>>(
-    getRepositoryToken(TelegramPairingTokenEntity),
-  );
-  const link = await linksRepository.findOneByOrFail({ phone: "+375291234567" });
+  const pairingTokensRepository = app.get<
+    Repository<TelegramPairingTokenEntity>
+  >(getRepositoryToken(TelegramPairingTokenEntity));
+  const link = await linksRepository.findOneByOrFail({
+    phone: "+375291234567",
+  });
   const token = await pairingTokensRepository.findOneByOrFail({
     phone: "+375291234567",
   });
