@@ -267,36 +267,26 @@ struct AuthView: View {
     }
 
     private var shouldShowBackendSupport: Bool {
-        container.isUsingCustomRESTBaseURL || viewModel.errorMessage != nil
+        container.isUsingCustomRESTBaseURL
     }
 
     private var backendSupportSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            statusLine(
-                title: container.isUsingCustomRESTBaseURL ? "Current backend (saved override)" : "Current backend",
-                value: container.restBaseURLString
+            Text("Кастомный backend активен только на этом устройстве.")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text("Если авторизация или Telegram pairing работают нестабильно, можно сразу сбросить override и вернуться на встроенный Railway backend. Адрес API и токены здесь не показываются.")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+
+            compactActionButton(
+                title: "Сбросить backend",
+                systemImage: "arrow.counterclockwise",
+                prominent: false,
+                action: resetBackendConfiguration
             )
-
-            if container.isUsingCustomRESTBaseURL {
-                statusLine(title: "Bundled backend", value: container.defaultRESTBaseURLString)
-
-                Text("На этом устройстве сохранён кастомный backend. Если авторизация не работает, можно сразу сбросить его на встроенный Railway backend.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                compactActionButton(
-                    title: "Сбросить backend",
-                    systemImage: "arrow.counterclockwise",
-                    prominent: false,
-                    action: resetBackendConfiguration
-                )
-            } else {
-                Text("Сборка использует встроенный Railway backend по умолчанию.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(16)
         .background(
@@ -322,20 +312,6 @@ struct AuthView: View {
                 .font(.system(size: 21, weight: .bold, design: .rounded))
         }
         .foregroundStyle(.white)
-    }
-
-    private func statusLine(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.white.opacity(0.45))
-
-            Text(value)
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.92))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 
     private func primaryButton(

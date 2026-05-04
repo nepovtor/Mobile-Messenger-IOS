@@ -1594,6 +1594,70 @@ test("contact from a different user_id is rejected when TELEGRAM_REQUIRE_OWN_CON
   );
 });
 
+test("contact without user_id is rejected when TELEGRAM_REQUIRE_OWN_CONTACT=true", async (t) => {
+  const app = await createTestApp({ verificationProvider: "telegram" });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const pairingResponse = await request(app.getHttpServer())
+    .post("/api/auth/telegram/pairing")
+    .send({ phone: "+375291234567" })
+    .expect(201);
+  const startToken = new URL(
+    pairingResponse.body.telegramStartUrl,
+  ).searchParams.get("start");
+  assert.ok(startToken);
+
+  const originalFetch = globalThis.fetch;
+  const sentMessages: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    sentMessages.push(body);
+    return new Response(JSON.stringify({ ok: true, result: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const telegramBotService = app.get(TelegramBotService);
+  await telegramBotService.handleUpdate({
+    update_id: 7,
+    message: {
+      message_id: 16,
+      text: `/start ${startToken}`,
+      chat: { id: 903, username: "pair_demo", first_name: "Pair" },
+      from: { id: 903, username: "pair_demo", first_name: "Pair" },
+    },
+  });
+  await telegramBotService.handleUpdate({
+    update_id: 8,
+    message: {
+      message_id: 17,
+      chat: { id: 903, username: "pair_demo", first_name: "Pair" },
+      from: { id: 903, username: "pair_demo", first_name: "Pair" },
+      contact: {
+        phone_number: "375291234567",
+        first_name: "Pair",
+      },
+    },
+  });
+
+  const linksRepository = app.get<Repository<TelegramLinkEntity>>(
+    getRepositoryToken(TelegramLinkEntity),
+  );
+  const link = await linksRepository.findOneBy({ phone: "+375291234567" });
+
+  assert.equal(link, null);
+  assert.match(
+    String(sentMessages[sentMessages.length - 1]?.text),
+    /Telegram не подтвердил владельца контакта/i,
+  );
+});
+
 test("contact phone must match pairing phone", async (t) => {
   const app = await createTestApp({ verificationProvider: "telegram" });
   t.after(async () => {
