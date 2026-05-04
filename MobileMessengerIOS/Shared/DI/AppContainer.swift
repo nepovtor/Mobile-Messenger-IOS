@@ -298,7 +298,8 @@ public final class AppContainer: ObservableObject {
         AuthViewModel(
             authService: RESTAuthService(baseURL: configService.restBaseURL),
             sessionStore: sessionStore,
-            telegramBotURL: configService.telegramBotURL
+            telegramBotURL: configService.telegramBotURL,
+            defaults: defaults
         )
     }
 

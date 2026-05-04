@@ -249,21 +249,84 @@ struct AuthView: View {
 
     private var demoAccountsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Demo accounts")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("Demo accounts")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Spacer(minLength: 0)
+
+                Text("Листайте вбок")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.45))
+            }
+
+            if let lastUsedLogin = viewModel.lastUsedLogin {
+                lastUsedLoginSection(lastUsedLogin)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 14) {
+                    ForEach(viewModel.demoAccounts) { account in
+                        DemoAccountCard(
+                            account: account,
+                            isSelected: account.contact == viewModel.contact
+                        ) {
+                            viewModel.selectDemoAccount(account)
+                        } onQuickSignIn: {
+                            Task { await viewModel.signInDemoAccount(account) }
+                        }
+                        .frame(width: 312)
+                    }
+                }
+            }
+
+            Text("Последний выбранный вход запоминается на этом устройстве.")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.55))
+        }
+    }
+
+    private func lastUsedLoginSection(_ lastUsedLogin: AuthLastUsedLogin) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Последний вход")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
-            ForEach(viewModel.demoAccounts) { account in
-                DemoAccountCard(
-                    account: account,
-                    isSelected: account.contact == viewModel.contact
+            Text(lastUsedLogin.title)
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text(lastUsedLogin.subtitle)
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                compactActionButton(
+                    title: "Заполнить",
+                    systemImage: "arrow.clockwise",
+                    prominent: false
                 ) {
-                    viewModel.selectDemoAccount(account)
-                } onQuickSignIn: {
-                    Task { await viewModel.signInDemoAccount(account) }
+                    viewModel.applyLastUsedLogin()
+                }
+
+                if lastUsedLogin.demoAccount != nil {
+                    compactActionButton(
+                        title: "Войти сразу",
+                        systemImage: "person.crop.circle.badge.checkmark",
+                        prominent: true
+                    ) {
+                        Task { await viewModel.signInLastUsedDemoAccount() }
+                    }
                 }
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
     }
 
     private var shouldShowBackendSupport: Bool {
@@ -482,6 +545,7 @@ private struct DemoAccountCard: View {
             }
             .buttonStyle(.plain)
         }
+        .frame(maxHeight: .infinity)
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)

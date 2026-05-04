@@ -37,8 +37,30 @@ public struct AuthDemoAccount: Identifiable, Hashable, Sendable {
     }
 }
 
+public struct AuthLastUsedLogin: Equatable, Sendable {
+    public let contact: String
+    public let demoAccount: AuthDemoAccount?
+
+    public var title: String {
+        demoAccount?.displayName ?? "Последний номер"
+    }
+
+    public var subtitle: String {
+        if let demoAccount {
+            return "\(demoAccount.contact) · Demo account"
+        }
+
+        return contact
+    }
+}
+
 @MainActor
 public final class AuthViewModel: ObservableObject {
+    enum DefaultsKeys {
+        static let lastUsedContact = "auth.last_used_contact"
+        static let lastUsedDemoContact = "auth.last_used_demo_contact"
+    }
+
     @Published public var screenMode: AuthScreenMode = .signIn
     @Published public var credentialMode: AuthCredentialMode = .code
     @Published public var method: AuthMethod = .phone
@@ -53,10 +75,12 @@ public final class AuthViewModel: ObservableObject {
     @Published public var isCodeSent: Bool = false
     @Published public var codeExpirationSeconds: Int?
     @Published public var telegramPairingExpiresIn: Int?
+    @Published public private(set) var lastUsedLogin: AuthLastUsedLogin?
     public let telegramBotURL: URL?
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
+    private let defaults: UserDefaults
     public let demoAccounts: [AuthDemoAccount] = [
         AuthDemoAccount(displayName: "Анна Demo", contact: "+15551230011", password: "demo1111"),
         AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222"),
@@ -68,11 +92,14 @@ public final class AuthViewModel: ObservableObject {
     public init(
         authService: AuthNetworking,
         sessionStore: SessionStore,
-        telegramBotURL: URL? = nil
+        telegramBotURL: URL? = nil,
+        defaults: UserDefaults = .standard
     ) {
         self.authService = authService
         self.sessionStore = sessionStore
         self.telegramBotURL = telegramBotURL
+        self.defaults = defaults
+        restoreLastUsedLogin()
     }
 
     public var isContactValid: Bool {
@@ -93,6 +120,10 @@ public final class AuthViewModel: ObservableObject {
 
     public var isPasswordValid: Bool {
         password.trimmingCharacters(in: .whitespacesAndNewlines).count >= 4
+    }
+
+    public var selectedDemoAccount: AuthDemoAccount? {
+        demoAccounts.first { $0.contact == contact }
     }
 
     public func setScreenMode(_ mode: AuthScreenMode) {
@@ -119,6 +150,7 @@ public final class AuthViewModel: ObservableObject {
         defer { isRequestingCode = false }
 
         let sanitizedContact = sanitize(contact: contact)
+        rememberLastUsedLogin(contact: sanitizedContact)
 
         do {
             let response = try await authService.requestCode(method: method, contact: sanitizedContact)
@@ -137,6 +169,7 @@ public final class AuthViewModel: ObservableObject {
         defer { isLinkingTelegram = false }
 
         let sanitizedContact = sanitize(contact: contact)
+        rememberLastUsedLogin(contact: sanitizedContact)
 
         do {
             let response = try await authService.requestTelegramPairing(phone: sanitizedContact)
@@ -159,6 +192,7 @@ public final class AuthViewModel: ObservableObject {
 
         let sanitizedContact = sanitize(contact: contact)
         let sanitizedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        rememberLastUsedLogin(contact: sanitizedContact)
 
         do {
             let response = try await authService.verifyCode(method: method, contact: sanitizedContact, code: sanitizedCode)
@@ -176,6 +210,7 @@ public final class AuthViewModel: ObservableObject {
 
         let sanitizedContact = sanitize(contact: contact)
         let sanitizedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        rememberLastUsedLogin(contact: sanitizedContact)
 
         do {
             let response = try await authService.signIn(
@@ -199,8 +234,25 @@ public final class AuthViewModel: ObservableObject {
     }
 
     public func signInDemoAccount(_ account: AuthDemoAccount) async {
+        rememberLastUsedLogin(account: account)
         selectDemoAccount(account)
         await signInWithPassword()
+    }
+
+    public func applyLastUsedLogin() {
+        guard let lastUsedLogin else { return }
+
+        method = .phone
+        screenMode = .signIn
+        credentialMode = .code
+        contact = lastUsedLogin.contact
+        password = lastUsedLogin.demoAccount?.password ?? ""
+        clearTransientState(keepContact: true)
+    }
+
+    public func signInLastUsedDemoAccount() async {
+        guard let account = lastUsedLogin?.demoAccount else { return }
+        await signInDemoAccount(account)
     }
 
     public func reset() {
@@ -235,6 +287,53 @@ public final class AuthViewModel: ObservableObject {
         case .email:
             return trimmed.lowercased()
         }
+    }
+
+    private func rememberLastUsedLogin(contact: String) {
+        let trimmedContact = contact.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContact.isEmpty else { return }
+
+        let matchedDemoAccount = demoAccounts.first { $0.contact == trimmedContact }
+        defaults.set(trimmedContact, forKey: DefaultsKeys.lastUsedContact)
+        if let matchedDemoAccount {
+            defaults.set(matchedDemoAccount.contact, forKey: DefaultsKeys.lastUsedDemoContact)
+        } else {
+            defaults.removeObject(forKey: DefaultsKeys.lastUsedDemoContact)
+        }
+
+        lastUsedLogin = AuthLastUsedLogin(
+            contact: trimmedContact,
+            demoAccount: matchedDemoAccount
+        )
+    }
+
+    private func rememberLastUsedLogin(account: AuthDemoAccount) {
+        defaults.set(account.contact, forKey: DefaultsKeys.lastUsedContact)
+        defaults.set(account.contact, forKey: DefaultsKeys.lastUsedDemoContact)
+        lastUsedLogin = AuthLastUsedLogin(contact: account.contact, demoAccount: account)
+    }
+
+    private func restoreLastUsedLogin() {
+        guard
+            let lastUsedContact = defaults.string(forKey: DefaultsKeys.lastUsedContact)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            !lastUsedContact.isEmpty
+        else {
+            return
+        }
+
+        let storedDemoContact = defaults.string(forKey: DefaultsKeys.lastUsedDemoContact)
+        let matchedDemoAccount = demoAccounts.first { account in
+            account.contact == storedDemoContact || account.contact == lastUsedContact
+        }
+
+        lastUsedLogin = AuthLastUsedLogin(
+            contact: lastUsedContact,
+            demoAccount: matchedDemoAccount
+        )
+
+        contact = lastUsedContact
+        password = matchedDemoAccount?.password ?? ""
     }
 
     private func clearTransientState(keepContact: Bool) {

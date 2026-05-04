@@ -604,6 +604,63 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertEqual(displayName, "Анна Demo")
     }
 
+    func testLastUsedPhoneRestoresOnNextViewModel() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let authService = AuthServiceSpy()
+        let sessionStore = SessionStore(
+            tokenStore: InMemoryTokenStore(),
+            defaults: defaults
+        )
+        let firstViewModel = AuthViewModel(
+            authService: authService,
+            sessionStore: sessionStore,
+            defaults: defaults
+        )
+        firstViewModel.contact = " +375 (29) 123-45-67 "
+
+        await firstViewModel.requestCode()
+
+        let restoredViewModel = AuthViewModel(
+            authService: AuthServiceSpy(),
+            sessionStore: makeSessionStore(),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(restoredViewModel.contact, "+375291234567")
+        XCTAssertEqual(restoredViewModel.lastUsedLogin?.contact, "+375291234567")
+        XCTAssertNil(restoredViewModel.lastUsedLogin?.demoAccount)
+    }
+
+    func testLastUsedDemoAccountRestoresAndCanSignInAgain() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let firstAuthService = AuthServiceSpy()
+        let firstViewModel = AuthViewModel(
+            authService: firstAuthService,
+            sessionStore: makeSessionStore(),
+            defaults: defaults
+        )
+        let account = firstViewModel.demoAccounts[2]
+
+        await firstViewModel.signInDemoAccount(account)
+
+        let restoredAuthService = AuthServiceSpy()
+        let restoredViewModel = AuthViewModel(
+            authService: restoredAuthService,
+            sessionStore: makeSessionStore(),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(restoredViewModel.contact, account.contact)
+        XCTAssertEqual(restoredViewModel.password, account.password)
+        XCTAssertEqual(restoredViewModel.lastUsedLogin?.demoAccount?.contact, account.contact)
+
+        await restoredViewModel.signInLastUsedDemoAccount()
+
+        let signIn = await restoredAuthService.lastSignInInput
+        XCTAssertEqual(signIn?.contact, account.contact)
+        XCTAssertEqual(signIn?.password, account.password)
+    }
+
 }
 
 final class TransportDecodingTests: XCTestCase {
