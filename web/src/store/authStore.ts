@@ -7,6 +7,7 @@ import type {
   AuthResponse,
   CurrentUser,
   LoginPayload,
+  TelegramPairingResponse,
 } from "../types/auth";
 import { storage } from "../utils/storage";
 import { validateDisplayName } from "../utils/displayName";
@@ -19,6 +20,7 @@ type AuthStore = {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  requestTelegramPairing: (phone: string) => Promise<TelegramPairingResponse>;
   requestCode: (phone: string) => Promise<AuthCodeResponse>;
   verifyCode: (phone: string, code: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
@@ -35,6 +37,18 @@ export const authStore = create<AuthStore>((set, get) => ({
   isAuthenticated: Boolean(storage.getToken()),
   isLoading: false,
   error: null,
+  async requestTelegramPairing(phone) {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await authApi.requestTelegramPairing(phone);
+      set({ isLoading: false, error: null });
+      return response;
+    } catch (error) {
+      const message = mapAuthErrorMessage(error);
+      set({ isLoading: false, error: message });
+      throw error;
+    }
+  },
   async requestCode(phone) {
     set({ isLoading: true, error: null });
     try {
@@ -194,7 +208,7 @@ function mapAuthErrorMessage(
   fallback = "Could not complete the authentication request.",
 ) {
   if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
-    return "Open the Telegram bot, press /start, send your phone number there, and then request the code again.";
+    return "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту.";
   }
 
   if (error instanceof Error) {

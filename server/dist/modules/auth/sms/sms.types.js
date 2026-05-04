@@ -10,7 +10,7 @@ class SmsProviderUnavailableError extends Error {
 }
 exports.SmsProviderUnavailableError = SmsProviderUnavailableError;
 class TelegramNotLinkedError extends Error {
-    constructor(message = "Open the Telegram bot and send your phone number before requesting a code.") {
+    constructor(message = "Link Telegram in the app first and send your own contact to the bot before requesting a code.") {
         super(message);
         this.code = "TELEGRAM_NOT_LINKED";
         this.name = "TelegramNotLinkedError";

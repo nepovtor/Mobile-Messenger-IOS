@@ -19,6 +19,11 @@ export declare function getSmsProvider(): SmsProviderName;
 export declare function getTelegramBotToken(): string | null;
 export declare function getTelegramBotUsername(): string | null;
 export declare function hasTelegramBotConfig(): boolean;
+export declare function isTelegramTextPhoneLinkingAllowed(): boolean;
+export declare function isTelegramOwnContactRequired(): boolean;
+export declare function getTelegramPairingTokenTTLSeconds(): number;
+export declare function getTelegramLinkResendCooldownSeconds(): number;
+export declare function isTelegramRelinkAllowed(): boolean;
 export declare function getSmsFrom(): string;
 export declare function canUseConsoleSmsInCurrentEnv(): boolean;
 export declare function getTwilioConfig(): {

@@ -15,7 +15,7 @@ export class TelegramNotLinkedError extends Error {
   readonly code = "TELEGRAM_NOT_LINKED";
 
   constructor(
-    message = "Open the Telegram bot and send your phone number before requesting a code.",
+    message = "Link Telegram in the app first and send your own contact to the bot before requesting a code.",
   ) {
     super(message);
     this.name = "TelegramNotLinkedError";

@@ -9,15 +9,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
+const contact_entity_1 = require("../entities/contact.entity");
+const location_share_entity_1 = require("../entities/location-share.entity");
 const phone_verification_code_entity_1 = require("../entities/phone-verification-code.entity");
 const telegram_link_entity_1 = require("../entities/telegram-link.entity");
+const telegram_pairing_token_entity_1 = require("../entities/telegram-pairing-token.entity");
 const runtime_config_1 = require("./common/runtime-config");
 const auth_module_1 = require("./auth/auth.module");
 const chat_module_1 = require("./chat/chat.module");
+const contacts_module_1 = require("./contacts/contacts.module");
 const docs_module_1 = require("./docs/docs.module");
 const health_module_1 = require("./health/health.module");
 const media_module_1 = require("./media/media.module");
+const location_module_1 = require("./location/location.module");
 const realtime_module_1 = require("./realtime/realtime.module");
+const users_module_1 = require("./users/users.module");
 const version_module_1 = require("./version/version.module");
 let AppModule = class AppModule {
 };
@@ -36,12 +42,21 @@ exports.AppModule = AppModule = __decorate([
                 synchronize: (0, runtime_config_1.isDatabaseSynchronizationEnabled)(),
                 retryAttempts: 5,
                 retryDelay: 2000,
-                entities: [phone_verification_code_entity_1.PhoneVerificationCodeEntity, telegram_link_entity_1.TelegramLinkEntity],
+                entities: [
+                    contact_entity_1.ContactEntity,
+                    location_share_entity_1.LocationShareEntity,
+                    phone_verification_code_entity_1.PhoneVerificationCodeEntity,
+                    telegram_link_entity_1.TelegramLinkEntity,
+                    telegram_pairing_token_entity_1.TelegramPairingTokenEntity,
+                ],
             }),
             docs_module_1.DocsModule,
             health_module_1.HealthModule,
             version_module_1.VersionModule,
             auth_module_1.AuthModule,
+            users_module_1.UsersModule,
+            contacts_module_1.ContactsModule,
+            location_module_1.LocationModule,
             realtime_module_1.RealtimeModule,
             media_module_1.MediaModule,
             chat_module_1.ChatModule,

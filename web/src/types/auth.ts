@@ -28,3 +28,9 @@ export type AuthCodeResponse = {
   expiresIn: number;
   debugCode?: string;
 };
+
+export type TelegramPairingResponse = {
+  botUsername: string;
+  telegramStartUrl: string;
+  expiresIn: number;
+};

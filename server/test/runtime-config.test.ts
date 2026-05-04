@@ -8,12 +8,17 @@ import {
   getAuthTestCode,
   getCorsOrigins,
   getJwtSecret,
+  getTelegramLinkResendCooldownSeconds,
   getTelegramBotToken,
   getTelegramBotUsername,
+  getTelegramPairingTokenTTLSeconds,
   getVerificationProvider,
   getSmsProvider,
   getTwilioConfig,
   hasTelegramBotConfig,
+  isTelegramOwnContactRequired,
+  isTelegramRelinkAllowed,
+  isTelegramTextPhoneLinkingAllowed,
   readBooleanEnv,
 } from "../src/modules/common/runtime-config";
 
@@ -141,12 +146,22 @@ test("verification provider reads telegram config", () => {
       VERIFICATION_PROVIDER: "telegram",
       TELEGRAM_BOT_TOKEN: "bot-token",
       TELEGRAM_BOT_USERNAME: "@mobile_demo_bot",
+      TELEGRAM_ALLOW_TEXT_PHONE_LINKING: "true",
+      TELEGRAM_REQUIRE_OWN_CONTACT: "true",
+      TELEGRAM_PAIRING_TOKEN_TTL_SECONDS: "600",
+      TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS: "60",
+      TELEGRAM_ALLOW_RELINK: "false",
     },
     () => {
       assert.equal(getVerificationProvider(), "telegram");
       assert.equal(getTelegramBotToken(), "bot-token");
       assert.equal(getTelegramBotUsername(), "mobile_demo_bot");
       assert.equal(hasTelegramBotConfig(), true);
+      assert.equal(isTelegramTextPhoneLinkingAllowed(), true);
+      assert.equal(isTelegramOwnContactRequired(), true);
+      assert.equal(getTelegramPairingTokenTTLSeconds(), 600);
+      assert.equal(getTelegramLinkResendCooldownSeconds(), 60);
+      assert.equal(isTelegramRelinkAllowed(), false);
     },
   );
 });

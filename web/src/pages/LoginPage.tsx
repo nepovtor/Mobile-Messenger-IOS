@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { DemoAccountCard } from "../components/auth/DemoAccountCard";
 import { DemoPasswordForm, LoginForm } from "../components/auth/LoginForm";
-import { appConfig } from "../config/api";
 import { Card } from "../components/ui/Card";
 import { authStore } from "../store/authStore";
 import { useState } from "react";
@@ -40,8 +39,15 @@ const demoAccounts = [
 ];
 
 export function LoginPage() {
-  const { login, requestCode, verifyCode, isLoading, error, clearError } =
-    authStore();
+  const {
+    login,
+    requestTelegramPairing,
+    requestCode,
+    verifyCode,
+    isLoading,
+    error,
+    clearError,
+  } = authStore();
   const [requestInfo, setRequestInfo] = useState<string | null>(null);
   const [codeSent, setCodeSent] = useState(false);
 
@@ -112,8 +118,20 @@ export function LoginPage() {
                 error={error}
                 codeSent={codeSent}
                 helperText={requestInfo}
-                telegramHint="Before requesting a code, open our Telegram bot, press /start, and send the same phone number there."
-                telegramBotUrl={appConfig.telegramBotUrl}
+                telegramHint="Press Link Telegram first. The app will open the bot with a temporary secure link. Then send your own contact to the bot and return here."
+                onLinkTelegram={async ({ phone }) => {
+                  clearError();
+                  const response = await requestTelegramPairing(phone.trim());
+                  window.open(
+                    response.telegramStartUrl,
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                  setCodeSent(false);
+                  setRequestInfo(
+                    `Telegram link ready. Send your own contact to the bot and return here within ${response.expiresIn} seconds.`,
+                  );
+                }}
                 onRequestCode={async ({ phone }) => {
                   clearError();
                   const response = await requestCode(phone.trim());

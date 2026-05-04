@@ -8,6 +8,7 @@ import { realtimeStore } from "./realtimeStore";
 
 vi.mock("../api/authApi", () => ({
   authApi: {
+    requestTelegramPairing: vi.fn(),
     requestCode: vi.fn(),
     verifyCode: vi.fn(),
     login: vi.fn(),
@@ -153,10 +154,25 @@ describe("authStore", () => {
     expect(response.resendAfterSeconds).toBe(60);
   });
 
+  it("requestTelegramPairing stores the pairing payload", async () => {
+    vi.mocked(authApi.requestTelegramPairing).mockResolvedValue({
+      botUsername: "mobile_demo_bot",
+      telegramStartUrl: "https://t.me/mobile_demo_bot?start=secure-pair-token",
+      expiresIn: 600,
+    });
+
+    const response = await authStore
+      .getState()
+      .requestTelegramPairing("+15550004");
+
+    expect(response.telegramStartUrl).toContain("secure-pair-token");
+    expect(response.expiresIn).toBe(600);
+  });
+
   it("maps TELEGRAM_NOT_LINKED into a user-friendly auth error", async () => {
     vi.mocked(authApi.requestCode).mockRejectedValue(
       new ApiError(
-        "Open the Telegram bot and send your phone number before requesting a code.",
+        "Link Telegram in the app first and send your own contact to the bot before requesting a code.",
         400,
         "TELEGRAM_NOT_LINKED",
       ),
@@ -166,7 +182,9 @@ describe("authStore", () => {
       authStore.getState().requestCode("+15550005"),
     ).rejects.toBeDefined();
 
-    expect(authStore.getState().error).toMatch(/Telegram bot/i);
+    expect(authStore.getState().error).toBe(
+      "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту.",
+    );
   });
 
   it("updateDisplayName refreshes currentUser without clearing the session", async () => {

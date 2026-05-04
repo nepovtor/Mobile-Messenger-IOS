@@ -8,13 +8,16 @@ import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AuthService } from "./auth.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
+import { RequestTelegramPairingDto } from "./dto/request-telegram-pairing.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
+import { TelegramBotService } from "./telegram/telegram-bot.service";
 
 @Controller("auth")
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly authRateLimitService: AuthRateLimitService,
+    private readonly telegramBotService: TelegramBotService,
   ) {}
 
   @Post("request")
@@ -54,6 +57,17 @@ export class AuthController {
   login(@Req() request: Request, @Body() dto: LoginAuthDto) {
     this.authRateLimitService.consume(`${this.getRequestIP(request)}:login`);
     return this.authService.login(dto);
+  }
+
+  @Post("telegram/pairing")
+  createTelegramPairing(
+    @Req() request: Request,
+    @Body() dto: RequestTelegramPairingDto,
+  ) {
+    return this.telegramBotService.createPairingLink(dto.phone, {
+      requestIP: this.getRequestIP(request),
+      userAgent: this.getUserAgent(request),
+    });
   }
 
   @Get("me")

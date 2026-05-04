@@ -10,7 +10,7 @@ type LoginFormProps = {
   codeSent: boolean;
   helperText: string | null;
   telegramHint: string;
-  telegramBotUrl: string | null;
+  onLinkTelegram: (payload: { phone: string }) => Promise<void>;
   onRequestCode: (payload: { phone: string }) => Promise<void>;
   onVerifyCode: (payload: { phone: string; code: string }) => Promise<void>;
 };
@@ -23,7 +23,7 @@ export function LoginForm({
   codeSent,
   helperText,
   telegramHint,
-  telegramBotUrl,
+  onLinkTelegram,
   onRequestCode,
   onVerifyCode,
 }: LoginFormProps) {
@@ -46,20 +46,20 @@ export function LoginForm({
       <div className="rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-4 text-sm text-sky-100">
         <div className="font-medium text-white">Telegram verification</div>
         <div className="mt-2 leading-6">{telegramHint}</div>
-        {telegramBotUrl ? (
-          <a
-            href={telegramBotUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-white"
-          >
-            Open Telegram bot
-          </a>
-        ) : (
+        <button
+          type="button"
+          disabled={isLoading || !phone.trim()}
+          onClick={() => void onLinkTelegram({ phone })}
+          className="mt-3 inline-flex rounded-full border border-cyan-300/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoading ? "Preparing link…" : "Link Telegram"}
+        </button>
+        {!phone.trim() ? (
           <div className="mt-3 text-xs text-sky-200/80">
-            Telegram bot username is not configured in this build yet.
+            Enter your phone number first so we can create a secure Telegram
+            link for this session.
           </div>
-        )}
+        ) : null}
       </div>
       <div className="space-y-2">
         <label className="text-sm text-slate-300">Phone number</label>
@@ -103,8 +103,8 @@ export function LoginForm({
         </Button>
       </div>
       <div className="text-xs leading-5 text-slate-400">
-        Enter the same international phone number in Telegram and in the app.
-        Demo accounts stay available below.
+        Link Telegram first, send your own contact to the bot, and then request
+        the code. Demo accounts stay available below.
       </div>
     </form>
   );

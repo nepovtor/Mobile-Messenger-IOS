@@ -31,6 +31,10 @@ __decorate([
     __metadata("design:type", String)
 ], TelegramLinkEntity.prototype, "chatId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: "telegram_user_id", type: "varchar", nullable: true }),
+    __metadata("design:type", Object)
+], TelegramLinkEntity.prototype, "telegramUserId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: "varchar", nullable: true }),
     __metadata("design:type", Object)
 ], TelegramLinkEntity.prototype, "username", void 0);
@@ -42,6 +46,14 @@ __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: "linked_at", type: "timestamptz" }),
     __metadata("design:type", Date)
 ], TelegramLinkEntity.prototype, "linkedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "last_verified_at", type: "timestamptz", nullable: true }),
+    __metadata("design:type", Object)
+], TelegramLinkEntity.prototype, "lastVerifiedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "revoked_at", type: "timestamptz", nullable: true }),
+    __metadata("design:type", Object)
+], TelegramLinkEntity.prototype, "revokedAt", void 0);
 __decorate([
     (0, typeorm_1.UpdateDateColumn)({ name: "updated_at", type: "timestamptz" }),
     __metadata("design:type", Date)

@@ -21,11 +21,14 @@ const auth_rate_limit_service_1 = require("./auth-rate-limit.service");
 const auth_service_1 = require("./auth.service");
 const login_auth_dto_1 = require("./dto/login-auth.dto");
 const request_auth_dto_1 = require("./dto/request-auth.dto");
+const request_telegram_pairing_dto_1 = require("./dto/request-telegram-pairing.dto");
 const verify_auth_dto_1 = require("./dto/verify-auth.dto");
+const telegram_bot_service_1 = require("./telegram/telegram-bot.service");
 let AuthController = class AuthController {
-    constructor(authService, authRateLimitService) {
+    constructor(authService, authRateLimitService, telegramBotService) {
         this.authService = authService;
         this.authRateLimitService = authRateLimitService;
+        this.telegramBotService = telegramBotService;
     }
     requestCode(request, dto) {
         this.authRateLimitService.consume(`${this.getRequestIP(request)}:request`, {
@@ -56,11 +59,14 @@ let AuthController = class AuthController {
         this.authRateLimitService.consume(`${this.getRequestIP(request)}:login`);
         return this.authService.login(dto);
     }
+    createTelegramPairing(request, dto) {
+        return this.telegramBotService.createPairingLink(dto.phone, {
+            requestIP: this.getRequestIP(request),
+            userAgent: this.getUserAgent(request),
+        });
+    }
     getMe(user) {
         return this.authService.getMe(user.sub);
-    }
-    listContacts(user) {
-        return this.authService.listContacts(user.sub);
     }
     getRequestIP(request) {
         const forwardedFor = request.headers["x-forwarded-for"];
@@ -100,6 +106,14 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "login", null);
 __decorate([
+    (0, common_1.Post)("telegram/pairing"),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, request_telegram_pairing_dto_1.RequestTelegramPairingDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "createTelegramPairing", null);
+__decorate([
     (0, common_1.Get)("me"),
     (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -107,17 +121,10 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "getMe", null);
-__decorate([
-    (0, common_1.Get)("contacts"),
-    (0, common_1.UseGuards)(auth_guard_1.AuthGuard),
-    __param(0, (0, current_user_decorator_1.CurrentUser)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", void 0)
-], AuthController.prototype, "listContacts", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)("auth"),
     __metadata("design:paramtypes", [auth_service_1.AuthService,
-        auth_rate_limit_service_1.AuthRateLimitService])
+        auth_rate_limit_service_1.AuthRateLimitService,
+        telegram_bot_service_1.TelegramBotService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

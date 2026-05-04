@@ -14,6 +14,41 @@ describe("authApi", () => {
     );
   });
 
+  it("requestTelegramPairing posts the phone payload and returns the secure start URL", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            botUsername: "mobile_demo_bot",
+            telegramStartUrl:
+              "https://t.me/mobile_demo_bot?start=secure-pair-token",
+            expiresIn: 600,
+          }),
+      }),
+    );
+
+    await expect(
+      authApi.requestTelegramPairing("+375291234567"),
+    ).resolves.toEqual({
+      botUsername: "mobile_demo_bot",
+      telegramStartUrl: "https://t.me/mobile_demo_bot?start=secure-pair-token",
+      expiresIn: 600,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/auth/telegram/pairing"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          phone: "+375291234567",
+        }),
+      }),
+    );
+  });
+
   it("requestCode posts the Railway-compatible contact payload", async () => {
     await authApi.requestCode("+375291234567");
 
@@ -74,7 +109,7 @@ describe("authApi", () => {
           JSON.stringify({
             code: "TELEGRAM_NOT_LINKED",
             message:
-              "Open the Telegram bot and send your phone number before requesting a code.",
+              "Link Telegram in the app first and send your own contact to the bot before requesting a code.",
           }),
       }),
     );

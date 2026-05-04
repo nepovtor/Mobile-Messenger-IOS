@@ -3,10 +3,19 @@ import type {
   AuthResponse,
   CurrentUser,
   LoginPayload,
+  TelegramPairingResponse,
 } from "../types/auth";
 import { httpRequest } from "./httpClient";
 
 export const authApi = {
+  requestTelegramPairing(phone: string) {
+    return httpRequest<TelegramPairingResponse>("/auth/telegram/pairing", {
+      method: "POST",
+      body: JSON.stringify({
+        phone,
+      }),
+    });
+  },
   async requestCode(phone: string) {
     const payload = await httpRequest<Partial<AuthCodeResponse>>(
       "/auth/request",

@@ -524,6 +524,26 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.errorMessage)
     }
 
+    func testTelegramPairingSanitizesPhoneAndReturnsSecureStartURL() async {
+        let authService = AuthServiceSpy()
+        let sessionStore = makeSessionStore()
+        let viewModel = AuthViewModel(
+            authService: authService,
+            sessionStore: sessionStore,
+            telegramBotURL: URL(string: "https://t.me/mobile_demo_bot")
+        )
+        viewModel.method = .phone
+        viewModel.contact = " +375 (29) 123-45-67 "
+
+        let startURL = await viewModel.requestTelegramPairingLink()
+
+        let request = await authService.lastTelegramPairingPhone
+        XCTAssertEqual(request, "+375291234567")
+        XCTAssertEqual(startURL?.absoluteString, "https://t.me/mobile_demo_bot?start=secure-pair-token")
+        XCTAssertEqual(viewModel.telegramPairingExpiresIn, 600)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
     func testVerifyCodeAuthenticatesSession() async {
         let authService = AuthServiceSpy()
         let sessionStore = makeSessionStore()
@@ -678,14 +698,17 @@ final class TransportDecodingTests: XCTestCase {
 
     func testTelegramNotLinkedErrorMappingIsUserFriendly() {
         let error = APIResponseParser.ParseError(
-            userMessage: "Open the Telegram bot and send your phone number before requesting a code.",
+            userMessage: "Link Telegram in the app first and send your own contact to the bot before requesting a code.",
             technicalDetails: nil,
             isRetryable: false,
             statusCode: 400,
             backendCode: "TELEGRAM_NOT_LINKED"
         )
 
-        XCTAssertTrue(AppError.presentableMessage(for: error).contains("Telegram"))
+        XCTAssertEqual(
+            AppError.presentableMessage(for: error),
+            "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту."
+        )
     }
 
     @MainActor
@@ -697,6 +720,22 @@ final class TransportDecodingTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.telegramBotURL?.absoluteString, "https://t.me/mobile_demo_bot")
+    }
+
+    func testTelegramPairingResponseDecodesAndBuildsStartURL() throws {
+        let payload = """
+        {
+          "botUsername": "mobile_demo_bot",
+          "telegramStartUrl": "https://t.me/mobile_demo_bot?start=secure-pair-token",
+          "expiresIn": 600
+        }
+        """
+
+        let response = try JSONDecoder().decode(TelegramPairingResponse.self, from: Data(payload.utf8))
+
+        XCTAssertEqual(response.botUsername, "mobile_demo_bot")
+        XCTAssertEqual(response.expiresIn, 600)
+        XCTAssertEqual(response.startURL?.absoluteString, "https://t.me/mobile_demo_bot?start=secure-pair-token")
     }
 
     @MainActor
@@ -1818,9 +1857,19 @@ private struct AnalyticsServiceSpy: AnalyticsService {
 }
 
 private actor AuthServiceSpy: AuthNetworking {
+    var lastTelegramPairingPhone: String?
     var lastRequestCodeInput: (method: AuthMethod, contact: String)?
     var lastVerifyCodeInput: (method: AuthMethod, contact: String, code: String)?
     var lastSignInInput: (method: AuthMethod, contact: String, password: String)?
+
+    func requestTelegramPairing(phone: String) async throws -> TelegramPairingResponse {
+        lastTelegramPairingPhone = phone
+        return TelegramPairingResponse(
+            botUsername: "mobile_demo_bot",
+            telegramStartUrl: "https://t.me/mobile_demo_bot?start=secure-pair-token",
+            expiresIn: 600
+        )
+    }
 
     func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
         lastRequestCodeInput = (method, contact)

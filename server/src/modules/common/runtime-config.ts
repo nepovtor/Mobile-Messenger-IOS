@@ -127,6 +127,30 @@ export function hasTelegramBotConfig(): boolean {
   return Boolean(getTelegramBotToken());
 }
 
+export function isTelegramTextPhoneLinkingAllowed(): boolean {
+  return readBooleanEnv("TELEGRAM_ALLOW_TEXT_PHONE_LINKING", false);
+}
+
+export function isTelegramOwnContactRequired(): boolean {
+  return readBooleanEnv("TELEGRAM_REQUIRE_OWN_CONTACT", true);
+}
+
+export function getTelegramPairingTokenTTLSeconds(): number {
+  const value = Number(process.env.TELEGRAM_PAIRING_TOKEN_TTL_SECONDS || "600");
+  return Number.isFinite(value) && value > 0 ? value : 600;
+}
+
+export function getTelegramLinkResendCooldownSeconds(): number {
+  const value = Number(
+    process.env.TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS || "60",
+  );
+  return Number.isFinite(value) && value > 0 ? value : 60;
+}
+
+export function isTelegramRelinkAllowed(): boolean {
+  return readBooleanEnv("TELEGRAM_ALLOW_RELINK", false);
+}
+
 export function getSmsFrom(): string {
   return process.env.SMS_FROM?.trim() || "MobileMsg";
 }

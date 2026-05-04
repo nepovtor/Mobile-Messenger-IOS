@@ -19,6 +19,11 @@ exports.getSmsProvider = getSmsProvider;
 exports.getTelegramBotToken = getTelegramBotToken;
 exports.getTelegramBotUsername = getTelegramBotUsername;
 exports.hasTelegramBotConfig = hasTelegramBotConfig;
+exports.isTelegramTextPhoneLinkingAllowed = isTelegramTextPhoneLinkingAllowed;
+exports.isTelegramOwnContactRequired = isTelegramOwnContactRequired;
+exports.getTelegramPairingTokenTTLSeconds = getTelegramPairingTokenTTLSeconds;
+exports.getTelegramLinkResendCooldownSeconds = getTelegramLinkResendCooldownSeconds;
+exports.isTelegramRelinkAllowed = isTelegramRelinkAllowed;
 exports.getSmsFrom = getSmsFrom;
 exports.canUseConsoleSmsInCurrentEnv = canUseConsoleSmsInCurrentEnv;
 exports.getTwilioConfig = getTwilioConfig;
@@ -128,6 +133,23 @@ function getTelegramBotUsername() {
 }
 function hasTelegramBotConfig() {
     return Boolean(getTelegramBotToken());
+}
+function isTelegramTextPhoneLinkingAllowed() {
+    return readBooleanEnv("TELEGRAM_ALLOW_TEXT_PHONE_LINKING", false);
+}
+function isTelegramOwnContactRequired() {
+    return readBooleanEnv("TELEGRAM_REQUIRE_OWN_CONTACT", true);
+}
+function getTelegramPairingTokenTTLSeconds() {
+    const value = Number(process.env.TELEGRAM_PAIRING_TOKEN_TTL_SECONDS || "600");
+    return Number.isFinite(value) && value > 0 ? value : 600;
+}
+function getTelegramLinkResendCooldownSeconds() {
+    const value = Number(process.env.TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS || "60");
+    return Number.isFinite(value) && value > 0 ? value : 60;
+}
+function isTelegramRelinkAllowed() {
+    return readBooleanEnv("TELEGRAM_ALLOW_RELINK", false);
 }
 function getSmsFrom() {
     return process.env.SMS_FROM?.trim() || "MobileMsg";

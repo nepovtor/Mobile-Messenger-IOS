@@ -12,6 +12,7 @@ const jwt_1 = require("@nestjs/jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const phone_verification_code_entity_1 = require("../../entities/phone-verification-code.entity");
 const telegram_link_entity_1 = require("../../entities/telegram-link.entity");
+const telegram_pairing_token_entity_1 = require("../../entities/telegram-pairing-token.entity");
 const user_entity_1 = require("../../entities/user.entity");
 const runtime_config_1 = require("../common/runtime-config");
 const auth_controller_1 = require("./auth.controller");
@@ -34,6 +35,7 @@ exports.AuthModule = AuthModule = __decorate([
                 user_entity_1.UserEntity,
                 phone_verification_code_entity_1.PhoneVerificationCodeEntity,
                 telegram_link_entity_1.TelegramLinkEntity,
+                telegram_pairing_token_entity_1.TelegramPairingTokenEntity,
             ]),
             jwt_1.JwtModule.registerAsync({
                 useFactory: async () => ({

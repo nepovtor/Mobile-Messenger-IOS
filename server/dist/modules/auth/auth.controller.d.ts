@@ -4,11 +4,14 @@ import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AuthService } from "./auth.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
+import { RequestTelegramPairingDto } from "./dto/request-telegram-pairing.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
+import { TelegramBotService } from "./telegram/telegram-bot.service";
 export declare class AuthController {
     private readonly authService;
     private readonly authRateLimitService;
-    constructor(authService: AuthService, authRateLimitService: AuthRateLimitService);
+    private readonly telegramBotService;
+    constructor(authService: AuthService, authRateLimitService: AuthRateLimitService, telegramBotService: TelegramBotService);
     requestCode(request: Request, dto: RequestAuthDto): Promise<{
         status: "code_sent";
         delivery: string;
@@ -27,6 +30,11 @@ export declare class AuthController {
         userID: string;
         displayName: string;
         phone: string;
+    }>;
+    createTelegramPairing(request: Request, dto: RequestTelegramPairingDto): Promise<{
+        botUsername: string;
+        telegramStartUrl: string;
+        expiresIn: number;
     }>;
     getMe(user: AuthenticatedUser): Promise<{
         userID: string;

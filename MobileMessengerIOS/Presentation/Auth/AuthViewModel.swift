@@ -46,11 +46,13 @@ public final class AuthViewModel: ObservableObject {
     @Published public var password: String = ""
     @Published public var code: String = ""
     @Published public var isSigningInWithPassword: Bool = false
+    @Published public var isLinkingTelegram: Bool = false
     @Published public var isRequestingCode: Bool = false
     @Published public var isVerifyingCode: Bool = false
     @Published public var errorMessage: String?
     @Published public var isCodeSent: Bool = false
     @Published public var codeExpirationSeconds: Int?
+    @Published public var telegramPairingExpiresIn: Int?
     public let telegramBotURL: URL?
 
     private let authService: AuthNetworking
@@ -127,6 +129,28 @@ public final class AuthViewModel: ObservableObject {
         }
     }
 
+    public func requestTelegramPairingLink() async -> URL? {
+        guard !isLinkingTelegram else { return nil }
+        errorMessage = nil
+        telegramPairingExpiresIn = nil
+        isLinkingTelegram = true
+        defer { isLinkingTelegram = false }
+
+        let sanitizedContact = sanitize(contact: contact)
+
+        do {
+            let response = try await authService.requestTelegramPairing(phone: sanitizedContact)
+            isCodeSent = false
+            code = ""
+            codeExpirationSeconds = nil
+            telegramPairingExpiresIn = response.expiresIn
+            return response.startURL
+        } catch {
+            errorMessage = AppError.presentableMessage(for: error)
+            return nil
+        }
+    }
+
     public func verifyCode() async {
         guard !isVerifyingCode else { return }
         errorMessage = nil
@@ -190,7 +214,12 @@ public final class AuthViewModel: ObservableObject {
     }
 
     public var telegramInstructionText: String {
-        "Код подтверждения приходит в Telegram. Перед входом откройте нашего Telegram-бота и нажмите /start."
+        "Сначала нажмите «Привязать Telegram». Бот откроется по временной защищённой ссылке, после чего отправьте ему свой собственный контакт кнопкой Telegram."
+    }
+
+    public var telegramPairingHintText: String? {
+        guard let telegramPairingExpiresIn else { return nil }
+        return "После отправки контакта вернитесь в приложение и нажмите «Получить код». Ссылка активна \(telegramPairingExpiresIn) секунд."
     }
 
     private func sanitize(contact: String) -> String {
@@ -215,9 +244,11 @@ public final class AuthViewModel: ObservableObject {
         code = ""
         errorMessage = nil
         isCodeSent = false
+        isLinkingTelegram = false
         isSigningInWithPassword = false
         isRequestingCode = false
         isVerifyingCode = false
         codeExpirationSeconds = nil
+        telegramPairingExpiresIn = nil
     }
 }

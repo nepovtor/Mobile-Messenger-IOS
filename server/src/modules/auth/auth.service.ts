@@ -13,7 +13,7 @@ import {
 import { createHmac, randomInt } from "node:crypto";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
@@ -266,8 +266,11 @@ export class AuthService implements OnModuleInit {
 
     verificationCode.consumedAt = new Date();
     await this.verificationCodesRepository.save(verificationCode);
-    const telegramLink = await this.telegramLinksRepository.findOneBy({
-      phone,
+    const telegramLink = await this.telegramLinksRepository.findOne({
+      where: {
+        phone,
+        revokedAt: IsNull(),
+      },
     });
 
     const user = await this.findOrCreateUser(

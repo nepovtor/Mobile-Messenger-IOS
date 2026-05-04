@@ -174,6 +174,11 @@ struct AuthView: View {
                 Text("Code expires in \(seconds) seconds")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
+            } else if let pairingHint = viewModel.telegramPairingHintText {
+                Text(pairingHint)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Enter a real phone number in international format to receive a one-time Telegram code.")
                     .font(.footnote)
@@ -208,10 +213,15 @@ struct AuthView: View {
                 .foregroundStyle(Color.white.opacity(0.82))
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(action: openTelegramBot) {
+            Button(action: linkTelegram) {
                 HStack(spacing: 10) {
-                    Image(systemName: "arrow.up.right.circle.fill")
-                    Text("Открыть Telegram-бота")
+                    if viewModel.isLinkingTelegram {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "link.circle.fill")
+                    }
+                    Text("Привязать Telegram")
                 }
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
@@ -222,10 +232,10 @@ struct AuthView: View {
                         .fill(Color(red: 0.12, green: 0.54, blue: 0.99).opacity(0.88))
                 )
             }
-            .disabled(viewModel.telegramBotURL == nil)
+            .disabled(!viewModel.isContactValid || viewModel.isLinkingTelegram)
 
-            if viewModel.telegramBotURL == nil {
-                Text("Telegram bot username is not configured in this build yet.")
+            if !viewModel.isContactValid {
+                Text("Сначала введите номер выше, чтобы приложение создало защищённую ссылку для бота.")
                     .font(.caption)
                     .foregroundStyle(Color.white.opacity(0.55))
             }
@@ -438,9 +448,11 @@ struct AuthView: View {
         }
     }
 
-    private func openTelegramBot() {
-        guard let telegramBotURL = viewModel.telegramBotURL else { return }
-        openURL(telegramBotURL)
+    private func linkTelegram() {
+        Task {
+            guard let telegramStartURL = await viewModel.requestTelegramPairingLink() else { return }
+            openURL(telegramStartURL)
+        }
     }
 
     private func resetBackendConfiguration() {

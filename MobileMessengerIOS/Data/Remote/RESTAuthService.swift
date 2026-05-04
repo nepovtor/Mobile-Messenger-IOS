@@ -390,6 +390,7 @@ extension JSONDecoder {
 }
 
 public protocol AuthNetworking: Sendable {
+    func requestTelegramPairing(phone: String) async throws -> TelegramPairingResponse
     func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse
     func verifyCode(method: AuthMethod, contact: String, code: String) async throws -> AuthVerifyResponse
     func signIn(method: AuthMethod, contact: String, password: String) async throws -> AuthVerifyResponse
@@ -402,6 +403,12 @@ public struct RESTAuthService: AuthNetworking {
     public init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session
+    }
+
+    public func requestTelegramPairing(phone: String) async throws -> TelegramPairingResponse {
+        try await sendRequest(endpoint: "/auth/telegram/pairing", payload: [
+            "phone": phone
+        ])
     }
 
     public func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
@@ -505,6 +512,16 @@ public struct AuthCodeResponse: Codable {
         resendAfterSeconds = try container.decodeIfPresent(Int.self, forKey: .resendAfterSeconds) ?? 60
         expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) ?? 300
         debugCode = try container.decodeIfPresent(String.self, forKey: .debugCode)
+    }
+}
+
+public struct TelegramPairingResponse: Codable, Sendable {
+    public let botUsername: String
+    public let telegramStartUrl: String
+    public let expiresIn: Int
+
+    public var startURL: URL? {
+        URL(string: telegramStartUrl)
     }
 }
 

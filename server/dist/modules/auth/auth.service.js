@@ -76,7 +76,7 @@ let AuthService = AuthService_1 = class AuthService {
             return;
         }
         for (const account of this.demoAccounts) {
-            await this.findOrCreateUser(account.method, account.contact, account.displayName);
+            await this.findOrCreateUser(account.method, account.contact, account.displayName, undefined, true);
         }
     }
     async requestCode(dto, requestContext) {
@@ -157,7 +157,12 @@ let AuthService = AuthService_1 = class AuthService {
         }
         verificationCode.consumedAt = new Date();
         await this.verificationCodesRepository.save(verificationCode);
-        const telegramLink = await this.telegramLinksRepository.findOneBy({ phone });
+        const telegramLink = await this.telegramLinksRepository.findOne({
+            where: {
+                phone,
+                revokedAt: (0, typeorm_2.IsNull)(),
+            },
+        });
         const user = await this.findOrCreateUser(user_entity_1.AuthMethod.PHONE, phone, this.findDemoAccount(user_entity_1.AuthMethod.PHONE, phone)?.displayName, telegramLink ?? undefined);
         return this.buildAuthResult(user);
     }
@@ -192,50 +197,10 @@ let AuthService = AuthService_1 = class AuthService {
             telegramUsername: user.telegramUsername,
         };
     }
-    async listContacts(userID) {
-        await this.getMe(userID);
-        const demoOrder = new Map(this.demoAccounts.map((account, index) => [account.contact, index]));
-        const demoContacts = new Set(this.demoAccounts.map((account) => account.contact));
-        const users = await this.usersRepository.find();
-        return users
-            .filter((user) => user.id === userID ||
-            !(0, runtime_config_1.areDemoAccountsEnabled)() ||
-            demoContacts.has(user.contact))
-            .sort((left, right) => {
-            if (left.id === userID) {
-                return -1;
-            }
-            if (right.id === userID) {
-                return 1;
-            }
-            const leftOrder = demoOrder.get(left.contact);
-            const rightOrder = demoOrder.get(right.contact);
-            if (leftOrder !== undefined &&
-                rightOrder !== undefined &&
-                leftOrder !== rightOrder) {
-                return leftOrder - rightOrder;
-            }
-            if (leftOrder !== undefined) {
-                return -1;
-            }
-            if (rightOrder !== undefined) {
-                return 1;
-            }
-            return left.displayName.localeCompare(right.displayName);
-        })
-            .map((user) => ({
-            userID: user.id,
-            displayName: user.displayName,
-            contact: user.contact,
-            method: user.method,
-            phone: user.phone,
-            isCurrentUser: user.id === userID,
-        }));
-    }
     findDemoAccount(method, contact) {
         return this.demoAccounts.find((account) => account.method === method && account.contact === contact);
     }
-    async findOrCreateUser(method, contact, preferredDisplayName, telegramLink) {
+    async findOrCreateUser(method, contact, preferredDisplayName, telegramLink, syncExistingDisplayName = false) {
         let user = await this.findUserByMethodAndContact(method, contact);
         const displayName = preferredDisplayName ?? (0, contact_utils_1.buildDisplayName)(method, contact);
         if (!user) {
@@ -261,12 +226,13 @@ let AuthService = AuthService_1 = class AuthService {
             }
         }
         let shouldSave = false;
-        if (method === user_entity_1.AuthMethod.PHONE &&
-            user.phone !== contact) {
+        if (method === user_entity_1.AuthMethod.PHONE && user.phone !== contact) {
             user.phone = contact;
             shouldSave = true;
         }
-        if (preferredDisplayName && user.displayName !== preferredDisplayName) {
+        if (syncExistingDisplayName &&
+            preferredDisplayName &&
+            user.displayName !== preferredDisplayName) {
             user.displayName = preferredDisplayName;
             shouldSave = true;
         }
@@ -286,10 +252,22 @@ let AuthService = AuthService_1 = class AuthService {
         return user;
     }
     findUserByMethodAndContact(method, contact) {
-        return this.usersRepository.findOne({
-            where: method === user_entity_1.AuthMethod.PHONE
-                ? [{ method, contact }, { phone: contact }]
-                : { method, contact },
+        if (method === user_entity_1.AuthMethod.PHONE) {
+            return this.findPhoneUser(contact);
+        }
+        return this.usersRepository.findOneBy({ method, contact });
+    }
+    async findPhoneUser(contact) {
+        const userByPhone = await this.usersRepository.findOneBy({
+            method: user_entity_1.AuthMethod.PHONE,
+            phone: contact,
+        });
+        if (userByPhone) {
+            return userByPhone;
+        }
+        return this.usersRepository.findOneBy({
+            method: user_entity_1.AuthMethod.PHONE,
+            contact,
         });
     }
     async buildAuthResult(user) {

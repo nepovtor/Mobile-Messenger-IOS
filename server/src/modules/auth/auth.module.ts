@@ -3,6 +3,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
+import { TelegramPairingTokenEntity } from "../../entities/telegram-pairing-token.entity";
 import { UserEntity } from "../../entities/user.entity";
 import {
   getJwtSecret,
@@ -27,6 +28,7 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
       UserEntity,
       PhoneVerificationCodeEntity,
       TelegramLinkEntity,
+      TelegramPairingTokenEntity,
     ]),
     JwtModule.registerAsync({
       useFactory: async () => ({
