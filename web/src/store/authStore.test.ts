@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authApi } from "../api/authApi";
 import { ApiError } from "../api/httpClient";
 import { profileApi } from "../api/profileApi";
-import { authStore } from "./authStore";
+import { authStore, mapAuthErrorMessage } from "./authStore";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
 
@@ -185,6 +185,17 @@ describe("authStore", () => {
     expect(authStore.getState().error).toBe(
       "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту.",
     );
+  });
+
+  it("maps invalid phone errors into an international-format hint", () => {
+    expect(
+      mapAuthErrorMessage(
+        new ApiError(
+          "Phone number must be in international format and start with +",
+          400,
+        ),
+      ),
+    ).toBe("Введите номер в международном формате, например +375291234567.");
   });
 
   it("updateDisplayName refreshes currentUser without clearing the session", async () => {

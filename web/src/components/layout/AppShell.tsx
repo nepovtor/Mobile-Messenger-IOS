@@ -1,19 +1,22 @@
-import { Menu } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Menu, Radio } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { chatApi } from "../../api/chatApi";
 import { contactsApi } from "../../api/contactsApi";
-import { chatStore } from "../../store/chatStore";
 import { realtimeStore } from "../../store/realtimeStore";
+import { chatStore } from "../../store/chatStore";
 import type { CurrentUser } from "../../types/auth";
 import type { ContactEntry } from "../../types/contact";
 import {
   mapContactErrorMessage,
   validateContactPhone,
 } from "../../utils/contacts";
+import { Button } from "../ui/Button";
+import { Card } from "../ui/Card";
+import { InlineAlert } from "../ui/InlineAlert";
 import { ChatPanel } from "./ChatPanel";
 import { EmptyState } from "./EmptyState";
 import { Sidebar } from "./Sidebar";
-import { Button } from "../ui/Button";
 
 export function AppShell({
   currentUser,
@@ -29,6 +32,7 @@ export function AppShell({
     selectedChatId,
     messagesByChatId,
     isLoadingChats,
+    isLoadingMessages,
     selectChat,
     loadChats,
     loadMessages,
@@ -56,12 +60,64 @@ export function AppShell({
     [chats, selectedChatId],
   );
 
+  const unreadCount = useMemo(
+    () => chats.reduce((total, chat) => total + chat.unreadCount, 0),
+    [chats],
+  );
+
+  const statusBanner = useMemo(() => {
+    if (chatError) {
+      return {
+        tone: "danger" as const,
+        title: "Chat error",
+        message: chatError,
+      };
+    }
+
+    if (realtimeError) {
+      return {
+        tone: "danger" as const,
+        title: "Realtime status",
+        message: realtimeError,
+      };
+    }
+
+    if (connectionState === "reconnecting") {
+      return {
+        tone: "warning" as const,
+        title: "Realtime status",
+        message:
+          "Reconnecting to realtime. Messages stay on screen while the socket recovers.",
+      };
+    }
+
+    if (connectionState === "disconnected") {
+      return {
+        tone: "warning" as const,
+        title: "Realtime status",
+        message:
+          "Realtime is offline. You can keep browsing chats and reconnect when ready.",
+      };
+    }
+
+    if (connectionState === "failed") {
+      return {
+        tone: "danger" as const,
+        title: "Realtime status",
+        message: "Connection issue detected. Reconnect to resume live updates.",
+      };
+    }
+
+    return null;
+  }, [chatError, connectionState, realtimeError]);
+
   useEffect(() => {
     let isCancelled = false;
     setContacts([]);
     setContactsError(null);
     setContactsNotice(null);
     setLoadingContacts(true);
+
     void contactsApi
       .getContacts()
       .then((result) => {
@@ -192,106 +248,87 @@ export function AppShell({
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.28),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(34,211,238,0.16),_transparent_26%),linear-gradient(180deg,#020617,#0f172a)] px-4 py-4 sm:px-6 sm:py-6">
+      <div className="glass-orb left-[-4rem] top-[4rem] h-44 w-44 bg-cyan-400/25" />
+      <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-indigo-500/18" />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20" />
-      <div className="relative mx-auto flex h-[calc(100vh-2rem)] max-w-[1440px] gap-4 sm:h-[calc(100vh-3rem)]">
-        {chatError || realtimeError ? (
-          <div className="absolute inset-x-0 top-0 z-20 mx-auto max-w-3xl px-4">
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-500/12 px-4 py-3 text-sm text-rose-100 backdrop-blur-xl">
-              {chatError || realtimeError}
+
+      <div className="relative mx-auto flex h-[calc(100vh-2rem)] max-w-[1480px] flex-col gap-4 sm:h-[calc(100vh-3rem)]">
+        <header className="rounded-[30px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-100">
+                <Radio className="h-3.5 w-3.5" />
+                Messenger dashboard
+              </p>
+              <h1 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">
+                Mobile Messenger
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                {selectedChat
+                  ? `Active thread: ${selectedChat.title}`
+                  : "Pick a conversation or open a contact to start the demo flow."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Card className="p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                  Chats
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {chats.length}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                  Contacts
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {contacts.length}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                  Unread
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {unreadCount}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                  Realtime
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white capitalize">
+                  {connectionState}
+                </p>
+              </Card>
             </div>
           </div>
+        </header>
+
+        {statusBanner ? (
+          <InlineAlert
+            tone={statusBanner.tone}
+            title={statusBanner.title}
+            action={
+              connectionState !== "connected" ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => realtimeStore.getState().reconnect()}
+                >
+                  Reconnect
+                </Button>
+              ) : undefined
+            }
+          >
+            {statusBanner.message}
+          </InlineAlert>
         ) : null}
-        <div className="hidden w-[360px] shrink-0 rounded-[32px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl md:block">
-          <Sidebar
-            user={currentUser}
-            chats={chats}
-            contacts={contacts}
-            selectedChatId={selectedChatId}
-            isLoading={isLoadingChats}
-            isLoadingContacts={isLoadingContacts}
-            connectionState={connectionState}
-            contactsError={contactsError}
-            contactsNotice={contactsNotice}
-            isAddingContact={isAddingContact}
-            openingContactId={openingContactId}
-            removingContactId={removingContactId}
-            onSelectChat={(chatId) => {
-              selectChat(chatId);
-            }}
-            onOpenContact={(contact) => void handleOpenContact(contact)}
-            onAddContact={(phone) => void handleAddContact(phone)}
-            onRemoveContact={(contact) => void handleRemoveContact(contact)}
-            onUpdateDisplayName={onUpdateDisplayName}
-            onLogout={onLogout}
-          />
-        </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="mb-3 flex items-center justify-between md:hidden">
-            <Button
-              variant="secondary"
-              className="px-3 py-2"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="mr-2 h-4 w-4" />
-              Chats
-            </Button>
-          </div>
-          <div className="min-h-0 flex-1">
-            {selectedChat ? (
-              <ChatPanel
-                chat={selectedChat}
-                messages={messagesByChatId[selectedChat.id] ?? []}
-                currentUser={currentUser}
-                connectionState={connectionState}
-                onBack={() => setSidebarOpen(true)}
-                onSend={(text) =>
-                  sendMessage(selectedChat.id, text, currentUser)
-                }
-                onRetry={(clientMessageId) =>
-                  void retryMessage(
-                    selectedChat.id,
-                    clientMessageId,
-                    currentUser,
-                  )
-                }
-                onEditMessage={(messageId, text) =>
-                  editMessage(selectedChat.id, messageId, text)
-                }
-                onDeleteMessage={(messageId) =>
-                  deleteMessage(selectedChat.id, messageId)
-                }
-                onTypingStart={() => {
-                  try {
-                    realtimeStore.getState().sendEvent("typing.started", {
-                      chatID: selectedChat.id,
-                    });
-                  } catch {
-                    void 0;
-                  }
-                }}
-                onTypingStop={() => {
-                  try {
-                    realtimeStore.getState().sendEvent("typing.stopped", {
-                      chatID: selectedChat.id,
-                    });
-                  } catch {
-                    void 0;
-                  }
-                }}
-              />
-            ) : (
-              <div className="h-full rounded-[28px] border border-white/10 bg-white/6 backdrop-blur-2xl">
-                <EmptyState />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {isSidebarOpen ? (
-        <div className="fixed inset-0 z-30 bg-slate-950/80 p-4 backdrop-blur-sm md:hidden">
-          <div className="mx-auto h-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/92 p-4">
+        <div className="min-h-0 flex flex-1 gap-4">
+          <div className="hidden w-[372px] shrink-0 rounded-[32px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl md:block">
             <Sidebar
               user={currentUser}
               chats={chats}
@@ -307,7 +344,6 @@ export function AppShell({
               removingContactId={removingContactId}
               onSelectChat={(chatId) => {
                 selectChat(chatId);
-                setSidebarOpen(false);
               }}
               onOpenContact={(contact) => void handleOpenContact(contact)}
               onAddContact={(phone) => void handleAddContact(phone)}
@@ -316,8 +352,113 @@ export function AppShell({
               onLogout={onLogout}
             />
           </div>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="mb-3 flex items-center justify-between gap-3 md:hidden">
+              <Button variant="secondary" onClick={() => setSidebarOpen(true)}>
+                <Menu className="h-4 w-4" />
+                Chats
+              </Button>
+              <div className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-slate-300">
+                {unreadCount} unread
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1">
+              {selectedChat ? (
+                <ChatPanel
+                  chat={selectedChat}
+                  messages={messagesByChatId[selectedChat.id] ?? []}
+                  currentUser={currentUser}
+                  connectionState={connectionState}
+                  isLoadingMessages={isLoadingMessages}
+                  onBack={() => setSidebarOpen(true)}
+                  onSend={(text) =>
+                    sendMessage(selectedChat.id, text, currentUser)
+                  }
+                  onRetry={(clientMessageId) =>
+                    void retryMessage(
+                      selectedChat.id,
+                      clientMessageId,
+                      currentUser,
+                    )
+                  }
+                  onEditMessage={(messageId, text) =>
+                    editMessage(selectedChat.id, messageId, text)
+                  }
+                  onDeleteMessage={(messageId) =>
+                    deleteMessage(selectedChat.id, messageId)
+                  }
+                  onTypingStart={() => {
+                    try {
+                      realtimeStore.getState().sendEvent("typing.started", {
+                        chatID: selectedChat.id,
+                      });
+                    } catch {
+                      void 0;
+                    }
+                  }}
+                  onTypingStop={() => {
+                    try {
+                      realtimeStore.getState().sendEvent("typing.stopped", {
+                        chatID: selectedChat.id,
+                      });
+                    } catch {
+                      void 0;
+                    }
+                  }}
+                />
+              ) : (
+                <div className="h-full rounded-[30px] border border-white/10 bg-white/[0.06] backdrop-blur-2xl">
+                  <EmptyState />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      ) : null}
+      </div>
+
+      <AnimatePresence>
+        {isSidebarOpen ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 bg-slate-950/80 p-4 backdrop-blur-sm md:hidden"
+          >
+            <motion.div
+              initial={{ x: -24, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -24, opacity: 0 }}
+              className="mx-auto h-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/92 p-4"
+            >
+              <Sidebar
+                user={currentUser}
+                chats={chats}
+                contacts={contacts}
+                selectedChatId={selectedChatId}
+                isLoading={isLoadingChats}
+                isLoadingContacts={isLoadingContacts}
+                connectionState={connectionState}
+                contactsError={contactsError}
+                contactsNotice={contactsNotice}
+                isAddingContact={isAddingContact}
+                openingContactId={openingContactId}
+                removingContactId={removingContactId}
+                onSelectChat={(chatId) => {
+                  selectChat(chatId);
+                  setSidebarOpen(false);
+                }}
+                onOpenContact={(contact) => void handleOpenContact(contact)}
+                onAddContact={(phone) => void handleAddContact(phone)}
+                onRemoveContact={(contact) => void handleRemoveContact(contact)}
+                onUpdateDisplayName={onUpdateDisplayName}
+                onLogout={onLogout}
+              />
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

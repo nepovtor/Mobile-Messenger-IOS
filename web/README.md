@@ -1,8 +1,18 @@
-# Mobile Messenger Web
+# Web Client
 
 React + TypeScript + Vite web client for the existing Mobile Messenger backend.
 
-The web client is preconfigured for the production backend, so there is no API input screen for end users.
+The web client keeps the live backend contract, native WebSocket realtime flow, Telegram verification, demo accounts, and local token storage intact. The UI is polished for coursework defense, but it does not introduce mocks or fake features.
+
+## Stack
+
+- React + TypeScript + Vite
+- Tailwind CSS
+- Zustand
+- React Router
+- Framer Motion
+- lucide-react
+- Leaflet / React Leaflet
 
 ## Run
 
@@ -12,9 +22,12 @@ npm install
 npm run dev
 ```
 
-## Build
+## Checks
 
 ```bash
+npm run format
+npm run lint
+npm test
 npm run build
 ```
 
@@ -28,8 +41,28 @@ npm run build
 
 ## Demo Flow
 
-1. Open the login screen.
-2. Pick a demo account card or enter the credentials manually.
-3. Open any available chat.
-4. Send a message and watch it move through realtime message states.
-5. Sign out to clear the session, local state, and websocket connection.
+1. Open the landing page and use the `Demo guide` hint if needed.
+2. Login as `Анна Demo` from the one-click demo cards.
+3. Open a chat thread and send a realtime message.
+4. Switch to Contacts to show add-by-phone and direct chat opening.
+5. Switch to Map to show privacy-first location sharing.
+
+## Real Login Flow
+
+1. Enter a phone number in international format such as `+375291234567`.
+2. Click `Привязать Telegram`.
+3. Send your own contact to the Telegram bot.
+4. Return to the web client, click `Получить код`, then `Подтвердить`.
+
+The UI does not expose the API URL, JWT, or debug payloads.
+
+## Screenshots To Capture
+
+- `login hero`
+- `messenger layout`
+- `chat thread`
+- `contacts`
+- `profile`
+- `map`
+
+If screenshots are not available yet, add the real images later under `docs/screenshots/` instead of committing empty placeholder files.

@@ -1,5 +1,7 @@
+import { Shield } from "lucide-react";
 import type { ContactLocation, MyLocationShare } from "../../api/locationApi";
 import { formatLocationUpdatedAt } from "../../utils/location";
+import { Card } from "../ui/Card";
 
 export function LocationSummaryCard({
   myLocation,
@@ -9,20 +11,21 @@ export function LocationSummaryCard({
   contacts: ContactLocation[];
 }) {
   return (
-    <div className="rounded-[28px] border border-white/10 bg-white/6 p-5">
-      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200/80">
+    <Card className="p-5">
+      <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-100">
+        <Shield className="h-3.5 w-3.5" />
         Privacy
-      </p>
-      <h2 className="mt-3 text-2xl font-semibold text-white">
+      </div>
+      <h2 className="mt-4 text-2xl font-semibold text-white">
         Opt-in location sharing
       </h2>
       <p className="mt-3 text-sm leading-6 text-slate-300">
-        Your location is shared only with your contacts while sharing is
-        enabled. Sharing updates only when you choose to share or refresh your
-        point, and only the latest point is stored.
+        Location sharing is off by default. Contacts see only shared location,
+        and only the latest point is stored.
       </p>
+
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+        <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
             My status
           </p>
@@ -33,7 +36,7 @@ export function LocationSummaryCard({
             {formatLocationUpdatedAt(myLocation?.updatedAt ?? null)}
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+        <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
             Contacts sharing now
           </p>
@@ -41,10 +44,10 @@ export function LocationSummaryCard({
             {contacts.length}
           </p>
           <p className="mt-2 text-sm text-slate-400">
-            Other contacts appear as Location not shared.
+            Contacts appear only while they explicitly share a location.
           </p>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

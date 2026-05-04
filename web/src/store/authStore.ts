@@ -203,12 +203,30 @@ async function authenticateWithBackendResult(
   });
 }
 
-function mapAuthErrorMessage(
+export function mapAuthErrorMessage(
   error: unknown,
   fallback = "Could not complete the authentication request.",
 ) {
   if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
     return "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    /(international format|valid phone number|E\.164|start with \+)/i.test(
+      error.message,
+    )
+  ) {
+    return "Введите номер в международном формате, например +375291234567.";
+  }
+
+  if (
+    error instanceof Error &&
+    /(international format|valid phone number|E\.164|start with \+)/i.test(
+      error.message,
+    )
+  ) {
+    return "Введите номер в международном формате, например +375291234567.";
   }
 
   if (error instanceof Error) {

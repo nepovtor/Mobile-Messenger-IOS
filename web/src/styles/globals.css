@@ -5,6 +5,10 @@
   color-scheme: dark;
   font-family: "Space Grotesk", sans-serif;
   background: #020617;
+  --app-bg: #020617;
+  --app-surface: rgba(15, 23, 42, 0.68);
+  --app-border: rgba(255, 255, 255, 0.12);
+  --app-text-muted: rgba(203, 213, 225, 0.72);
 }
 
 * {
@@ -27,12 +31,57 @@ body {
       transparent 32%
     ),
     linear-gradient(180deg, #020617 0%, #0f172a 100%);
+  background-attachment: fixed;
+  overflow-x: hidden;
 }
 
 button,
 input,
 textarea {
   font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: white;
+}
+
+a {
+  color: inherit;
+}
+
+.glass-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(42px);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: drift 18s ease-in-out infinite;
+}
+
+.glass-orb:nth-child(2) {
+  animation-delay: -6s;
+}
+
+.glass-orb:nth-child(3) {
+  animation-delay: -11s;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(12px, -20px, 0) scale(1.04);
+  }
+  66% {
+    transform: translate3d(-18px, 14px, 0) scale(0.98);
+  }
 }
 
 ::-webkit-scrollbar {

@@ -1,25 +1,39 @@
 import type { ConnectionState } from "../../realtime/realtimeTypes";
 import { Badge } from "../ui/Badge";
 
-const labelByState: Record<ConnectionState, string> = {
-  connected: "Connected",
-  connecting: "Connecting",
-  reconnecting: "Reconnecting",
-  disconnected: "Offline",
-  failed: "Connection issue",
-};
+const connectionMeta = {
+  connected: {
+    label: "Connected",
+    tone: "success",
+  },
+  connecting: {
+    label: "Connecting",
+    tone: "neutral",
+  },
+  reconnecting: {
+    label: "Reconnecting",
+    tone: "warning",
+  },
+  disconnected: {
+    label: "Offline",
+    tone: "warning",
+  },
+  failed: {
+    label: "Connection issue",
+    tone: "danger",
+  },
+} as const;
 
-const toneByState: Record<
-  ConnectionState,
-  "neutral" | "success" | "warning" | "danger"
-> = {
-  connected: "success",
-  connecting: "neutral",
-  reconnecting: "warning",
-  disconnected: "warning",
-  failed: "danger",
-};
+function getConnectionBadgeMeta(state: ConnectionState) {
+  return connectionMeta[state];
+}
 
 export function ConnectionBadge({ state }: { state: ConnectionState }) {
-  return <Badge tone={toneByState[state]}>{labelByState[state]}</Badge>;
+  const meta = getConnectionBadgeMeta(state);
+
+  return (
+    <Badge tone={meta.tone} pulseDot>
+      {meta.label}
+    </Badge>
+  );
 }

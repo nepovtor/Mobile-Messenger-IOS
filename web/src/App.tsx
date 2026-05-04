@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Card } from "./components/ui/Card";
+import { Spinner } from "./components/ui/Spinner";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { MessengerPage } from "./pages/MessengerPage";
@@ -21,8 +23,11 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-200">
-        Restoring session…
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-200">
+        <Card className="flex items-center gap-3 px-5 py-4">
+          <Spinner />
+          Restoring session…
+        </Card>
       </div>
     );
   }

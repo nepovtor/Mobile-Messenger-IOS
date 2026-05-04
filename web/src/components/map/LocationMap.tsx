@@ -1,11 +1,5 @@
 import { useEffect } from "react";
-import {
-  MapContainer,
-  Marker,
-  Popup,
-  TileLayer,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { ContactLocation, MyLocationShare } from "../../api/locationApi";
 import { formatLocationUpdatedAt } from "../../utils/location";
@@ -14,9 +8,9 @@ import { Button } from "../ui/Button";
 function buildMarker(label: string, tint: string) {
   return L.divIcon({
     className: "",
-    html: `<div style="width:44px;height:44px;border-radius:999px;background:${tint};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;box-shadow:0 12px 24px rgba(15,23,42,.26);border:2px solid rgba(255,255,255,.25)">${label}</div>`,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    html: `<div style="width:46px;height:46px;border-radius:18px;background:${tint};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;box-shadow:0 12px 24px rgba(15,23,42,.28);border:2px solid rgba(255,255,255,.22)">${label}</div>`,
+    iconSize: [46, 46],
+    iconAnchor: [23, 23],
     popupAnchor: [0, -16],
   });
 }
@@ -49,8 +43,8 @@ export function LocationMap({
     >
       <RecenterMap center={center} />
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; CARTO'
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
 
       {myLocation?.sharingEnabled &&
@@ -78,7 +72,10 @@ export function LocationMap({
         <Marker
           key={contact.userID}
           position={[contact.latitude, contact.longitude]}
-          icon={buildMarker(initials(contact.displayName), "#2563eb")}
+          icon={buildMarker(
+            initials(contact.displayName),
+            "linear-gradient(135deg,#2563eb,#8b5cf6)",
+          )}
         >
           <Popup>
             <div className="min-w-[220px] space-y-3">

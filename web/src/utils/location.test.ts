@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/httpClient";
-import {
-  formatLocationUpdatedAt,
-  mapLocationErrorMessage,
-} from "./location";
+import { formatLocationUpdatedAt, mapLocationErrorMessage } from "./location";
 
 describe("location utils", () => {
   it("maps api errors into readable location messages", () => {
     expect(
-      mapLocationErrorMessage(new ApiError("Backend is unavailable right now.")),
+      mapLocationErrorMessage(
+        new ApiError("Backend is unavailable right now."),
+      ),
     ).toBe("Backend is unavailable right now.");
   });
 

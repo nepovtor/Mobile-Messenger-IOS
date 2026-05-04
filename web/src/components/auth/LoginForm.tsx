@@ -1,5 +1,12 @@
 import { useState } from "react";
+import {
+  BadgeCheck,
+  Link2,
+  MessageSquareMore,
+  SendHorizonal,
+} from "lucide-react";
 import { Button } from "../ui/Button";
+import { InlineAlert } from "../ui/InlineAlert";
 import { Input } from "../ui/Input";
 
 type LoginFormProps = {
@@ -32,7 +39,7 @@ export function LoginForm({
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-5"
       onSubmit={async (event) => {
         event.preventDefault();
         if (codeSent) {
@@ -43,17 +50,25 @@ export function LoginForm({
         await onRequestCode({ phone });
       }}
     >
-      <div className="rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-4 text-sm text-sky-100">
-        <div className="font-medium text-white">Telegram verification</div>
-        <div className="mt-2 leading-6">{telegramHint}</div>
-        <button
-          type="button"
-          disabled={isLoading || !phone.trim()}
-          onClick={() => void onLinkTelegram({ phone })}
-          className="mt-3 inline-flex rounded-full border border-cyan-300/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isLoading ? "Preparing link…" : "Link Telegram"}
-        </button>
+      <div className="rounded-[28px] border border-sky-300/20 bg-sky-400/10 px-4 py-4 text-sm text-sky-100">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-cyan-100">
+              <MessageSquareMore className="h-3.5 w-3.5" />
+              Telegram verification
+            </div>
+            <div className="mt-3 leading-6 text-slate-200">{telegramHint}</div>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isLoading || !phone.trim()}
+            onClick={() => void onLinkTelegram({ phone })}
+          >
+            <Link2 className="h-4 w-4" />
+            {isLoading ? "Preparing…" : "Привязать Telegram"}
+          </Button>
+        </div>
         {!phone.trim() ? (
           <div className="mt-3 text-xs text-sky-200/80">
             Enter your phone number first so we can create a secure Telegram
@@ -62,8 +77,12 @@ export function LoginForm({
         ) : null}
       </div>
       <div className="space-y-2">
-        <label className="text-sm text-slate-300">Phone number</label>
+        <label className="text-sm font-medium text-slate-200" htmlFor="phone">
+          Phone number
+        </label>
         <Input
+          id="phone"
+          aria-label="Phone number"
           value={phone}
           onChange={(event) => setPhone(event.target.value)}
           placeholder="+375291234567"
@@ -71,8 +90,12 @@ export function LoginForm({
       </div>
       {codeSent ? (
         <div className="space-y-2">
-          <label className="text-sm text-slate-300">Telegram code</label>
+          <label className="text-sm font-medium text-slate-200" htmlFor="code">
+            Telegram code
+          </label>
           <Input
+            id="code"
+            aria-label="Telegram code"
             value={code}
             onChange={(event) => setCode(event.target.value)}
             placeholder="123456"
@@ -80,14 +103,14 @@ export function LoginForm({
         </div>
       ) : null}
       {helperText ? (
-        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+        <InlineAlert tone="info" title="Verification flow">
           {helperText}
-        </div>
+        </InlineAlert>
       ) : null}
       {error ? (
-        <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+        <InlineAlert tone="danger" title="Authentication error">
           {error}
-        </div>
+        </InlineAlert>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Button
@@ -96,15 +119,21 @@ export function LoginForm({
           type="button"
           onClick={() => void onRequestCode({ phone })}
         >
-          {isLoading && !codeSent ? "Sending…" : "Get code"}
+          <SendHorizonal className="h-4 w-4" />
+          {isLoading && !codeSent ? "Sending…" : "Получить код"}
         </Button>
-        <Button block disabled={isLoading || !phone.trim() || !code.trim()}>
-          {isLoading && codeSent ? "Verifying…" : "Verify"}
+        <Button
+          block
+          variant={codeSent ? "primary" : "secondary"}
+          disabled={isLoading || !phone.trim() || !code.trim()}
+        >
+          <BadgeCheck className="h-4 w-4" />
+          {isLoading && codeSent ? "Verifying…" : "Подтвердить"}
         </Button>
       </div>
       <div className="text-xs leading-5 text-slate-400">
-        Link Telegram first, send your own contact to the bot, and then request
-        the code. Demo accounts stay available below.
+        For real sign in, first link Telegram, send your own contact to the bot,
+        then request the code and confirm it here.
       </div>
     </form>
   );
@@ -133,16 +162,30 @@ export function DemoPasswordForm({
       }}
     >
       <div className="space-y-2">
-        <label className="text-sm text-slate-300">Demo phone</label>
+        <label
+          className="text-sm font-medium text-slate-200"
+          htmlFor="demo-phone"
+        >
+          Demo phone
+        </label>
         <Input
+          id="demo-phone"
+          aria-label="Demo phone"
           value={contact}
           onChange={(event) => setContact(event.target.value)}
           placeholder="+15551230011"
         />
       </div>
       <div className="space-y-2">
-        <label className="text-sm text-slate-300">Demo password</label>
+        <label
+          className="text-sm font-medium text-slate-200"
+          htmlFor="demo-password"
+        >
+          Demo password
+        </label>
         <Input
+          id="demo-password"
+          aria-label="Demo password"
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -150,9 +193,9 @@ export function DemoPasswordForm({
         />
       </div>
       {error ? (
-        <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+        <InlineAlert tone="danger" title="Demo sign-in error">
           {error}
-        </div>
+        </InlineAlert>
       ) : null}
       <Button block disabled={isLoading || !contact.trim() || !password.trim()}>
         {isLoading ? "Signing in…" : "Sign in with demo account"}

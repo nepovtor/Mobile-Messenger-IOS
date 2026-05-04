@@ -1,13 +1,16 @@
-import { Search } from "lucide-react";
-import type { ChatSummary } from "../../types/chat";
+import { Search, Users } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { CurrentUser } from "../../types/auth";
+import type { ChatSummary } from "../../types/chat";
 import type { ContactEntry } from "../../types/contact";
+import type { ConnectionState } from "../../realtime/realtimeTypes";
+import { Avatar } from "../ui/Avatar";
+import { Button } from "../ui/Button";
+import { InlineAlert } from "../ui/InlineAlert";
+import { Input } from "../ui/Input";
+import { Skeleton } from "../ui/Skeleton";
 import { ChatList } from "../chat/ChatList";
 import { UserMenu } from "../chat/UserMenu";
-import { Input } from "../ui/Input";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
-import { useMemo, useState } from "react";
-import { Button } from "../ui/Button";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function Sidebar({
@@ -52,6 +55,7 @@ export function Sidebar({
   const [query, setQuery] = useState("");
   const [phone, setPhone] = useState("");
   const [activeTab, setActiveTab] = useState<"chats" | "contacts">("chats");
+
   const filteredChats = useMemo(() => {
     if (!query.trim()) {
       return chats;
@@ -63,6 +67,7 @@ export function Sidebar({
         .some((value) => value!.toLowerCase().includes(normalized)),
     );
   }, [chats, query]);
+
   const filteredContacts = useMemo(() => {
     if (!query.trim()) {
       return contacts;
@@ -77,36 +82,61 @@ export function Sidebar({
 
   return (
     <aside className="flex h-full flex-col gap-4">
+      <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-4">
+        <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/80">
+          Workspace
+        </p>
+        <h2 className="mt-3 text-xl font-semibold text-white">
+          Messenger dashboard
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-300">
+          Realtime chats, direct contacts, profile controls, and map access in
+          one presentation-friendly layout.
+        </p>
+      </div>
+
       <UserMenu
         user={user}
         connectionState={connectionState}
         onUpdateDisplayName={onUpdateDisplayName}
         onLogout={onLogout}
       />
+
       <WorkspaceSwitcher />
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/6 p-1">
+
+      <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/10 bg-white/[0.06] p-1">
         <button
-          className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
-            activeTab === "chats" ? "bg-white/12 text-white" : "text-slate-400"
+          type="button"
+          aria-pressed={activeTab === "chats"}
+          className={`rounded-[18px] px-3 py-2 text-sm font-medium transition ${
+            activeTab === "chats"
+              ? "bg-white/[0.12] text-white"
+              : "text-slate-400"
           }`}
           onClick={() => setActiveTab("chats")}
         >
-          Chats
+          Chats ({chats.length})
         </button>
         <button
-          className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+          type="button"
+          aria-pressed={activeTab === "contacts"}
+          className={`rounded-[18px] px-3 py-2 text-sm font-medium transition ${
             activeTab === "contacts"
-              ? "bg-white/12 text-white"
+              ? "bg-white/[0.12] text-white"
               : "text-slate-400"
           }`}
           onClick={() => setActiveTab("contacts")}
         >
-          Contacts
+          Contacts ({contacts.length})
         </button>
       </div>
+
       <div className="relative">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         <Input
+          aria-label={
+            activeTab === "chats" ? "Search chats" : "Search contacts"
+          }
           className="pl-10"
           placeholder={
             activeTab === "chats" ? "Search chats" : "Search contacts"
@@ -115,6 +145,7 @@ export function Sidebar({
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         {activeTab === "chats" ? (
           <ChatList
@@ -125,11 +156,15 @@ export function Sidebar({
           />
         ) : (
           <div className="space-y-3">
-            <div className="rounded-2xl border border-white/10 bg-white/6 p-3">
+            <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-4">
               <p className="mb-2 text-sm font-semibold text-white">
                 Add contact by phone
               </p>
+              <p className="mb-3 text-xs leading-5 text-slate-400">
+                Add a contact by phone to start messaging
+              </p>
               <Input
+                aria-label="Contact phone"
                 placeholder="+375291234567"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
@@ -138,65 +173,64 @@ export function Sidebar({
                 block
                 className="mt-3"
                 disabled={isAddingContact || !phone.trim()}
-                onClick={() => {
-                  const trimmed = phone.trim();
-                  void onAddContact(trimmed);
-                  setPhone("");
-                }}
+                isLoading={isAddingContact}
+                onClick={() => void onAddContact(phone.trim())}
               >
-                {isAddingContact ? "Adding..." : "Add contact"}
+                Add contact
               </Button>
             </div>
 
             {contactsNotice ? (
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+              <InlineAlert tone="success" title="Contacts">
                 {contactsNotice}
-              </div>
+              </InlineAlert>
             ) : null}
+
             {contactsError ? (
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+              <InlineAlert tone="danger" title="Contacts">
                 {contactsError}
-              </div>
+              </InlineAlert>
             ) : null}
 
             {isLoadingContacts ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-20 animate-pulse rounded-2xl border border-white/8 bg-white/6"
-                  />
+                  <Skeleton key={index} className="h-24" />
                 ))}
               </div>
             ) : filteredContacts.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-10 text-center text-sm text-slate-400">
-                No contacts yet. Add someone by phone to start a direct chat.
+              <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
+                Add a contact by phone to start messaging
               </div>
             ) : (
               <div className="space-y-3">
                 {filteredContacts.map((contact) => (
                   <div
                     key={contact.id}
-                    className="rounded-2xl border border-white/10 bg-white/6 p-3"
+                    className="rounded-[26px] border border-white/10 bg-white/[0.06] p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">
-                          {contact.displayName}
-                        </p>
-                        <p className="truncate text-xs text-slate-400">
-                          {contact.phone}
-                        </p>
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-cyan-200/70">
-                          {contact.directChatID
-                            ? "Direct chat ready"
-                            : "Chat opens on demand"}
-                        </p>
+                      <div className="flex min-w-0 items-start gap-3">
+                        <Avatar name={contact.displayName} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {contact.displayName}
+                          </p>
+                          <p className="truncate text-xs text-slate-400">
+                            {contact.phone}
+                          </p>
+                          <div className="mt-2 inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.18em] text-cyan-200/70">
+                            <Users className="h-3.5 w-3.5" />
+                            {contact.directChatID
+                              ? "Direct chat ready"
+                              : "Chat opens on demand"}
+                          </div>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <Button
                           variant="secondary"
-                          className="px-3 py-2"
+                          size="sm"
                           disabled={openingContactId === contact.id}
                           onClick={() => onOpenContact(contact)}
                         >
@@ -206,7 +240,8 @@ export function Sidebar({
                         </Button>
                         <Button
                           variant="ghost"
-                          className="px-3 py-2 text-rose-200 hover:text-rose-100"
+                          size="sm"
+                          className="text-rose-200 hover:text-rose-100"
                           disabled={removingContactId === contact.id}
                           onClick={() => onRemoveContact(contact)}
                         >

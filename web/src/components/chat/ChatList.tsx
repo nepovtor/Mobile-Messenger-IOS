@@ -1,4 +1,5 @@
 import type { ChatSummary } from "../../types/chat";
+import { Skeleton } from "../ui/Skeleton";
 import { ChatListItem } from "./ChatListItem";
 
 export function ChatList({
@@ -16,10 +17,7 @@ export function ChatList({
     return (
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-24 animate-pulse rounded-2xl border border-white/8 bg-white/6"
-          />
+          <Skeleton key={index} className="h-24" />
         ))}
       </div>
     );
@@ -27,8 +25,9 @@ export function ChatList({
 
   if (chats.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-10 text-center text-sm text-slate-400">
-        No chats found for this account yet.
+      <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
+        No chats found for this account yet. Open contacts to create a direct
+        conversation and continue the demo.
       </div>
     );
   }
