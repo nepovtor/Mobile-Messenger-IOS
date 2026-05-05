@@ -1,12 +1,11 @@
+import clsx from "clsx";
 import {
   Activity,
-  Clock3,
-  Code2,
-  Database,
   RefreshCcw,
   ScrollText,
   Server,
   ShieldCheck,
+  Wrench,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -27,6 +26,9 @@ import type {
   SystemLogEntry,
   SystemOverview,
 } from "../types/system";
+import { formatRelativeStatus } from "../utils/date";
+
+type AdminTab = "overview" | "activity" | "infrastructure" | "logs";
 
 type DecodedJwt = {
   sub?: string;
@@ -37,6 +39,50 @@ type DecodedJwt = {
   iat?: number;
   exp?: number;
 };
+
+const adminTabs = [
+  {
+    id: "overview" as const,
+    label: "Overview",
+    icon: Server,
+  },
+  {
+    id: "activity" as const,
+    label: "Activity",
+    icon: Activity,
+  },
+  {
+    id: "infrastructure" as const,
+    label: "Infrastructure",
+    icon: Wrench,
+  },
+  {
+    id: "logs" as const,
+    label: "Logs",
+    icon: ScrollText,
+  },
+] as const;
+
+const repoFallback = {
+  typescript: {
+    strict: true,
+    target: "es2021",
+    module: "Node16",
+  },
+  docker: {
+    rootDockerfilePresent: true,
+    serverDockerfilePresent: true,
+    composeFilePresent: true,
+  },
+  logging: {
+    requestFile: "requests.log",
+    errorFile: "errors.log",
+  },
+  database: {
+    driver: "postgres",
+    orm: "typeorm",
+  },
+} as const;
 
 function decodeJwtPayload(token: string | null): DecodedJwt | null {
   if (!token) {
@@ -76,7 +122,11 @@ function formatDateTime(value?: string | number | null) {
   }).format(date);
 }
 
-function formatUptime(seconds: number) {
+function formatUptime(seconds: number | null) {
+  if (seconds == null) {
+    return "n/a";
+  }
+
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
@@ -90,6 +140,18 @@ function formatUptime(seconds: number) {
   }
 
   return `${remainingSeconds}s`;
+}
+
+function formatSessionExpiry(value?: number) {
+  return typeof value === "number" ? formatDateTime(value) : "n/a";
+}
+
+function isMissingSystemRoute(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    error.status === 404 &&
+    /\/api\/system\//i.test(error.message)
+  );
 }
 
 function tailPath(value: string) {
@@ -115,92 +177,148 @@ function prettyMeta(meta: Record<string, unknown> | null) {
   return JSON.stringify(meta, null, 2);
 }
 
-function isMissingSystemRoute(error: unknown) {
+function toneForBool(value: boolean | null): "success" | "warning" | "neutral" {
+  if (value === true) {
+    return "success";
+  }
+  if (value === false) {
+    return "warning";
+  }
+  return "neutral";
+}
+
+function toneForMessageStatus(
+  status: string,
+): "success" | "warning" | "danger" {
+  if (status === "read" || status === "delivered" || status === "sent") {
+    return "success";
+  }
+  if (status === "failed") {
+    return "danger";
+  }
+  return "warning";
+}
+
+function SectionCard({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    error instanceof ApiError &&
-    error.status === 404 &&
-    /\/api\/system\//i.test(error.message)
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-white">{title}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="mt-5">{children}</div>
+    </Card>
   );
 }
 
-function formatSessionExpiry(value?: number) {
-  return typeof value === "number" ? formatDateTime(value) : "n/a";
-}
-
-const repoFallback = {
-  typescript: {
-    strict: true,
-    target: "es2021",
-    module: "Node16",
-  },
-  docker: {
-    rootDockerfilePresent: true,
-    serverDockerfilePresent: true,
-    composeFilePresent: true,
-  },
-  logging: {
-    requestFile: "requests.log",
-    errorFile: "errors.log",
-  },
-  database: {
-    driver: "postgres",
-    orm: "typeorm",
-  },
-} as const;
-
-function StatusPill({
+function MetricCard({
   label,
   value,
+  hint,
+  tone = "neutral",
 }: {
   label: string;
-  value: boolean | null;
+  value: string;
+  hint: string;
+  tone?: "neutral" | "success" | "warning" | "danger";
 }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+          {label}
+        </p>
+        <Badge tone={tone} pulseDot={tone !== "neutral"}>
+          {tone === "neutral" ? "Info" : tone === "success" ? "Live" : tone}
+        </Badge>
+      </div>
+      <p className="mt-3 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{hint}</p>
+    </Card>
+  );
+}
+
+function StatusRow({ label, value }: { label: string; value: boolean | null }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
       <span className="text-sm text-slate-300">{label}</span>
-      <Badge
-        tone={
-          value === true ? "success" : value === false ? "warning" : "neutral"
-        }
-        pulseDot={value !== null}
-      >
+      <Badge tone={toneForBool(value)} pulseDot={value !== null}>
         {value === true ? "Ready" : value === false ? "Missing" : "Unknown"}
       </Badge>
     </div>
   );
 }
 
-function LogFeed({
+function EmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.04] px-5 py-10 text-center">
+      <p className="text-base font-semibold text-white">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{message}</p>
+    </div>
+  );
+}
+
+function ActivityList({
   title,
   description,
-  emptyMessage,
-  entries,
+  children,
 }: {
   title: string;
   description: string;
-  emptyMessage: string;
-  entries: SystemLogEntry[];
+  children: ReactNode;
 }) {
   return (
-    <Card className="p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-semibold text-white">{title}</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              {description}
-            </p>
-          </div>
-          <Badge tone={entries.length > 0 ? "success" : "neutral"}>
-            {entries.length} entries
-          </Badge>
-        </div>
+    <SectionCard title={title} description={description}>
+      <div className="space-y-3">{children}</div>
+    </SectionCard>
+  );
+}
 
-      {entries.length === 0 ? (
-        <div className="mt-5 rounded-[24px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm text-slate-400">
-          {emptyMessage}
-        </div>
+function LogFeed({
+  title,
+  description,
+  entries,
+  emptyMessage,
+  unavailable,
+}: {
+  title: string;
+  description: string;
+  entries: SystemLogEntry[];
+  emptyMessage: string;
+  unavailable: boolean;
+}) {
+  return (
+    <SectionCard
+      title={title}
+      description={description}
+      action={
+        <Badge tone={entries.length > 0 ? "success" : "neutral"}>
+          {entries.length} entries
+        </Badge>
+      }
+    >
+      {unavailable ? (
+        <EmptyState
+          title="Live logs unavailable"
+          message="The current backend deployment does not expose the protected /api/system log routes yet."
+        />
+      ) : entries.length === 0 ? (
+        <EmptyState title="No entries yet" message={emptyMessage} />
       ) : (
-        <div className="mt-5 space-y-3">
+        <div className="space-y-3">
           {entries.map((entry, index) => {
             const method = metaString(entry.meta, "method");
             const url = metaString(entry.meta, "url");
@@ -222,15 +340,9 @@ function LogFeed({
                         >
                           {entry.level}
                         </Badge>
-                        {method && url ? (
-                          <span className="text-sm font-medium text-white">
-                            {method} {url}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-medium text-white">
-                            {entry.message}
-                          </span>
-                        )}
+                        <span className="text-sm font-medium text-white">
+                          {method && url ? `${method} ${url}` : entry.message}
+                        </span>
                       </div>
                       <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
                         {formatDateTime(entry.timestamp)}
@@ -238,9 +350,7 @@ function LogFeed({
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
                       {typeof statusCode === "number" ? (
-                        <Badge
-                          tone={statusCode >= 500 ? "danger" : "neutral"}
-                        >
+                        <Badge tone={statusCode >= 500 ? "danger" : "neutral"}>
                           {statusCode}
                         </Badge>
                       ) : null}
@@ -261,33 +371,7 @@ function LogFeed({
           })}
         </div>
       )}
-    </Card>
-  );
-}
-
-function LabCard({
-  icon: Icon,
-  title,
-  children,
-}: {
-  icon: typeof Code2;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card className="h-full p-5 sm:p-6">
-      <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/18 bg-cyan-400/10 text-cyan-100">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <div className="mt-3 space-y-3 text-sm leading-6 text-slate-300">
-            {children}
-          </div>
-        </div>
-      </div>
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -303,6 +387,8 @@ export function SystemPage() {
     updateDisplayName,
   } = authStore();
   const connectionState = realtimeStore((state) => state.connectionState);
+
+  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [requestLogs, setRequestLogs] = useState<SystemLogEntry[]>([]);
   const [errorLogs, setErrorLogs] = useState<SystemLogEntry[]>([]);
@@ -317,125 +403,7 @@ export function SystemPage() {
 
   const jwtPayload = useMemo(() => decodeJwtPayload(token), [token]);
 
-  useEffect(() => {
-    if (!isAuthenticated || !currentUser) {
-      navigate("/", { replace: true });
-      return;
-    }
-
-    let isDisposed = false;
-
-    async function loadSystemData(isManualRefresh = false) {
-      if (isManualRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      setPageError(null);
-      setSystemApiMissing(false);
-      try {
-        const [
-          overviewResult,
-          requestLogsResult,
-          errorLogsResult,
-          versionResult,
-          healthResult,
-        ] = await Promise.allSettled([
-          systemApi.getOverview(),
-          systemApi.getRequestLogs(18),
-          systemApi.getErrorLogs(12),
-          systemApi.getVersion(),
-          systemApi.getHealth(),
-        ]);
-
-        if (isDisposed) {
-          return;
-        }
-
-        if (overviewResult.status === "fulfilled") {
-          setOverview(overviewResult.value);
-        } else {
-          setOverview(null);
-        }
-
-        if (requestLogsResult.status === "fulfilled") {
-          setRequestLogs(requestLogsResult.value);
-        } else {
-          setRequestLogs([]);
-        }
-
-        if (errorLogsResult.status === "fulfilled") {
-          setErrorLogs(errorLogsResult.value);
-        } else {
-          setErrorLogs([]);
-        }
-
-        if (versionResult.status === "fulfilled") {
-          setVersionInfo(versionResult.value);
-        }
-
-        if (healthResult.status === "fulfilled") {
-          setHealthInfo(healthResult.value);
-        }
-
-        const systemErrors = [
-          overviewResult,
-          requestLogsResult,
-          errorLogsResult,
-        ].flatMap((result) =>
-          result.status === "rejected" ? [result.reason] : [],
-        );
-        const missingSystemRoutes = systemErrors.some((error) =>
-          isMissingSystemRoute(error),
-        );
-
-        if (missingSystemRoutes) {
-          setSystemApiMissing(true);
-          setPageError(
-            "Current backend deployment does not expose /api/system/* yet. Deploy the latest backend build or point the web client to your local backend.",
-          );
-        } else if (systemErrors[0]) {
-          setPageError(
-            systemErrors[0] instanceof Error
-              ? systemErrors[0].message
-              : "Could not load the system overview.",
-          );
-        }
-
-        if (!missingSystemRoutes && !systemErrors[0]) {
-          setPageError(null);
-        }
-      } finally {
-        if (!isDisposed) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
-    }
-
-    void loadSystemData();
-
-    return () => {
-      isDisposed = true;
-    };
-  }, [currentUser, isAuthenticated, navigate]);
-
-  useEffect(() => {
-    if (authError) {
-      navigate("/", { replace: true });
-      clearError();
-    }
-  }, [authError, clearError, navigate]);
-
-  if (!currentUser) {
-    return null;
-  }
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    setPageError(null);
-    setSystemApiMissing(false);
-
+  async function hydrateAdminData() {
     const [
       overviewResult,
       requestLogsResult,
@@ -483,27 +451,87 @@ export function SystemPage() {
     ].flatMap((result) =>
       result.status === "rejected" ? [result.reason] : [],
     );
+
     const missingSystemRoutes = systemErrors.some((error) =>
       isMissingSystemRoute(error),
     );
 
+    setSystemApiMissing(missingSystemRoutes);
+
     if (missingSystemRoutes) {
-      setSystemApiMissing(true);
       setPageError(
         "Current backend deployment does not expose /api/system/* yet. Deploy the latest backend build or point the web client to your local backend.",
       );
-    } else if (systemErrors[0]) {
+      return;
+    }
+
+    if (systemErrors[0]) {
       setPageError(
         systemErrors[0] instanceof Error
           ? systemErrors[0].message
-          : "Could not refresh the system overview.",
+          : "Could not load the admin panel.",
       );
+      return;
     }
 
-    setRefreshing(false);
+    setPageError(null);
   }
 
-  const displayedVersion = overview?.api.version ?? versionInfo?.version ?? "n/a";
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser) {
+      navigate("/", { replace: true });
+      return;
+    }
+
+    let isDisposed = false;
+
+    async function load() {
+      setLoading(true);
+      setPageError(null);
+      setSystemApiMissing(false);
+
+      try {
+        await hydrateAdminData();
+      } finally {
+        if (!isDisposed) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [currentUser, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (authError) {
+      navigate("/", { replace: true });
+      clearError();
+    }
+  }, [authError, clearError, navigate]);
+
+  if (!currentUser) {
+    return null;
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    setPageError(null);
+    setSystemApiMissing(false);
+
+    try {
+      await hydrateAdminData();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const displayedVersion =
+    overview?.api.version ?? versionInfo?.version ?? "n/a";
   const displayedEnvironment =
     overview?.api.environment ??
     (systemApiMissing ? "Not exposed by current deployment" : "n/a");
@@ -512,9 +540,14 @@ export function SystemPage() {
     (systemApiMissing ? "Not exposed by current deployment" : "n/a");
   const displayedUptime =
     overview?.api.uptimeSeconds ?? healthInfo?.uptime ?? null;
-  const displayedGeneratedAt = overview?.generatedAt ?? healthInfo?.timestamp ?? null;
-  const displayedTsStrict = overview?.typescript.strict ?? repoFallback.typescript.strict;
-  const displayedTsTarget = overview?.typescript.target ?? repoFallback.typescript.target;
+  const displayedGeneratedAt =
+    overview?.generatedAt ?? healthInfo?.timestamp ?? null;
+  const displayedTsStrict =
+    overview?.typescript.strict ?? repoFallback.typescript.strict;
+  const displayedTsTarget =
+    overview?.typescript.target ?? repoFallback.typescript.target;
+  const displayedTsModule =
+    overview?.typescript.module ?? repoFallback.typescript.module;
   const displayedRequestLogFile =
     overview?.logging.requestFile ?? repoFallback.logging.requestFile;
   const displayedErrorLogFile =
@@ -522,73 +555,78 @@ export function SystemPage() {
   const displayedJwtConfigured =
     overview?.authentication.jwtConfigured ?? Boolean(token);
   const displayedJwtExpiresIn =
-    overview?.authentication.jwtExpiresIn ?? formatSessionExpiry(jwtPayload?.exp);
+    overview?.authentication.jwtExpiresIn ??
+    formatSessionExpiry(jwtPayload?.exp);
   const displayedBearerScheme =
     overview?.authentication.bearerScheme ?? "Bearer";
+  const totalRows = overview
+    ? Object.values(overview.database.counts).reduce(
+        (sum, count) => sum + count,
+        0,
+      )
+    : null;
+
+  const recentUsers = overview?.database.recentUsers ?? [];
+  const recentChats = overview?.database.recentChats ?? [];
+  const recentMessages = overview?.database.recentMessages ?? [];
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.15),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.14),_transparent_28%),linear-gradient(180deg,#020617_0%,#111827_100%)] px-4 py-4 sm:px-6 sm:py-6">
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(249,115,22,0.14),_transparent_26%),linear-gradient(180deg,#020617_0%,#111827_48%,#030712_100%)] px-4 py-4 sm:px-6 sm:py-6">
       <div className="glass-orb left-[-4rem] top-[4rem] h-44 w-44 bg-cyan-400/20" />
-      <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-amber-400/16" />
+      <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-orange-400/14" />
 
-      <div className="mx-auto flex max-w-[1480px] flex-col gap-4">
-        <Card className="p-4 sm:p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="mx-auto flex max-w-[1520px] flex-col gap-4">
+        <Card className="overflow-hidden p-4 sm:p-5">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-100">
-                <Server className="h-3.5 w-3.5" />
-                System dashboard
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Admin Console
               </p>
-              <h1 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">
-                Web demo for labs 7-11
+              <h1 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">
+                Mobile Messenger Admin
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                A browser-accessible control room for the core coursework
-                features: TypeScript runtime metadata, request and error logs,
-                Docker assets, PostgreSQL + TypeORM status, and JWT-based
-                authentication.
+                One place for backend health, auth configuration, recent
+                activity, infrastructure status and live logs.
               </p>
             </div>
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                  API
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white">
-                  {displayedVersion}
-                </p>
-              </Card>
-              <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                  JWT
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white">
-                  {token ? "Active" : "Missing"}
-                </p>
-              </Card>
-              <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                  DB rows
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white">
-                  {overview
-                    ? overview.database.counts.users +
-                      overview.database.counts.contacts +
-                      overview.database.counts.chats +
-                      overview.database.counts.messages
-                    : systemApiMissing
-                      ? "unavailable"
-                      : "loading"}
-                </p>
-              </Card>
-              <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                  Logs
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white">
-                  {requestLogs.length + errorLogs.length} loaded
-                </p>
-              </Card>
+              <MetricCard
+                label="Backend"
+                value={displayedVersion}
+                hint={displayedEnvironment}
+                tone="success"
+              />
+              <MetricCard
+                label="Session"
+                value={displayedJwtConfigured ? "Bearer" : "No JWT"}
+                hint={displayedJwtExpiresIn}
+                tone={displayedJwtConfigured ? "success" : "warning"}
+              />
+              <MetricCard
+                label="Database"
+                value={totalRows != null ? String(totalRows) : "n/a"}
+                hint={
+                  totalRows != null
+                    ? "Tracked rows"
+                    : "Awaiting system API data"
+                }
+                tone={totalRows != null ? "success" : "neutral"}
+              />
+              <MetricCard
+                label="Logs"
+                value={String(requestLogs.length + errorLogs.length)}
+                hint="Loaded entries"
+                tone={
+                  systemApiMissing
+                    ? "warning"
+                    : requestLogs.length + errorLogs.length > 0
+                      ? "success"
+                      : "neutral"
+                }
+              />
             </div>
           </div>
         </Card>
@@ -597,6 +635,7 @@ export function SystemPage() {
           <aside className="rounded-[32px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl">
             <div className="space-y-4">
               <WorkspaceSwitcher />
+
               <UserMenu
                 user={currentUser}
                 connectionState={connectionState}
@@ -608,11 +647,11 @@ export function SystemPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-white">
-                      Refresh overview
+                      Admin refresh
                     </p>
                     <p className="mt-1 text-xs leading-5 text-slate-400">
-                      Reloads backend status, counts, request logs and error
-                      logs.
+                      Sync overview, activity and logs from the protected system
+                      endpoints.
                     </p>
                   </div>
                   <Button
@@ -629,33 +668,31 @@ export function SystemPage() {
 
               <Card className="p-4">
                 <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">
-                  Session snapshot
+                  Session
                 </p>
                 <div className="mt-4 space-y-3 text-sm text-slate-300">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                      Token preview
-                    </p>
-                    <p className="mt-2 break-all font-medium text-white">
-                      {token
-                        ? `${token.slice(0, 18)}...${token.slice(-12)}`
-                        : "No token"}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                      JWT expiry
-                    </p>
-                    <p className="mt-2 font-medium text-white">
-                      {formatDateTime(jwtPayload?.exp ?? null)}
-                    </p>
-                  </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
                       Subject
                     </p>
                     <p className="mt-2 break-all font-medium text-white">
                       {jwtPayload?.sub ?? currentUser.userID}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                      Expires
+                    </p>
+                    <p className="mt-2 font-medium text-white">
+                      {formatSessionExpiry(jwtPayload?.exp)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                      Realtime
+                    </p>
+                    <p className="mt-2 font-medium capitalize text-white">
+                      {connectionState}
                     </p>
                   </div>
                 </div>
@@ -665,197 +702,43 @@ export function SystemPage() {
 
           <main className="space-y-4">
             {pageError ? (
-              <InlineAlert tone="danger" title="System dashboard">
+              <InlineAlert
+                tone={systemApiMissing ? "warning" : "danger"}
+                title="Admin status"
+              >
                 {pageError}
               </InlineAlert>
             ) : null}
 
-            {systemApiMissing ? (
-              <InlineAlert tone="warning" title="Live backend note">
-                The current Railway deployment is missing the new protected
-                `/api/system/*` routes. Repo-backed sections below still show
-                known project setup, but live logs and database counts require a
-                backend redeploy.
-              </InlineAlert>
-            ) : null}
-
-            <InlineAlert tone="info" title="What this page covers">
-              The page exposes the main backend-focused coursework features in
-              the browser: strict TypeScript setup, log files, Docker assets,
-              PostgreSQL + TypeORM persistence, and JWT/Bearer authentication.
-            </InlineAlert>
-
-            <div className="grid gap-4 2xl:grid-cols-2">
-              <LabCard icon={Code2} title="Lab 7. TypeScript">
-                <p>
-                  The web client runs on React + Vite + TypeScript, while the
-                  backend reports its active compiler target, module mode and
-                  strict-mode flag directly from `tsconfig.json`.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone="success">Frontend TS</Badge>
-                  <Badge
-                    tone={displayedTsStrict ? "success" : "warning"}
+            <div className="grid gap-2 rounded-[24px] border border-white/10 bg-slate-950/40 p-1 sm:grid-cols-4">
+              {adminTabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={clsx(
+                      "flex items-center justify-center gap-2 rounded-[18px] px-3 py-3 text-sm font-medium transition",
+                      activeTab === tab.id
+                        ? "bg-white/[0.12] text-white"
+                        : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                    )}
+                    onClick={() => setActiveTab(tab.id)}
                   >
-                    Strict: {String(displayedTsStrict)}
-                  </Badge>
-                  <Badge tone="neutral">
-                    Target: {String(displayedTsTarget)}
-                  </Badge>
-                </div>
-              </LabCard>
-
-              <LabCard icon={ScrollText} title="Lab 8. Logging & Error Handling">
-                <p>
-                  Every HTTP request is logged with method, URL, query, body,
-                  status code and duration. Runtime errors, uncaught exceptions
-                  and unhandled promise rejections are written into a dedicated
-                  error log file.
-                </p>
-                <div className="space-y-2">
-                  <StatusPill
-                    label={`Request log: ${tailPath(displayedRequestLogFile)}`}
-                    value={overview ? Boolean(overview.logging.requestFile) : null}
-                  />
-                  <StatusPill
-                    label={`Error log: ${tailPath(displayedErrorLogFile)}`}
-                    value={overview ? Boolean(overview.logging.errorFile) : null}
-                  />
-                </div>
-                {systemApiMissing ? (
-                  <p className="text-xs leading-5 text-slate-400">
-                    Log file names are configured in the repo, but live log
-                    streaming is unavailable on the current deployment.
-                  </p>
-                ) : null}
-              </LabCard>
-
-              <LabCard icon={Server} title="Lab 9. Docker Basics">
-                <p>
-                  The backend publishes whether the repository contains the
-                  server Dockerfile, the root deployment Dockerfile and the
-                  compose setup used for local infrastructure.
-                </p>
-                <div className="space-y-2">
-                  <StatusPill
-                    label="Root Dockerfile"
-                    value={
-                      overview?.docker.rootDockerfilePresent ??
-                      repoFallback.docker.rootDockerfilePresent
-                    }
-                  />
-                  <StatusPill
-                    label="Server Dockerfile"
-                    value={
-                      overview?.docker.serverDockerfilePresent ??
-                      repoFallback.docker.serverDockerfilePresent
-                    }
-                  />
-                  <StatusPill
-                    label="docker-compose"
-                    value={
-                      overview?.docker.composeFilePresent ??
-                      repoFallback.docker.composeFilePresent
-                    }
-                  />
-                </div>
-              </LabCard>
-
-              <LabCard
-                icon={Database}
-                title="Lab 10. PostgreSQL & TypeORM"
-              >
-                <p>
-                  PostgreSQL is the active backend store, TypeORM manages the
-                  entities, and the dashboard shows current data volume across
-                  users, contacts, chats, messages and shared locations.
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <StatusPill
-                    label={`${overview?.database.driver ?? repoFallback.database.driver} / ${
-                      overview?.database.orm ?? repoFallback.database.orm
-                    }`}
-                    value={true}
-                  />
-                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                    <span className="text-sm text-slate-300">
-                      Synchronize:{" "}
-                      {overview
-                        ? overview.database.synchronize
-                          ? "on"
-                          : "off"
-                        : "n/a"}
-                    </span>
-                    <Badge
-                      tone={
-                        overview
-                          ? overview.database.synchronize
-                            ? "warning"
-                            : "success"
-                          : "neutral"
-                      }
-                    >
-                      {overview
-                        ? overview.database.synchronize
-                          ? "Dev mode"
-                          : "Safe"
-                        : "Unknown"}
-                    </Badge>
-                  </div>
-                </div>
-                {systemApiMissing ? (
-                  <p className="text-xs leading-5 text-slate-400">
-                    Driver and ORM are known from the repo. Live row counts need
-                    the latest backend deployment.
-                  </p>
-                ) : null}
-              </LabCard>
-
-              <LabCard
-                icon={ShieldCheck}
-                title="Lab 11. Authentication & JWT"
-              >
-                <p>
-                  This browser session uses Bearer authentication, stores the
-                  JWT locally, decodes the payload in the UI and calls protected
-                  backend routes with the token in the `Authorization` header.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge
-                    tone={displayedJwtConfigured ? "success" : "danger"}
-                  >
-                    JWT secret {displayedJwtConfigured ? "configured" : "missing"}
-                  </Badge>
-                  <Badge tone="neutral">
-                    Scheme: {displayedBearerScheme}
-                  </Badge>
-                  <Badge tone="neutral">
-                    Expires: {displayedJwtExpiresIn}
-                  </Badge>
-                </div>
-              </LabCard>
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-2">
-              <Card className="p-5 sm:p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">
-                      Runtime summary
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      Live backend metadata pulled from the protected system API.
-                    </p>
-                  </div>
-                  <Activity className="h-5 w-5 text-cyan-200" />
-                </div>
-
-                {isLoading && !overview ? (
-                  <div className="mt-5 text-sm text-slate-400">
-                    Loading system overview…
-                  </div>
-                ) : overview ? (
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {activeTab === "overview" ? (
+              <div className="space-y-4">
+                <SectionCard
+                  title="Admin snapshot"
+                  description="Live runtime state combined with safe fallbacks when the protected system API is not deployed yet."
+                >
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
                         Environment
@@ -877,78 +760,376 @@ export function SystemPage() {
                         Uptime
                       </p>
                       <p className="mt-2 font-semibold text-white">
-                        {displayedUptime != null
-                          ? formatUptime(displayedUptime)
-                          : "n/a"}
+                        {formatUptime(displayedUptime)}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                        Generated
+                        Refreshed
                       </p>
                       <p className="mt-2 font-semibold text-white">
                         {formatDateTime(displayedGeneratedAt)}
                       </p>
                     </div>
                   </div>
-                ) : null}
-              </Card>
+                </SectionCard>
 
-              <Card className="p-5 sm:p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">
-                      Data snapshot
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      Current counts from PostgreSQL through TypeORM.
-                    </p>
-                  </div>
-                  <Clock3 className="h-5 w-5 text-amber-200" />
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <SectionCard
+                    title="Authentication"
+                    description="JWT state, login modes and provider configuration."
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      <Badge
+                        tone={displayedJwtConfigured ? "success" : "danger"}
+                      >
+                        JWT secret{" "}
+                        {displayedJwtConfigured ? "configured" : "missing"}
+                      </Badge>
+                      <Badge tone="neutral">
+                        Scheme: {displayedBearerScheme}
+                      </Badge>
+                      <Badge tone="neutral">
+                        Expires: {displayedJwtExpiresIn}
+                      </Badge>
+                      <Badge
+                        tone={
+                          overview?.authentication.demoAccountsEnabled
+                            ? "success"
+                            : "warning"
+                        }
+                      >
+                        Demo accounts{" "}
+                        {overview?.authentication.demoAccountsEnabled
+                          ? "enabled"
+                          : "unknown"}
+                      </Badge>
+                      <Badge
+                        tone={
+                          overview?.authentication.passwordLoginEnabled
+                            ? "success"
+                            : "warning"
+                        }
+                      >
+                        Password login{" "}
+                        {overview?.authentication.passwordLoginEnabled
+                          ? "enabled"
+                          : "unknown"}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                          Verification provider
+                        </p>
+                        <p className="mt-2 font-semibold capitalize text-white">
+                          {overview?.authentication.verificationProvider ??
+                            "n/a"}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                          SMS provider
+                        </p>
+                        <p className="mt-2 font-semibold capitalize text-white">
+                          {overview?.authentication.smsProvider ?? "n/a"}
+                        </p>
+                      </div>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard
+                    title="Infrastructure"
+                    description="Database, storage and deployment readiness."
+                  >
+                    <div className="space-y-3">
+                      <StatusRow
+                        label="PostgreSQL / TypeORM"
+                        value={overview?.database.connected ?? null}
+                      />
+                      <StatusRow
+                        label="Root Dockerfile"
+                        value={
+                          overview?.docker.rootDockerfilePresent ??
+                          repoFallback.docker.rootDockerfilePresent
+                        }
+                      />
+                      <StatusRow
+                        label="Server Dockerfile"
+                        value={
+                          overview?.docker.serverDockerfilePresent ??
+                          repoFallback.docker.serverDockerfilePresent
+                        }
+                      />
+                      <StatusRow
+                        label="docker-compose"
+                        value={
+                          overview?.docker.composeFilePresent ??
+                          repoFallback.docker.composeFilePresent
+                        }
+                      />
+                      <StatusRow
+                        label={`Storage bucket: ${
+                          overview?.storage.bucket ?? "unknown"
+                        }`}
+                        value={overview?.storage.configured ?? null}
+                      />
+                    </div>
+                  </SectionCard>
                 </div>
+              </div>
+            ) : null}
 
-                {overview ? (
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {Object.entries(overview.database.counts).map(
-                      ([key, value]) => (
+            {activeTab === "activity" ? (
+              <div className="space-y-4">
+                {systemApiMissing ? (
+                  <EmptyState
+                    title="Activity requires the latest backend"
+                    message="Deploy the current backend build to expose recent users, chats and messages inside the admin panel."
+                  />
+                ) : null}
+
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <ActivityList
+                    title="Recent users"
+                    description="Latest created or reused user profiles in the database."
+                  >
+                    {recentUsers.length === 0 ? (
+                      <EmptyState
+                        title="No recent users"
+                        message="Users will appear here once the backend starts returning activity data."
+                      />
+                    ) : (
+                      recentUsers.map((user) => (
                         <div
-                          key={key}
-                          className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"
+                          key={user.id}
+                          className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
                         >
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                            {key}
-                          </p>
-                          <p className="mt-2 text-xl font-semibold text-white">
-                            {value}
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-white">
+                                {user.displayName}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-400">
+                                {user.phone ?? user.contact}
+                              </p>
+                            </div>
+                            <Badge tone="neutral">user</Badge>
+                          </div>
+                          <p className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-500">
+                            {formatRelativeStatus(user.createdAt)}
                           </p>
                         </div>
-                      ),
+                      ))
                     )}
-                  </div>
-                ) : (
-                  <div className="mt-5 text-sm text-slate-400">
-                    {systemApiMissing
-                      ? "Database counts are unavailable on the current deployment."
-                      : "Loading database counts…"}
-                  </div>
-                )}
-              </Card>
-            </div>
+                  </ActivityList>
 
-            <div className="grid gap-4 xl:grid-cols-2">
-              <LogFeed
-                title="Recent request logs"
-                description="Incoming API requests captured with URL, query, body, status code and duration."
-                emptyMessage="Requests will appear here after you use the API."
-                entries={requestLogs}
-              />
-              <LogFeed
-                title="Recent error logs"
-                description="Runtime failures, uncaught exceptions and rejected promises are collected in the dedicated error stream."
-                emptyMessage="No error entries captured yet."
-                entries={errorLogs}
-              />
-            </div>
+                  <ActivityList
+                    title="Recent chats"
+                    description="Newest chat updates ordered by last activity."
+                  >
+                    {recentChats.length === 0 ? (
+                      <EmptyState
+                        title="No recent chats"
+                        message="Chats will appear here once activity data is available."
+                      />
+                    ) : (
+                      recentChats.map((chat) => (
+                        <div
+                          key={chat.id}
+                          className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-white">
+                                {chat.title}
+                              </p>
+                              <p className="mt-1 line-clamp-2 text-sm text-slate-400">
+                                {chat.lastMessagePreview || "No preview yet"}
+                              </p>
+                            </div>
+                            <Badge tone="neutral">chat</Badge>
+                          </div>
+                          <p className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-500">
+                            {formatRelativeStatus(chat.lastActivity)}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </ActivityList>
+
+                  <ActivityList
+                    title="Recent messages"
+                    description="Latest delivered, read or failed messages across chats."
+                  >
+                    {recentMessages.length === 0 ? (
+                      <EmptyState
+                        title="No recent messages"
+                        message="Messages will appear here once activity data is available."
+                      />
+                    ) : (
+                      recentMessages.map((message) => (
+                        <div
+                          key={message.id}
+                          className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-white">
+                                {message.authorName}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-400">
+                                {message.chatTitle ?? message.chatID}
+                              </p>
+                            </div>
+                            <Badge tone={toneForMessageStatus(message.status)}>
+                              {message.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-3 line-clamp-2 text-sm text-slate-300">
+                            {message.preview || "Empty payload"}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Badge tone="neutral">{message.kind}</Badge>
+                            <Badge tone="neutral">
+                              {formatRelativeStatus(message.createdAt)}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </ActivityList>
+                </div>
+              </div>
+            ) : null}
+
+            {activeTab === "infrastructure" ? (
+              <div className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <SectionCard
+                    title="TypeScript and runtime"
+                    description="Compiler posture and runtime environment."
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                          Strict
+                        </p>
+                        <p className="mt-2 font-semibold text-white">
+                          {String(displayedTsStrict)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                          Target
+                        </p>
+                        <p className="mt-2 font-semibold text-white">
+                          {String(displayedTsTarget)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                          Module
+                        </p>
+                        <p className="mt-2 font-semibold text-white">
+                          {String(displayedTsModule)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                          API base
+                        </p>
+                        <p className="mt-2 font-semibold text-white">
+                          {overview?.api.basePath ?? "/api"}
+                        </p>
+                      </div>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard
+                    title="Storage and deployment"
+                    description="Media bucket and local container assets."
+                  >
+                    <div className="space-y-3">
+                      <StatusRow
+                        label={`Request log file: ${tailPath(displayedRequestLogFile)}`}
+                        value={
+                          overview
+                            ? Boolean(overview.logging.requestFile)
+                            : null
+                        }
+                      />
+                      <StatusRow
+                        label={`Error log file: ${tailPath(displayedErrorLogFile)}`}
+                        value={
+                          overview ? Boolean(overview.logging.errorFile) : null
+                        }
+                      />
+                      <StatusRow
+                        label={`Storage bucket: ${overview?.storage.bucket ?? "unknown"}`}
+                        value={overview?.storage.configured ?? null}
+                      />
+                      <StatusRow
+                        label={`DB synchronize: ${
+                          overview
+                            ? overview.database.synchronize
+                              ? "on"
+                              : "off"
+                            : "unknown"
+                        }`}
+                        value={overview ? !overview.database.synchronize : null}
+                      />
+                    </div>
+                  </SectionCard>
+                </div>
+
+                <SectionCard
+                  title="Protected routes"
+                  description="Routes that expect a valid Bearer session before allowing access."
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      overview?.authentication.protectedRoutes ?? [
+                        "/api/auth/me",
+                        "/api/contacts",
+                        "/api/chats",
+                        "/api/location/me",
+                      ]
+                    ).map((route) => (
+                      <Badge key={route} tone="neutral">
+                        {route}
+                      </Badge>
+                    ))}
+                  </div>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {activeTab === "logs" ? (
+              <div className="grid gap-4 xl:grid-cols-2">
+                <LogFeed
+                  title="Request log stream"
+                  description="Recent authenticated or anonymous HTTP calls captured by the backend middleware."
+                  entries={requestLogs}
+                  emptyMessage="Requests will appear here after you start using the API."
+                  unavailable={systemApiMissing}
+                />
+                <LogFeed
+                  title="Error log stream"
+                  description="Unhandled runtime errors, exceptions and rejected promises."
+                  entries={errorLogs}
+                  emptyMessage="No error entries captured yet."
+                  unavailable={systemApiMissing}
+                />
+              </div>
+            ) : null}
+
+            {isLoading ? (
+              <InlineAlert tone="info" title="Admin panel">
+                Loading admin data…
+              </InlineAlert>
+            ) : null}
           </main>
         </div>
       </div>

@@ -10,8 +10,12 @@ import { MessageEntity } from "../../entities/message.entity";
 import { UserEntity } from "../../entities/user.entity";
 import { appLogger } from "../common/app-logger";
 import {
+  areDemoAccountsEnabled,
   getJwtExpiresIn,
   getNodeEnv,
+  getSmsProvider,
+  getVerificationProvider,
+  isPasswordLoginEnabled,
   isDatabaseSynchronizationEnabled,
 } from "../common/runtime-config";
 
@@ -67,14 +71,38 @@ export class SystemService {
     const repoRootDir = path.join(serverRootDir, "..");
     const packageJson = readJsonFile(path.join(serverRootDir, "package.json"));
     const tsconfig = readJsonFile(path.join(serverRootDir, "tsconfig.json"));
-    const [users, contacts, chats, messages, sharedLocations] =
-      await Promise.all([
-        this.usersRepository.count(),
-        this.contactsRepository.count(),
-        this.chatsRepository.count(),
-        this.messagesRepository.count(),
-        this.locationSharesRepository.count(),
-      ]);
+    const [
+      users,
+      contacts,
+      chats,
+      messages,
+      sharedLocations,
+      recentUsers,
+      recentChats,
+      recentMessages,
+    ] = await Promise.all([
+      this.usersRepository.count(),
+      this.contactsRepository.count(),
+      this.chatsRepository.count(),
+      this.messagesRepository.count(),
+      this.locationSharesRepository.count(),
+      this.usersRepository.find({
+        order: { createdAt: "DESC" },
+        take: 6,
+      }),
+      this.chatsRepository.find({
+        order: { lastActivity: "DESC" },
+        take: 6,
+      }),
+      this.messagesRepository.find({
+        relations: {
+          author: true,
+          chat: true,
+        },
+        order: { createdAt: "DESC" },
+        take: 8,
+      }),
+    ]);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -113,6 +141,7 @@ export class SystemService {
       database: {
         driver: "postgres",
         orm: "typeorm",
+        connected: true,
         host: process.env.DB_HOST || "localhost",
         port: Number(process.env.DB_PORT || "5432"),
         name: process.env.DB_NAME || "messenger",
@@ -124,11 +153,44 @@ export class SystemService {
           messages,
           sharedLocations,
         },
+        recentUsers: recentUsers.map((user) => ({
+          id: user.id,
+          displayName: user.displayName,
+          contact: user.contact,
+          phone: user.phone,
+          createdAt: user.createdAt.toISOString(),
+        })),
+        recentChats: recentChats.map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          lastMessagePreview: chat.lastMessagePreview,
+          lastActivity: chat.lastActivity.toISOString(),
+          createdAt: chat.createdAt.toISOString(),
+        })),
+        recentMessages: recentMessages.map((message) => ({
+          id: message.id,
+          chatID: message.chatId,
+          chatTitle: message.chat?.title ?? null,
+          authorName: message.author?.displayName ?? "Unknown",
+          kind: message.kind,
+          status: message.status,
+          preview:
+            message.deletedAt != null
+              ? "Message deleted"
+              : message.kind === "image"
+                ? "Photo"
+                : (message.text ?? ""),
+          createdAt: message.createdAt.toISOString(),
+        })),
       },
       authentication: {
         jwtConfigured: Boolean(process.env.JWT_SECRET?.trim()),
         jwtExpiresIn: getJwtExpiresIn(),
         bearerScheme: "Bearer",
+        verificationProvider: getVerificationProvider(),
+        smsProvider: getSmsProvider(),
+        demoAccountsEnabled: areDemoAccountsEnabled(),
+        passwordLoginEnabled: isPasswordLoginEnabled(),
         protectedRoutes: [
           "/api/auth/me",
           "/api/contacts",
@@ -136,6 +198,13 @@ export class SystemService {
           "/api/location/me",
           "/api/system/overview",
         ],
+      },
+      storage: {
+        endpoint: process.env.S3_ENDPOINT || null,
+        bucket: process.env.S3_BUCKET || null,
+        configured: Boolean(
+          process.env.S3_ENDPOINT?.trim() && process.env.S3_BUCKET?.trim(),
+        ),
       },
     };
   }

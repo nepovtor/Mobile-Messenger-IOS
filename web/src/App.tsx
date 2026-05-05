@@ -52,9 +52,10 @@ export default function App() {
         element={isAuthenticated ? <MapPage /> : <Navigate to="/" replace />}
       />
       <Route
-        path="/system"
+        path="/admin"
         element={isAuthenticated ? <SystemPage /> : <Navigate to="/" replace />}
       />
+      <Route path="/system" element={<Navigate to="/admin" replace />} />
     </Routes>
   );
 }

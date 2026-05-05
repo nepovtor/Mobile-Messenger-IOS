@@ -27,7 +27,7 @@ export function WorkspaceSwitcher() {
         Map
       </NavLink>
       <NavLink
-        to="/system"
+        to="/admin"
         className={({ isActive }) =>
           `flex items-center justify-center gap-2 rounded-[18px] px-3 py-2.5 text-center text-sm font-medium transition ${
             isActive ? "bg-white/[0.12] text-white" : "text-slate-400"
@@ -35,7 +35,7 @@ export function WorkspaceSwitcher() {
         }
       >
         <Server className="h-4 w-4" />
-        System
+        Admin
       </NavLink>
     </div>
   );

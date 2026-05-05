@@ -37,6 +37,7 @@ export type SystemOverview = {
   database: {
     driver: string;
     orm: string;
+    connected: boolean;
     host: string;
     port: number;
     name: string;
@@ -48,12 +49,45 @@ export type SystemOverview = {
       messages: number;
       sharedLocations: number;
     };
+    recentUsers: Array<{
+      id: string;
+      displayName: string;
+      contact: string;
+      phone: string | null;
+      createdAt: string;
+    }>;
+    recentChats: Array<{
+      id: string;
+      title: string;
+      lastMessagePreview: string | null;
+      lastActivity: string;
+      createdAt: string;
+    }>;
+    recentMessages: Array<{
+      id: string;
+      chatID: string;
+      chatTitle: string | null;
+      authorName: string;
+      kind: string;
+      status: string;
+      preview: string;
+      createdAt: string;
+    }>;
   };
   authentication: {
     jwtConfigured: boolean;
     jwtExpiresIn: string;
     bearerScheme: string;
+    verificationProvider: string;
+    smsProvider: string;
+    demoAccountsEnabled: boolean;
+    passwordLoginEnabled: boolean;
     protectedRoutes: string[];
+  };
+  storage: {
+    endpoint: string | null;
+    bucket: string | null;
+    configured: boolean;
   };
 };
 
