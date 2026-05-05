@@ -5,6 +5,7 @@ import { Spinner } from "./components/ui/Spinner";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { MessengerPage } from "./pages/MessengerPage";
+import { SystemPage } from "./pages/SystemPage";
 import { authStore } from "./store/authStore";
 import { locationStore } from "./store/locationStore";
 
@@ -49,6 +50,10 @@ export default function App() {
       <Route
         path="/map"
         element={isAuthenticated ? <MapPage /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/system"
+        element={isAuthenticated ? <SystemPage /> : <Navigate to="/" replace />}
       />
     </Routes>
   );

@@ -4,12 +4,19 @@ import { ValidationPipe } from "@nestjs/common";
 import { WsAdapter } from "@nestjs/platform-ws";
 import type { CustomOrigin } from "@nestjs/common/interfaces/external/cors-options.interface";
 import { AppModule } from "./modules/app.module";
+import {
+  appLogger,
+  createRequestLoggingMiddleware,
+  registerProcessErrorHandlers,
+} from "./modules/common/app-logger";
 import { getCorsOrigins } from "./modules/common/runtime-config";
 import { GlobalExceptionFilter } from "./modules/common/global-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
+  registerProcessErrorHandlers();
   app.useWebSocketAdapter(new WsAdapter(app));
+  app.use(createRequestLoggingMiddleware());
   const corsOrigins = getCorsOrigins();
   if (corsOrigins.length > 0) {
     const originValidator: CustomOrigin = (
@@ -44,10 +51,10 @@ async function bootstrap() {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 8080;
   await app.listen(port, "0.0.0.0");
-  // eslint-disable-next-line no-console
-  console.log(
-    `API is ready on http://localhost:${port}/api with ${corsOrigins.length} CORS origin(s)`,
-  );
+  await appLogger.info("bootstrap", "API server started", {
+    port,
+    corsOrigins,
+  });
 }
 
 bootstrap();

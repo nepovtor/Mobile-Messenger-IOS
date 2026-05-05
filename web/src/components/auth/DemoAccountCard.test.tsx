@@ -9,7 +9,6 @@ describe("DemoAccountCard", () => {
         name="Анна Demo"
         phone="+15551230011"
         code="demo1111"
-        description="Учебные чаты и личная переписка"
         onSelect={vi.fn()}
       />,
     );
@@ -17,8 +16,6 @@ describe("DemoAccountCard", () => {
     expect(screen.getByText("Анна Demo")).toBeInTheDocument();
     expect(screen.getByText("+15551230011")).toBeInTheDocument();
     expect(screen.getByText("demo1111")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /quick sign in/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /войти/i })).toBeInTheDocument();
   });
 });

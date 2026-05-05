@@ -19,6 +19,9 @@ export class AppController {
         "/api/chats/:chatId/messages",
         "/api/chats/:chatId/messages [POST]",
         "/api/chats [POST]",
+        "/api/system/overview",
+        "/api/system/logs/requests",
+        "/api/system/logs/errors",
       ],
       message: "Welcome to Mobile Messenger API",
     };

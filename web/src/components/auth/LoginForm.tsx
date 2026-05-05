@@ -42,7 +42,7 @@ export function LoginForm({
       className="space-y-5"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (codeSent) {
+        if (code.trim()) {
           await onVerifyCode({ phone, code });
           return;
         }
@@ -50,14 +50,14 @@ export function LoginForm({
         await onRequestCode({ phone });
       }}
     >
-      <div className="rounded-[28px] border border-sky-300/20 bg-sky-400/10 px-4 py-4 text-sm text-sky-100">
+      <div className="rounded-[28px] border border-white/14 bg-white/[0.08] px-4 py-4 text-sm text-sky-50">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-cyan-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-white">
               <MessageSquareMore className="h-3.5 w-3.5" />
-              Telegram verification
+              Telegram
             </div>
-            <div className="mt-3 leading-6 text-slate-200">{telegramHint}</div>
+            <div className="mt-3 leading-6 text-slate-100">{telegramHint}</div>
           </div>
           <Button
             type="button"
@@ -66,32 +66,28 @@ export function LoginForm({
             onClick={() => void onLinkTelegram({ phone })}
           >
             <Link2 className="h-4 w-4" />
-            {isLoading ? "Preparing…" : "Привязать Telegram"}
+            {isLoading ? "..." : "Открыть Telegram"}
           </Button>
         </div>
-        {!phone.trim() ? (
-          <div className="mt-3 text-xs text-sky-200/80">
-            Enter your phone number first so we can create a secure Telegram
-            link for this session.
-          </div>
-        ) : null}
       </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-200" htmlFor="phone">
-          Phone number
-        </label>
-        <Input
-          id="phone"
-          aria-label="Phone number"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          placeholder="+375291234567"
-        />
-      </div>
-      {codeSent ? (
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-200" htmlFor="code">
-            Telegram code
+          <label className="text-sm font-medium text-white" htmlFor="phone">
+            Номер
+          </label>
+          <Input
+            id="phone"
+            aria-label="Phone number"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="+375291234567"
+            className="border-white/12 bg-slate-950/72"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-white" htmlFor="code">
+            Код
           </label>
           <Input
             id="code"
@@ -99,19 +95,28 @@ export function LoginForm({
             value={code}
             onChange={(event) => setCode(event.target.value)}
             placeholder="123456"
+            maxLength={6}
+            className="border-white/12 bg-slate-950/72"
           />
         </div>
-      ) : null}
+      </div>
+
+      <div className="text-xs uppercase tracking-[0.22em] text-white/55">
+        Код приходит после запроса
+      </div>
+
       {helperText ? (
-        <InlineAlert tone="info" title="Verification flow">
+        <InlineAlert tone="info" title="Код">
           {helperText}
         </InlineAlert>
       ) : null}
+
       {error ? (
-        <InlineAlert tone="danger" title="Authentication error">
+        <InlineAlert tone="danger" title="Ошибка">
           {error}
         </InlineAlert>
       ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Button
           block
@@ -120,7 +125,7 @@ export function LoginForm({
           onClick={() => void onRequestCode({ phone })}
         >
           <SendHorizonal className="h-4 w-4" />
-          {isLoading && !codeSent ? "Sending…" : "Получить код"}
+          {isLoading && !codeSent ? "Отправка..." : "Получить код"}
         </Button>
         <Button
           block
@@ -128,12 +133,8 @@ export function LoginForm({
           disabled={isLoading || !phone.trim() || !code.trim()}
         >
           <BadgeCheck className="h-4 w-4" />
-          {isLoading && codeSent ? "Verifying…" : "Подтвердить"}
+          {isLoading && codeSent ? "Проверка..." : "Войти"}
         </Button>
-      </div>
-      <div className="text-xs leading-5 text-slate-400">
-        For real sign in, first link Telegram, send your own contact to the bot,
-        then request the code and confirm it here.
       </div>
     </form>
   );

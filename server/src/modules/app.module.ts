@@ -14,6 +14,7 @@ import { HealthModule } from "./health/health.module";
 import { MediaModule } from "./media/media.module";
 import { LocationModule } from "./location/location.module";
 import { RealtimeModule } from "./realtime/realtime.module";
+import { SystemModule } from "./system/system.module";
 import { UsersModule } from "./users/users.module";
 import { VersionModule } from "./version/version.module";
 
@@ -48,6 +49,7 @@ import { VersionModule } from "./version/version.module";
     RealtimeModule,
     MediaModule,
     ChatModule,
+    SystemModule,
   ],
 })
 export class AppModule {}

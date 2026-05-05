@@ -34,6 +34,8 @@ The project keeps the existing backend contract, Telegram verification flow, dem
 - contacts tab with add-by-phone and direct chat opening
 - profile display name editing in the user menu
 - map page with Leaflet + OpenStreetMap
+- protected system dashboard for labs 7-11 overview
+- JWT session payload preview, backend status, and recent logs in the browser
 - opt-in location sharing with browser permission prompt
 - auth/chat cleanup on logout
 
@@ -41,11 +43,13 @@ The project keeps the existing backend contract, Telegram verification flow, dem
 
 - NestJS REST API
 - native WebSocket realtime gateway
+- request and error file logging with process-level error handlers
 - contacts API
 - profile API
 - location API with latest-point storage only
 - Telegram verification provider support
 - auth rate limiting
+- protected `/api/system/*` observability endpoints
 - automated tests
 
 ## Architecture
