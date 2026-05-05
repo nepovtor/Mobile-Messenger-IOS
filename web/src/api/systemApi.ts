@@ -8,22 +8,38 @@ import type {
 
 export const systemApi = {
   getOverview() {
-    return httpRequest<SystemOverview>("/system/overview");
+    return httpRequest<SystemOverview>("/system/overview", {
+      authMode: "admin",
+    });
   },
 
   getRequestLogs(limit = 20) {
-    return httpRequest<SystemLogEntry[]>(`/system/logs/requests?limit=${limit}`);
+    return httpRequest<SystemLogEntry[]>(
+      `/system/logs/requests?limit=${limit}`,
+      {
+        authMode: "admin",
+      },
+    );
   },
 
   getErrorLogs(limit = 20) {
-    return httpRequest<SystemLogEntry[]>(`/system/logs/errors?limit=${limit}`);
+    return httpRequest<SystemLogEntry[]>(
+      `/system/logs/errors?limit=${limit}`,
+      {
+        authMode: "admin",
+      },
+    );
   },
 
   getVersion() {
-    return httpRequest<BackendVersionInfo>("/version");
+    return httpRequest<BackendVersionInfo>("/version", {
+      authMode: "none",
+    });
   },
 
   getHealth() {
-    return httpRequest<BackendHealthInfo>("/health");
+    return httpRequest<BackendHealthInfo>("/health", {
+      authMode: "none",
+    });
   },
 };

@@ -11,6 +11,7 @@ export const authApi = {
   requestTelegramPairing(phone: string) {
     return httpRequest<TelegramPairingResponse>("/auth/telegram/pairing", {
       method: "POST",
+      authMode: "none",
       body: JSON.stringify({
         phone,
       }),
@@ -21,6 +22,7 @@ export const authApi = {
       "/auth/request",
       {
         method: "POST",
+        authMode: "none",
         body: JSON.stringify({
           method: "phone",
           contact: phone,
@@ -39,6 +41,7 @@ export const authApi = {
   verifyCode(phone: string, code: string) {
     return httpRequest<AuthResponse>("/auth/verify", {
       method: "POST",
+      authMode: "none",
       body: JSON.stringify({
         method: "phone",
         contact: phone,
@@ -49,10 +52,13 @@ export const authApi = {
   login(payload: LoginPayload) {
     return httpRequest<AuthResponse>("/auth/login", {
       method: "POST",
+      authMode: "none",
       body: JSON.stringify(payload),
     });
   },
   getMe() {
-    return httpRequest<CurrentUser>("/auth/me");
+    return httpRequest<CurrentUser>("/auth/me", {
+      authMode: "user",
+    });
   },
 };

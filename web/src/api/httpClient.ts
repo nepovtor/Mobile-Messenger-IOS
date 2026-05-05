@@ -1,5 +1,5 @@
 import { appConfig } from "../config/api";
-import { authStore } from "../store/authStore";
+import { adminStorage, storage } from "../utils/storage";
 
 export class ApiError extends Error {
   status: number;
@@ -15,7 +15,19 @@ export class ApiError extends Error {
 
 type RequestOptions = RequestInit & {
   timeoutMs?: number;
+  authMode?: "user" | "admin" | "none";
 };
+
+const unauthorizedHandlers: Partial<
+  Record<"user" | "admin", (message: string) => void>
+> = {};
+
+export function registerUnauthorizedHandler(
+  scope: "user" | "admin",
+  handler: (message: string) => void,
+) {
+  unauthorizedHandlers[scope] = handler;
+}
 
 function toApiError(status: number, payload: unknown): ApiError {
   const code =
@@ -62,17 +74,27 @@ export async function httpRequest<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs ?? appConfig.requestTimeoutMs;
+  const {
+    timeoutMs = appConfig.requestTimeoutMs,
+    authMode = "user",
+    headers,
+    ...requestInit
+  } = options;
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const token = authStore.getState().token;
+    const token =
+      authMode === "admin"
+        ? adminStorage.getToken()
+        : authMode === "user"
+          ? storage.getToken()
+          : null;
     const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
-      ...options,
+      ...requestInit,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers ?? {}),
+        ...(headers ?? {}),
       },
       signal: controller.signal,
     });
@@ -80,10 +102,8 @@ export async function httpRequest<T>(
     const payload = await parseJson(response);
     if (!response.ok) {
       const error = toApiError(response.status, payload);
-      if (response.status === 401) {
-        authStore
-          .getState()
-          .handleUnauthorized("Session expired. Please sign in again.");
+      if (response.status === 401 && authMode !== "none") {
+        unauthorizedHandlers[authMode]?.(error.message);
       }
       throw error;
     }

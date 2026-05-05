@@ -27,6 +27,31 @@ export function getJwtExpiresIn(): string {
   return process.env.JWT_EXPIRES_IN?.trim() || "7d";
 }
 
+export function getAdminLogin(): string {
+  return process.env.ADMIN_LOGIN?.trim() || "admin";
+}
+
+export function getAdminDisplayName(): string {
+  return process.env.ADMIN_DISPLAY_NAME?.trim() || "Administrator";
+}
+
+export function getAdminPassword(): string | null {
+  const password = process.env.ADMIN_PASSWORD?.trim();
+  if (password) {
+    return password;
+  }
+
+  return isProductionEnv() ? null : "admin";
+}
+
+export function isAdminConsoleEnabled(): boolean {
+  return Boolean(getAdminPassword());
+}
+
+export function getAdminJwtExpiresIn(): string {
+  return process.env.ADMIN_JWT_EXPIRES_IN?.trim() || getJwtExpiresIn();
+}
+
 export function isDatabaseSynchronizationEnabled(): boolean {
   return readBooleanEnv("DB_SYNCHRONIZE", !isProductionEnv());
 }

@@ -6,11 +6,11 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from "@nestjs/common";
-import { AuthGuard } from "../auth/auth.guard";
+import { AdminGuard } from "../admin/admin.guard";
 import { SystemService } from "./system.service";
 
 @Controller("system")
-@UseGuards(AuthGuard)
+@UseGuards(AdminGuard)
 export class SystemController {
   constructor(private readonly systemService: SystemService) {}
 

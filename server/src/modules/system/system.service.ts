@@ -10,7 +10,9 @@ import { MessageEntity } from "../../entities/message.entity";
 import { UserEntity } from "../../entities/user.entity";
 import { appLogger } from "../common/app-logger";
 import {
+  getAdminLogin,
   areDemoAccountsEnabled,
+  isAdminConsoleEnabled,
   getJwtExpiresIn,
   getNodeEnv,
   getSmsProvider,
@@ -187,11 +189,14 @@ export class SystemService {
         jwtConfigured: Boolean(process.env.JWT_SECRET?.trim()),
         jwtExpiresIn: getJwtExpiresIn(),
         bearerScheme: "Bearer",
+        adminConsoleEnabled: isAdminConsoleEnabled(),
+        adminLogin: getAdminLogin(),
         verificationProvider: getVerificationProvider(),
         smsProvider: getSmsProvider(),
         demoAccountsEnabled: areDemoAccountsEnabled(),
         passwordLoginEnabled: isPasswordLoginEnabled(),
         protectedRoutes: [
+          "/api/admin/me",
           "/api/auth/me",
           "/api/contacts",
           "/api/chats",

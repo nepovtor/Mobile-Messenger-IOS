@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { BadgeCheck, KeyRound, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { DemoAccountCard } from "../components/auth/DemoAccountCard";
 import { LoginForm } from "../components/auth/LoginForm";
 import { Badge } from "../components/ui/Badge";
@@ -70,6 +71,15 @@ export function LoginPage() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-8"
         >
+          <div className="flex justify-end">
+            <Link
+              to="/admin/login"
+              className="inline-flex items-center rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-medium text-slate-100 transition hover:border-white/20 hover:bg-white/[0.1] hover:text-white"
+            >
+              Admin login
+            </Link>
+          </div>
+
           <header className="space-y-4 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/[0.08] px-4 py-2 text-xs uppercase tracking-[0.28em] text-white/90">
               <Sparkles className="h-3.5 w-3.5" />

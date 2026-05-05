@@ -2,32 +2,44 @@ import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Card } from "./components/ui/Card";
 import { Spinner } from "./components/ui/Spinner";
+import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { MessengerPage } from "./pages/MessengerPage";
 import { SystemPage } from "./pages/SystemPage";
+import { adminStore } from "./store/adminStore";
 import { authStore } from "./store/authStore";
 import { locationStore } from "./store/locationStore";
 
 export default function App() {
-  const { restoreSession, isAuthenticated, isLoading } = authStore();
+  const {
+    restoreSession,
+    isAuthenticated: isUserAuthenticated,
+    isLoading: isUserLoading,
+  } = authStore();
+  const {
+    restoreSession: restoreAdminSession,
+    isAuthenticated: isAdminAuthenticated,
+    isLoading: isAdminLoading,
+  } = adminStore();
 
   useEffect(() => {
     void restoreSession();
-  }, [restoreSession]);
+    void restoreAdminSession();
+  }, [restoreAdminSession, restoreSession]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isUserAuthenticated) {
       locationStore.getState().clear();
     }
-  }, [isAuthenticated]);
+  }, [isUserAuthenticated]);
 
-  if (isLoading) {
+  if (isUserLoading || isAdminLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-200">
         <Card className="flex items-center gap-3 px-5 py-4">
           <Spinner />
-          Restoring session…
+          Restoring sessions…
         </Card>
       </div>
     );
@@ -38,22 +50,44 @@ export default function App() {
       <Route
         path="/"
         element={
-          isAuthenticated ? <Navigate to="/messenger" replace /> : <LoginPage />
+          isUserAuthenticated ? (
+            <Navigate to="/messenger" replace />
+          ) : (
+            <LoginPage />
+          )
         }
       />
       <Route
         path="/messenger"
         element={
-          isAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />
+          isUserAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />
         }
       />
       <Route
         path="/map"
-        element={isAuthenticated ? <MapPage /> : <Navigate to="/" replace />}
+        element={
+          isUserAuthenticated ? <MapPage /> : <Navigate to="/" replace />
+        }
+      />
+      <Route
+        path="/admin/login"
+        element={
+          isAdminAuthenticated ? (
+            <Navigate to="/admin" replace />
+          ) : (
+            <AdminLoginPage />
+          )
+        }
       />
       <Route
         path="/admin"
-        element={isAuthenticated ? <SystemPage /> : <Navigate to="/" replace />}
+        element={
+          isAdminAuthenticated ? (
+            <SystemPage />
+          ) : (
+            <Navigate to="/admin/login" replace />
+          )
+        }
       />
       <Route path="/system" element={<Navigate to="/admin" replace />} />
     </Routes>

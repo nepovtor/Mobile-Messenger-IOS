@@ -1,5 +1,7 @@
-const TOKEN_KEY = "mobile-messenger.web.token";
+const USER_TOKEN_KEY = "mobile-messenger.web.token";
 const USER_KEY = "mobile-messenger.web.user";
+const ADMIN_TOKEN_KEY = "mobile-messenger.web.admin.token";
+const ADMIN_KEY = "mobile-messenger.web.admin.user";
 
 function getStorage() {
   if (typeof window === "undefined") {
@@ -16,35 +18,40 @@ function getStorage() {
   return storage;
 }
 
-export const storage = {
-  getToken(): string | null {
-    return getStorage()?.getItem(TOKEN_KEY) ?? null;
-  },
-  setToken(token: string) {
-    getStorage()?.setItem(TOKEN_KEY, token);
-  },
-  clearToken() {
-    getStorage()?.removeItem(TOKEN_KEY);
-  },
-  getUser() {
-    const raw = getStorage()?.getItem(USER_KEY);
-    if (!raw) {
-      return null;
-    }
-    try {
-      return JSON.parse(raw) as unknown;
-    } catch {
-      return null;
-    }
-  },
-  setUser(user: unknown) {
-    getStorage()?.setItem(USER_KEY, JSON.stringify(user));
-  },
-  clearUser() {
-    getStorage()?.removeItem(USER_KEY);
-  },
-  clearAll() {
-    this.clearToken();
-    this.clearUser();
-  },
-};
+function createStorage(tokenKey: string, userKey: string) {
+  return {
+    getToken(): string | null {
+      return getStorage()?.getItem(tokenKey) ?? null;
+    },
+    setToken(token: string) {
+      getStorage()?.setItem(tokenKey, token);
+    },
+    clearToken() {
+      getStorage()?.removeItem(tokenKey);
+    },
+    getUser() {
+      const raw = getStorage()?.getItem(userKey);
+      if (!raw) {
+        return null;
+      }
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        return null;
+      }
+    },
+    setUser(user: unknown) {
+      getStorage()?.setItem(userKey, JSON.stringify(user));
+    },
+    clearUser() {
+      getStorage()?.removeItem(userKey);
+    },
+    clearAll() {
+      this.clearToken();
+      this.clearUser();
+    },
+  };
+}
+
+export const storage = createStorage(USER_TOKEN_KEY, USER_KEY);
+export const adminStorage = createStorage(ADMIN_TOKEN_KEY, ADMIN_KEY);

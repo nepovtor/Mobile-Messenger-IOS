@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { authApi } from "../api/authApi";
-import { ApiError } from "../api/httpClient";
+import { ApiError, registerUnauthorizedHandler } from "../api/httpClient";
 import { profileApi } from "../api/profileApi";
 import type {
   AuthCodeResponse,
@@ -182,6 +182,10 @@ export const authStore = create<AuthStore>((set, get) => ({
     set({ error: null });
   },
 }));
+
+registerUnauthorizedHandler("user", (message) => {
+  authStore.getState().handleUnauthorized(message);
+});
 
 async function authenticateWithBackendResult(
   result: AuthResponse,

@@ -5,6 +5,7 @@ import { LocationShareEntity } from "../entities/location-share.entity";
 import { PhoneVerificationCodeEntity } from "../entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../entities/telegram-pairing-token.entity";
+import { AdminModule } from "./admin/admin.module";
 import { isDatabaseSynchronizationEnabled } from "./common/runtime-config";
 import { AuthModule } from "./auth/auth.module";
 import { ChatModule } from "./chat/chat.module";
@@ -42,6 +43,7 @@ import { VersionModule } from "./version/version.module";
     DocsModule,
     HealthModule,
     VersionModule,
+    AdminModule,
     AuthModule,
     UsersModule,
     ContactsModule,

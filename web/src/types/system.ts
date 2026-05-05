@@ -78,6 +78,8 @@ export type SystemOverview = {
     jwtConfigured: boolean;
     jwtExpiresIn: string;
     bearerScheme: string;
+    adminConsoleEnabled: boolean;
+    adminLogin: string;
     verificationProvider: string;
     smsProvider: string;
     demoAccountsEnabled: boolean;

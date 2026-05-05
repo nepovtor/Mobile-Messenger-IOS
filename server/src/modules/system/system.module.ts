@@ -5,13 +5,13 @@ import { ContactEntity } from "../../entities/contact.entity";
 import { LocationShareEntity } from "../../entities/location-share.entity";
 import { MessageEntity } from "../../entities/message.entity";
 import { UserEntity } from "../../entities/user.entity";
-import { AuthModule } from "../auth/auth.module";
+import { AdminModule } from "../admin/admin.module";
 import { SystemController } from "./system.controller";
 import { SystemService } from "./system.service";
 
 @Module({
   imports: [
-    AuthModule,
+    AdminModule,
     TypeOrmModule.forFeature([
       UserEntity,
       ContactEntity,

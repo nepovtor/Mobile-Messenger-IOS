@@ -1,6 +1,8 @@
 import clsx from "clsx";
 import {
   Activity,
+  ArrowLeft,
+  LogOut,
   RefreshCcw,
   ScrollText,
   Server,
@@ -12,14 +14,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError } from "../api/httpClient";
 import { systemApi } from "../api/systemApi";
-import { UserMenu } from "../components/chat/UserMenu";
-import { WorkspaceSwitcher } from "../components/layout/WorkspaceSwitcher";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { InlineAlert } from "../components/ui/InlineAlert";
-import { authStore } from "../store/authStore";
-import { realtimeStore } from "../store/realtimeStore";
+import { adminStore } from "../store/adminStore";
 import type {
   BackendHealthInfo,
   BackendVersionInfo,
@@ -32,6 +31,8 @@ type AdminTab = "overview" | "activity" | "infrastructure" | "logs";
 
 type DecodedJwt = {
   sub?: string;
+  login?: string;
+  role?: string;
   displayName?: string;
   contact?: string;
   method?: string;
@@ -378,15 +379,13 @@ function LogFeed({
 export function SystemPage() {
   const navigate = useNavigate();
   const {
-    currentUser,
+    currentAdmin,
     isAuthenticated,
     token,
-    error: authError,
+    error: adminError,
     clearError,
     logout,
-    updateDisplayName,
-  } = authStore();
-  const connectionState = realtimeStore((state) => state.connectionState);
+  } = adminStore();
 
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [overview, setOverview] = useState<SystemOverview | null>(null);
@@ -478,8 +477,8 @@ export function SystemPage() {
   }
 
   useEffect(() => {
-    if (!isAuthenticated || !currentUser) {
-      navigate("/", { replace: true });
+    if (!isAuthenticated || !currentAdmin) {
+      navigate("/admin/login", { replace: true });
       return;
     }
 
@@ -505,16 +504,16 @@ export function SystemPage() {
     return () => {
       isDisposed = true;
     };
-  }, [currentUser, isAuthenticated, navigate]);
+  }, [currentAdmin, isAuthenticated, navigate]);
 
   useEffect(() => {
-    if (authError) {
-      navigate("/", { replace: true });
+    if (adminError) {
+      navigate("/admin/login", { replace: true });
       clearError();
     }
-  }, [authError, clearError, navigate]);
+  }, [adminError, clearError, navigate]);
 
-  if (!currentUser) {
+  if (!currentAdmin) {
     return null;
   }
 
@@ -559,6 +558,8 @@ export function SystemPage() {
     formatSessionExpiry(jwtPayload?.exp);
   const displayedBearerScheme =
     overview?.authentication.bearerScheme ?? "Bearer";
+  const displayedAdminLogin =
+    overview?.authentication.adminLogin ?? currentAdmin.login;
   const totalRows = overview
     ? Object.values(overview.database.counts).reduce(
         (sum, count) => sum + count,
@@ -587,8 +588,8 @@ export function SystemPage() {
                 Mobile Messenger Admin
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                One place for backend health, auth configuration, recent
-                activity, infrastructure status and live logs.
+                Separate workspace for backend health, auth configuration,
+                recent activity, infrastructure status and live logs.
               </p>
             </div>
 
@@ -634,14 +635,41 @@ export function SystemPage() {
         <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
           <aside className="rounded-[32px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl">
             <div className="space-y-4">
-              <WorkspaceSwitcher />
+              <Card className="p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">
+                      Admin access
+                    </p>
+                    <h2 className="mt-2 text-xl font-semibold text-white">
+                      {currentAdmin.displayName}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {displayedAdminLogin}
+                    </p>
+                  </div>
+                  <Badge tone="success">{currentAdmin.role}</Badge>
+                </div>
 
-              <UserMenu
-                user={currentUser}
-                connectionState={connectionState}
-                onUpdateDisplayName={updateDisplayName}
-                onLogout={logout}
-              />
+                <p className="mt-4 text-sm leading-6 text-slate-400">
+                  This session is isolated from user accounts and is only used
+                  for admin routes.
+                </p>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate("/", { replace: true })}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    User login
+                  </Button>
+                  <Button variant="danger" onClick={logout}>
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </Button>
+                </div>
+              </Card>
 
               <Card className="p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -676,7 +704,7 @@ export function SystemPage() {
                       Subject
                     </p>
                     <p className="mt-2 break-all font-medium text-white">
-                      {jwtPayload?.sub ?? currentUser.userID}
+                      {jwtPayload?.sub ?? `admin:${currentAdmin.login}`}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -689,10 +717,10 @@ export function SystemPage() {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                      Realtime
+                      Role
                     </p>
-                    <p className="mt-2 font-medium capitalize text-white">
-                      {connectionState}
+                    <p className="mt-2 font-medium text-white">
+                      {jwtPayload?.role ?? currentAdmin.role}
                     </p>
                   </div>
                 </div>
