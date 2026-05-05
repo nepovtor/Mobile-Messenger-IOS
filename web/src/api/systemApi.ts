@@ -1,5 +1,10 @@
 import { httpRequest } from "./httpClient";
-import type { SystemLogEntry, SystemOverview } from "../types/system";
+import type {
+  BackendHealthInfo,
+  BackendVersionInfo,
+  SystemLogEntry,
+  SystemOverview,
+} from "../types/system";
 
 export const systemApi = {
   getOverview() {
@@ -12,5 +17,13 @@ export const systemApi = {
 
   getErrorLogs(limit = 20) {
     return httpRequest<SystemLogEntry[]>(`/system/logs/errors?limit=${limit}`);
+  },
+
+  getVersion() {
+    return httpRequest<BackendVersionInfo>("/version");
+  },
+
+  getHealth() {
+    return httpRequest<BackendHealthInfo>("/health");
   },
 };

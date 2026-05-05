@@ -56,3 +56,14 @@ export type SystemOverview = {
     protectedRoutes: string[];
   };
 };
+
+export type BackendVersionInfo = {
+  name: string;
+  version: string;
+};
+
+export type BackendHealthInfo = {
+  status: string;
+  uptime: number;
+  timestamp: string;
+};

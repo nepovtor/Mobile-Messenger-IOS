@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ApiError } from "../api/httpClient";
 import { systemApi } from "../api/systemApi";
 import { UserMenu } from "../components/chat/UserMenu";
 import { WorkspaceSwitcher } from "../components/layout/WorkspaceSwitcher";
@@ -20,7 +21,12 @@ import { Card } from "../components/ui/Card";
 import { InlineAlert } from "../components/ui/InlineAlert";
 import { authStore } from "../store/authStore";
 import { realtimeStore } from "../store/realtimeStore";
-import type { SystemLogEntry, SystemOverview } from "../types/system";
+import type {
+  BackendHealthInfo,
+  BackendVersionInfo,
+  SystemLogEntry,
+  SystemOverview,
+} from "../types/system";
 
 type DecodedJwt = {
   sub?: string;
@@ -109,18 +115,56 @@ function prettyMeta(meta: Record<string, unknown> | null) {
   return JSON.stringify(meta, null, 2);
 }
 
+function isMissingSystemRoute(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    error.status === 404 &&
+    /\/api\/system\//i.test(error.message)
+  );
+}
+
+function formatSessionExpiry(value?: number) {
+  return typeof value === "number" ? formatDateTime(value) : "n/a";
+}
+
+const repoFallback = {
+  typescript: {
+    strict: true,
+    target: "es2021",
+    module: "Node16",
+  },
+  docker: {
+    rootDockerfilePresent: true,
+    serverDockerfilePresent: true,
+    composeFilePresent: true,
+  },
+  logging: {
+    requestFile: "requests.log",
+    errorFile: "errors.log",
+  },
+  database: {
+    driver: "postgres",
+    orm: "typeorm",
+  },
+} as const;
+
 function StatusPill({
   label,
   value,
 }: {
   label: string;
-  value: boolean;
+  value: boolean | null;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
       <span className="text-sm text-slate-300">{label}</span>
-      <Badge tone={value ? "success" : "warning"} pulseDot>
-        {value ? "Ready" : "Missing"}
+      <Badge
+        tone={
+          value === true ? "success" : value === false ? "warning" : "neutral"
+        }
+        pulseDot={value !== null}
+      >
+        {value === true ? "Ready" : value === false ? "Missing" : "Unknown"}
       </Badge>
     </div>
   );
@@ -262,9 +306,14 @@ export function SystemPage() {
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [requestLogs, setRequestLogs] = useState<SystemLogEntry[]>([]);
   const [errorLogs, setErrorLogs] = useState<SystemLogEntry[]>([]);
+  const [versionInfo, setVersionInfo] = useState<BackendVersionInfo | null>(
+    null,
+  );
+  const [healthInfo, setHealthInfo] = useState<BackendHealthInfo | null>(null);
   const [isLoading, setLoading] = useState(true);
   const [isRefreshing, setRefreshing] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [systemApiMissing, setSystemApiMissing] = useState(false);
 
   const jwtPayload = useMemo(() => decodeJwtPayload(token), [token]);
 
@@ -283,31 +332,79 @@ export function SystemPage() {
         setLoading(true);
       }
       setPageError(null);
-
+      setSystemApiMissing(false);
       try {
-        const [nextOverview, nextRequestLogs, nextErrorLogs] =
-          await Promise.all([
-            systemApi.getOverview(),
-            systemApi.getRequestLogs(18),
-            systemApi.getErrorLogs(12),
-          ]);
+        const [
+          overviewResult,
+          requestLogsResult,
+          errorLogsResult,
+          versionResult,
+          healthResult,
+        ] = await Promise.allSettled([
+          systemApi.getOverview(),
+          systemApi.getRequestLogs(18),
+          systemApi.getErrorLogs(12),
+          systemApi.getVersion(),
+          systemApi.getHealth(),
+        ]);
 
         if (isDisposed) {
           return;
         }
 
-        setOverview(nextOverview);
-        setRequestLogs(nextRequestLogs);
-        setErrorLogs(nextErrorLogs);
-      } catch (error) {
-        if (isDisposed) {
-          return;
+        if (overviewResult.status === "fulfilled") {
+          setOverview(overviewResult.value);
+        } else {
+          setOverview(null);
         }
-        setPageError(
-          error instanceof Error
-            ? error.message
-            : "Could not load the system overview.",
+
+        if (requestLogsResult.status === "fulfilled") {
+          setRequestLogs(requestLogsResult.value);
+        } else {
+          setRequestLogs([]);
+        }
+
+        if (errorLogsResult.status === "fulfilled") {
+          setErrorLogs(errorLogsResult.value);
+        } else {
+          setErrorLogs([]);
+        }
+
+        if (versionResult.status === "fulfilled") {
+          setVersionInfo(versionResult.value);
+        }
+
+        if (healthResult.status === "fulfilled") {
+          setHealthInfo(healthResult.value);
+        }
+
+        const systemErrors = [
+          overviewResult,
+          requestLogsResult,
+          errorLogsResult,
+        ].flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
         );
+        const missingSystemRoutes = systemErrors.some((error) =>
+          isMissingSystemRoute(error),
+        );
+
+        if (missingSystemRoutes) {
+          setSystemApiMissing(true);
+          setPageError(
+            "Current backend deployment does not expose /api/system/* yet. Deploy the latest backend build or point the web client to your local backend.",
+          );
+        } else if (systemErrors[0]) {
+          setPageError(
+            systemErrors[0] instanceof Error
+              ? systemErrors[0].message
+              : "Could not load the system overview.",
+          );
+        }
+
+        if (!missingSystemRoutes && !systemErrors[0]) {
+          setPageError(null);
+        }
       } finally {
         if (!isDisposed) {
           setLoading(false);
@@ -337,26 +434,97 @@ export function SystemPage() {
   async function handleRefresh() {
     setRefreshing(true);
     setPageError(null);
+    setSystemApiMissing(false);
 
-    try {
-      const [nextOverview, nextRequestLogs, nextErrorLogs] = await Promise.all([
-        systemApi.getOverview(),
-        systemApi.getRequestLogs(18),
-        systemApi.getErrorLogs(12),
-      ]);
-      setOverview(nextOverview);
-      setRequestLogs(nextRequestLogs);
-      setErrorLogs(nextErrorLogs);
-    } catch (error) {
+    const [
+      overviewResult,
+      requestLogsResult,
+      errorLogsResult,
+      versionResult,
+      healthResult,
+    ] = await Promise.allSettled([
+      systemApi.getOverview(),
+      systemApi.getRequestLogs(18),
+      systemApi.getErrorLogs(12),
+      systemApi.getVersion(),
+      systemApi.getHealth(),
+    ]);
+
+    if (overviewResult.status === "fulfilled") {
+      setOverview(overviewResult.value);
+    } else {
+      setOverview(null);
+    }
+
+    if (requestLogsResult.status === "fulfilled") {
+      setRequestLogs(requestLogsResult.value);
+    } else {
+      setRequestLogs([]);
+    }
+
+    if (errorLogsResult.status === "fulfilled") {
+      setErrorLogs(errorLogsResult.value);
+    } else {
+      setErrorLogs([]);
+    }
+
+    if (versionResult.status === "fulfilled") {
+      setVersionInfo(versionResult.value);
+    }
+
+    if (healthResult.status === "fulfilled") {
+      setHealthInfo(healthResult.value);
+    }
+
+    const systemErrors = [
+      overviewResult,
+      requestLogsResult,
+      errorLogsResult,
+    ].flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    const missingSystemRoutes = systemErrors.some((error) =>
+      isMissingSystemRoute(error),
+    );
+
+    if (missingSystemRoutes) {
+      setSystemApiMissing(true);
       setPageError(
-        error instanceof Error
-          ? error.message
+        "Current backend deployment does not expose /api/system/* yet. Deploy the latest backend build or point the web client to your local backend.",
+      );
+    } else if (systemErrors[0]) {
+      setPageError(
+        systemErrors[0] instanceof Error
+          ? systemErrors[0].message
           : "Could not refresh the system overview.",
       );
-    } finally {
-      setRefreshing(false);
     }
+
+    setRefreshing(false);
   }
+
+  const displayedVersion = overview?.api.version ?? versionInfo?.version ?? "n/a";
+  const displayedEnvironment =
+    overview?.api.environment ??
+    (systemApiMissing ? "Not exposed by current deployment" : "n/a");
+  const displayedNodeVersion =
+    overview?.api.nodeVersion ??
+    (systemApiMissing ? "Not exposed by current deployment" : "n/a");
+  const displayedUptime =
+    overview?.api.uptimeSeconds ?? healthInfo?.uptime ?? null;
+  const displayedGeneratedAt = overview?.generatedAt ?? healthInfo?.timestamp ?? null;
+  const displayedTsStrict = overview?.typescript.strict ?? repoFallback.typescript.strict;
+  const displayedTsTarget = overview?.typescript.target ?? repoFallback.typescript.target;
+  const displayedRequestLogFile =
+    overview?.logging.requestFile ?? repoFallback.logging.requestFile;
+  const displayedErrorLogFile =
+    overview?.logging.errorFile ?? repoFallback.logging.errorFile;
+  const displayedJwtConfigured =
+    overview?.authentication.jwtConfigured ?? Boolean(token);
+  const displayedJwtExpiresIn =
+    overview?.authentication.jwtExpiresIn ?? formatSessionExpiry(jwtPayload?.exp);
+  const displayedBearerScheme =
+    overview?.authentication.bearerScheme ?? "Bearer";
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.15),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.14),_transparent_28%),linear-gradient(180deg,#020617_0%,#111827_100%)] px-4 py-4 sm:px-6 sm:py-6">
@@ -387,7 +555,7 @@ export function SystemPage() {
                   API
                 </p>
                 <p className="mt-2 text-sm font-semibold text-white">
-                  {overview?.api.version ?? "loading"}
+                  {displayedVersion}
                 </p>
               </Card>
               <Card className="p-4">
@@ -408,7 +576,9 @@ export function SystemPage() {
                       overview.database.counts.contacts +
                       overview.database.counts.chats +
                       overview.database.counts.messages
-                    : "loading"}
+                    : systemApiMissing
+                      ? "unavailable"
+                      : "loading"}
                 </p>
               </Card>
               <Card className="p-4">
@@ -500,6 +670,15 @@ export function SystemPage() {
               </InlineAlert>
             ) : null}
 
+            {systemApiMissing ? (
+              <InlineAlert tone="warning" title="Live backend note">
+                The current Railway deployment is missing the new protected
+                `/api/system/*` routes. Repo-backed sections below still show
+                known project setup, but live logs and database counts require a
+                backend redeploy.
+              </InlineAlert>
+            ) : null}
+
             <InlineAlert tone="info" title="What this page covers">
               The page exposes the main backend-focused coursework features in
               the browser: strict TypeScript setup, log files, Docker assets,
@@ -516,12 +695,12 @@ export function SystemPage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge tone="success">Frontend TS</Badge>
                   <Badge
-                    tone={overview?.typescript.strict ? "success" : "warning"}
+                    tone={displayedTsStrict ? "success" : "warning"}
                   >
-                    Strict: {String(overview?.typescript.strict ?? "n/a")}
+                    Strict: {String(displayedTsStrict)}
                   </Badge>
                   <Badge tone="neutral">
-                    Target: {String(overview?.typescript.target ?? "n/a")}
+                    Target: {String(displayedTsTarget)}
                   </Badge>
                 </div>
               </LabCard>
@@ -535,18 +714,20 @@ export function SystemPage() {
                 </p>
                 <div className="space-y-2">
                   <StatusPill
-                    label={`Request log: ${tailPath(
-                      overview?.logging.requestFile ?? "requests.log",
-                    )}`}
-                    value={Boolean(overview?.logging.requestFile)}
+                    label={`Request log: ${tailPath(displayedRequestLogFile)}`}
+                    value={overview ? Boolean(overview.logging.requestFile) : null}
                   />
                   <StatusPill
-                    label={`Error log: ${tailPath(
-                      overview?.logging.errorFile ?? "errors.log",
-                    )}`}
-                    value={Boolean(overview?.logging.errorFile)}
+                    label={`Error log: ${tailPath(displayedErrorLogFile)}`}
+                    value={overview ? Boolean(overview.logging.errorFile) : null}
                   />
                 </div>
+                {systemApiMissing ? (
+                  <p className="text-xs leading-5 text-slate-400">
+                    Log file names are configured in the repo, but live log
+                    streaming is unavailable on the current deployment.
+                  </p>
+                ) : null}
               </LabCard>
 
               <LabCard icon={Server} title="Lab 9. Docker Basics">
@@ -558,15 +739,24 @@ export function SystemPage() {
                 <div className="space-y-2">
                   <StatusPill
                     label="Root Dockerfile"
-                    value={Boolean(overview?.docker.rootDockerfilePresent)}
+                    value={
+                      overview?.docker.rootDockerfilePresent ??
+                      repoFallback.docker.rootDockerfilePresent
+                    }
                   />
                   <StatusPill
                     label="Server Dockerfile"
-                    value={Boolean(overview?.docker.serverDockerfilePresent)}
+                    value={
+                      overview?.docker.serverDockerfilePresent ??
+                      repoFallback.docker.serverDockerfilePresent
+                    }
                   />
                   <StatusPill
                     label="docker-compose"
-                    value={Boolean(overview?.docker.composeFilePresent)}
+                    value={
+                      overview?.docker.composeFilePresent ??
+                      repoFallback.docker.composeFilePresent
+                    }
                   />
                 </div>
               </LabCard>
@@ -582,25 +772,43 @@ export function SystemPage() {
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <StatusPill
-                    label={`${overview?.database.driver ?? "postgres"} / ${
-                      overview?.database.orm ?? "typeorm"
+                    label={`${overview?.database.driver ?? repoFallback.database.driver} / ${
+                      overview?.database.orm ?? repoFallback.database.orm
                     }`}
-                    value={Boolean(overview)}
+                    value={true}
                   />
                   <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                     <span className="text-sm text-slate-300">
                       Synchronize:{" "}
-                      {overview?.database.synchronize ? "on" : "off"}
+                      {overview
+                        ? overview.database.synchronize
+                          ? "on"
+                          : "off"
+                        : "n/a"}
                     </span>
                     <Badge
                       tone={
-                        overview?.database.synchronize ? "warning" : "success"
+                        overview
+                          ? overview.database.synchronize
+                            ? "warning"
+                            : "success"
+                          : "neutral"
                       }
                     >
-                      {overview?.database.synchronize ? "Dev mode" : "Safe"}
+                      {overview
+                        ? overview.database.synchronize
+                          ? "Dev mode"
+                          : "Safe"
+                        : "Unknown"}
                     </Badge>
                   </div>
                 </div>
+                {systemApiMissing ? (
+                  <p className="text-xs leading-5 text-slate-400">
+                    Driver and ORM are known from the repo. Live row counts need
+                    the latest backend deployment.
+                  </p>
+                ) : null}
               </LabCard>
 
               <LabCard
@@ -614,22 +822,15 @@ export function SystemPage() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Badge
-                    tone={
-                      overview?.authentication.jwtConfigured
-                        ? "success"
-                        : "danger"
-                    }
+                    tone={displayedJwtConfigured ? "success" : "danger"}
                   >
-                    JWT secret{" "}
-                    {overview?.authentication.jwtConfigured
-                      ? "configured"
-                      : "missing"}
+                    JWT secret {displayedJwtConfigured ? "configured" : "missing"}
                   </Badge>
                   <Badge tone="neutral">
-                    Scheme: {overview?.authentication.bearerScheme ?? "Bearer"}
+                    Scheme: {displayedBearerScheme}
                   </Badge>
                   <Badge tone="neutral">
-                    Expires: {overview?.authentication.jwtExpiresIn ?? "n/a"}
+                    Expires: {displayedJwtExpiresIn}
                   </Badge>
                 </div>
               </LabCard>
@@ -660,7 +861,7 @@ export function SystemPage() {
                         Environment
                       </p>
                       <p className="mt-2 font-semibold text-white">
-                        {overview.api.environment}
+                        {displayedEnvironment}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -668,7 +869,7 @@ export function SystemPage() {
                         Node.js
                       </p>
                       <p className="mt-2 font-semibold text-white">
-                        {overview.api.nodeVersion}
+                        {displayedNodeVersion}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -676,7 +877,9 @@ export function SystemPage() {
                         Uptime
                       </p>
                       <p className="mt-2 font-semibold text-white">
-                        {formatUptime(overview.api.uptimeSeconds)}
+                        {displayedUptime != null
+                          ? formatUptime(displayedUptime)
+                          : "n/a"}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -684,7 +887,7 @@ export function SystemPage() {
                         Generated
                       </p>
                       <p className="mt-2 font-semibold text-white">
-                        {formatDateTime(overview.generatedAt)}
+                        {formatDateTime(displayedGeneratedAt)}
                       </p>
                     </div>
                   </div>
@@ -724,7 +927,9 @@ export function SystemPage() {
                   </div>
                 ) : (
                   <div className="mt-5 text-sm text-slate-400">
-                    Loading database counts…
+                    {systemApiMissing
+                      ? "Database counts are unavailable on the current deployment."
+                      : "Loading database counts…"}
                   </div>
                 )}
               </Card>
