@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { MessengerPage } from "./pages/MessengerPage";
 import { SystemPage } from "./pages/SystemPage";
+import { TelegramSubscriptionPage } from "./pages/TelegramSubscriptionPage";
 import { adminStore } from "./store/adminStore";
 import { authStore } from "./store/authStore";
 import { locationStore } from "./store/locationStore";
@@ -68,6 +69,10 @@ export default function App() {
         element={
           isUserAuthenticated ? <MapPage /> : <Navigate to="/" replace />
         }
+      />
+      <Route
+        path="/telegram/subscription"
+        element={<TelegramSubscriptionPage />}
       />
       <Route
         path="/admin/login"

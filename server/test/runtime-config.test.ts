@@ -13,6 +13,8 @@ import {
   getTelegramBotToken,
   getTelegramBotUsername,
   getTelegramPairingTokenTTLSeconds,
+  getTelegramSubscriptionAppUrl,
+  getWebAppUrl,
   getVerificationProvider,
   getSmsProvider,
   getTwilioConfig,
@@ -187,6 +189,22 @@ test("admin password falls back to demo credentials when demo mode is enabled", 
     },
     () => {
       assert.equal(getAdminPassword(), null);
+    },
+  );
+});
+
+test("telegram subscription app URL is derived from web app URL", () => {
+  withEnv(
+    {
+      WEB_APP_URL: "https://demo.example.com/",
+      PUBLIC_WEB_URL: undefined,
+    },
+    () => {
+      assert.equal(getWebAppUrl(), "https://demo.example.com");
+      assert.equal(
+        getTelegramSubscriptionAppUrl("team"),
+        "https://demo.example.com/telegram/subscription?source=telegram-bot&plan=team",
+      );
     },
   );
 });

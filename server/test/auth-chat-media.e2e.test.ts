@@ -119,6 +119,7 @@ type TestAppOptions = {
   telegramPairingTokenTTLSeconds?: number;
   telegramLinkResendCooldownSeconds?: number;
   telegramAllowRelink?: boolean;
+  webAppUrl?: string | null;
   beforeInit?: (app: INestApplication) => Promise<void> | void;
 };
 
@@ -171,6 +172,11 @@ async function createTestApp(
   process.env.TELEGRAM_ALLOW_RELINK = options.telegramAllowRelink
     ? "true"
     : "false";
+  if (options.webAppUrl === null) {
+    delete process.env.WEB_APP_URL;
+  } else {
+    process.env.WEB_APP_URL = options.webAppUrl ?? "https://web.example.test";
+  }
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -1341,6 +1347,54 @@ test("Telegram text phone linking is allowed only when TELEGRAM_ALLOW_TEXT_PHONE
   assert.equal(link.chatId, "888");
   assert.equal(link.telegramUserId, "888");
   assert.equal(link.username, "boris_demo");
+});
+
+test("Telegram subscription command sends a mini app offer with plan links", async (t) => {
+  const app = await createTestApp({
+    verificationProvider: "telegram",
+    webAppUrl: "https://web.example.test",
+  });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const originalFetch = globalThis.fetch;
+  const sentMessages: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    sentMessages.push(body);
+
+    return new Response(JSON.stringify({ ok: true, result: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const telegramBotService = app.get(TelegramBotService);
+  await telegramBotService.handleUpdate({
+    update_id: 2,
+    message: {
+      message_id: 11,
+      text: "/subscription team",
+      chat: { id: 888, username: "boris_demo", first_name: "Boris" },
+      from: { id: 888, username: "boris_demo", first_name: "Boris" },
+    },
+  });
+
+  assert.equal(sentMessages.length, 1);
+  assert.match(String(sentMessages[0]?.text), /mini app подписки/i);
+
+  const replyMarkup = JSON.parse(String(sentMessages[0]?.reply_markup)) as {
+    inline_keyboard: Array<Array<Record<string, unknown>>>;
+  };
+  const firstButton = replyMarkup.inline_keyboard[0]?.[0];
+  assert.equal(
+    (firstButton?.web_app as { url?: string } | undefined)?.url,
+    "https://web.example.test/telegram/subscription?source=telegram-bot&plan=team",
+  );
 });
 
 test("/auth/telegram/pairing creates a hashed token", async (t) => {

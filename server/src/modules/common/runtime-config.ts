@@ -56,6 +56,32 @@ export function getAdminJwtExpiresIn(): string {
   return process.env.ADMIN_JWT_EXPIRES_IN?.trim() || getJwtExpiresIn();
 }
 
+function normalizeUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+export function getWebAppUrl(): string | null {
+  const value =
+    process.env.WEB_APP_URL?.trim() || process.env.PUBLIC_WEB_URL?.trim();
+  return value ? normalizeUrl(value) : null;
+}
+
+export function getTelegramSubscriptionAppUrl(
+  plan?: "starter" | "team" | "business",
+): string | null {
+  const baseUrl = getWebAppUrl();
+  if (!baseUrl) {
+    return null;
+  }
+
+  const url = new URL("telegram/subscription", `${baseUrl}/`);
+  url.searchParams.set("source", "telegram-bot");
+  if (plan) {
+    url.searchParams.set("plan", plan);
+  }
+  return url.toString();
+}
+
 export function isDatabaseSynchronizationEnabled(): boolean {
   return readBooleanEnv("DB_SYNCHRONIZE", !isProductionEnv());
 }

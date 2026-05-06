@@ -17,6 +17,7 @@ import {
   getTelegramBotUsername,
   getTelegramLinkResendCooldownSeconds,
   getTelegramPairingTokenTTLSeconds,
+  getTelegramSubscriptionAppUrl,
   getVerificationProvider,
   hasTelegramBotConfig,
   isProductionEnv,
@@ -61,6 +62,8 @@ type TelegramMessageContext = {
   firstName: string | null;
 };
 
+type SubscriptionPlan = "starter" | "team" | "business";
+
 @Injectable()
 export class TelegramBotService
   implements OnModuleInit, OnModuleDestroy, SmsService
@@ -97,7 +100,8 @@ export class TelegramBotService
   }
 
   async startBot(): Promise<void> {
-    if (getVerificationProvider() !== "telegram") {
+    const hasSubscriptionMiniApp = Boolean(getTelegramSubscriptionAppUrl());
+    if (getVerificationProvider() !== "telegram" && !hasSubscriptionMiniApp) {
       return;
     }
 
@@ -219,7 +223,27 @@ export class TelegramBotService
         return;
       }
 
+      const subscriptionPlan = this.extractSubscriptionPlan(startToken);
+      if (subscriptionPlan !== undefined) {
+        await this.sendSubscriptionOffer(context.chatId, subscriptionPlan);
+        return;
+      }
+
       await this.handleSecureStart(startToken, context);
+      return;
+    }
+
+    const text = message.text?.trim();
+    const subscriptionPlan =
+      typeof text === "string"
+        ? this.extractSubscriptionPlanFromCommand(text)
+        : undefined;
+    if (subscriptionPlan !== undefined) {
+      await this.sendSubscriptionOffer(context.chatId, subscriptionPlan);
+      return;
+    }
+
+    if (getVerificationProvider() !== "telegram") {
       return;
     }
 
@@ -233,7 +257,6 @@ export class TelegramBotService
       return;
     }
 
-    const text = message.text?.trim();
     if (!text) {
       return;
     }
@@ -612,7 +635,7 @@ export class TelegramBotService
   private async sendGenericStartMessage(chatId: string): Promise<void> {
     await this.callTelegram("sendMessage", {
       chat_id: chatId,
-      text: "Для безопасной привязки лучше открыть этого бота из приложения. После этого нажмите кнопку ниже и отправьте свой номер.",
+      text: "Для безопасной привязки лучше открыть этого бота из приложения. После этого нажмите кнопку ниже и отправьте свой номер. Для demo-витрины подписки используйте команду /subscription.",
       reply_markup: JSON.stringify({
         keyboard: [
           [
@@ -625,6 +648,127 @@ export class TelegramBotService
         resize_keyboard: true,
         one_time_keyboard: false,
       }),
+    });
+  }
+
+  private extractSubscriptionPlan(
+    value: string,
+  ): SubscriptionPlan | null | undefined {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === "subscription" ||
+      normalized === "subscribe" ||
+      normalized === "premium" ||
+      normalized === "pro"
+    ) {
+      return null;
+    }
+
+    if (normalized === "subscription_starter" || normalized === "starter") {
+      return "starter";
+    }
+
+    if (normalized === "subscription_team" || normalized === "team") {
+      return "team";
+    }
+
+    if (normalized === "subscription_business" || normalized === "business") {
+      return "business";
+    }
+
+    return undefined;
+  }
+
+  private extractSubscriptionPlanFromCommand(
+    text: string,
+  ): SubscriptionPlan | null | undefined {
+    const commandMatch = text.match(
+      /^\/(premium|subscribe|subscription|pro)(?:@\w+)?(?:\s+([a-z]+))?$/i,
+    );
+    if (commandMatch) {
+      const plan = commandMatch[2]
+        ? this.extractSubscriptionPlan(commandMatch[2])
+        : null;
+      return plan === undefined ? null : plan;
+    }
+
+    if (/^(подписка|тарифы|premium|subscription)$/i.test(text)) {
+      return null;
+    }
+
+    return undefined;
+  }
+
+  private async sendSubscriptionOffer(
+    chatId: string,
+    selectedPlan: SubscriptionPlan | null,
+  ): Promise<void> {
+    const planLabel =
+      selectedPlan === "starter"
+        ? "Starter"
+        : selectedPlan === "team"
+          ? "Team"
+          : selectedPlan === "business"
+            ? "Business"
+            : null;
+    const appUrl = getTelegramSubscriptionAppUrl(selectedPlan ?? undefined);
+    const botUsername = getTelegramBotUsername();
+
+    const lines = [
+      planLabel
+        ? `План ${planLabel} уже открыт в demo mini app подписки.`
+        : "Откройте demo mini app подписки Mobile Messenger Plus.",
+      "",
+      "Что внутри:",
+      "• Starter, Team и Business тарифы",
+      "• преимущества подписки и сценарии использования",
+      "• отдельный экран, который можно открывать прямо из Telegram",
+      "",
+      "Оплата в этой сборке пока не подключена — это demo-предложение подписки.",
+    ];
+
+    const inlineKeyboard: Array<
+      Array<Record<string, string | { url: string }>>
+    > = [];
+
+    if (appUrl) {
+      inlineKeyboard.push([
+        {
+          text: "Открыть mini app",
+          web_app: {
+            url: appUrl,
+          },
+        },
+      ]);
+    }
+
+    if (botUsername) {
+      inlineKeyboard.push([
+        {
+          text: "Starter",
+          url: `https://t.me/${botUsername}?start=subscription_starter`,
+        },
+        {
+          text: "Team",
+          url: `https://t.me/${botUsername}?start=subscription_team`,
+        },
+        {
+          text: "Business",
+          url: `https://t.me/${botUsername}?start=subscription_business`,
+        },
+      ]);
+    }
+
+    await this.callTelegram("sendMessage", {
+      chat_id: chatId,
+      text: lines.join("\n"),
+      ...(inlineKeyboard.length > 0
+        ? {
+            reply_markup: JSON.stringify({
+              inline_keyboard: inlineKeyboard,
+            }),
+          }
+        : {}),
     });
   }
 
