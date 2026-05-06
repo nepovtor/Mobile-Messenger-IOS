@@ -54,8 +54,9 @@ export function AdminLoginPage() {
                 </div>
               </div>
               <p className="mt-4 text-sm leading-6 text-slate-400">
-                В production задай `ADMIN_LOGIN` и `ADMIN_PASSWORD`, чтобы
-                заменить demo credentials.
+                Если demo-аккаунты включены, demo admin вход работает по
+                умолчанию. Для своего конфига задай `ADMIN_LOGIN` и
+                `ADMIN_PASSWORD`.
               </p>
             </Card>
 

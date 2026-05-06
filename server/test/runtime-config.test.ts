@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getAdminPassword,
   canUseConsoleSmsInCurrentEnv,
   getAuthCodeMaxAttempts,
   getAuthCodeResendCooldownSeconds,
@@ -162,6 +163,30 @@ test("verification provider reads telegram config", () => {
       assert.equal(getTelegramPairingTokenTTLSeconds(), 600);
       assert.equal(getTelegramLinkResendCooldownSeconds(), 60);
       assert.equal(isTelegramRelinkAllowed(), false);
+    },
+  );
+});
+
+test("admin password falls back to demo credentials when demo mode is enabled", () => {
+  withEnv(
+    {
+      NODE_ENV: "production",
+      ADMIN_PASSWORD: undefined,
+      AUTH_ENABLE_DEMO_ACCOUNTS: "true",
+    },
+    () => {
+      assert.equal(getAdminPassword(), "admin");
+    },
+  );
+
+  withEnv(
+    {
+      NODE_ENV: "production",
+      ADMIN_PASSWORD: undefined,
+      AUTH_ENABLE_DEMO_ACCOUNTS: "false",
+    },
+    () => {
+      assert.equal(getAdminPassword(), null);
     },
   );
 });

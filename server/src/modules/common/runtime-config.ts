@@ -41,6 +41,10 @@ export function getAdminPassword(): string | null {
     return password;
   }
 
+  if (areDemoAccountsEnabled()) {
+    return "admin";
+  }
+
   return isProductionEnv() ? null : "admin";
 }
 
