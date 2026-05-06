@@ -15,9 +15,9 @@ export function ChatList({
 }) {
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-24" />
+      <div className="space-y-1 px-2 py-2">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} className="h-[76px] rounded-[18px]" />
         ))}
       </div>
     );
@@ -25,15 +25,16 @@ export function ChatList({
 
   if (chats.length === 0) {
     return (
-      <div className="rounded-[28px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
-        Пока нет диалогов. Откройте вкладку контактов, чтобы быстро создать
-        личную переписку по номеру телефона.
+      <div className="px-2 py-2">
+        <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.03] px-4 py-8 text-center text-sm text-slate-400">
+          Нет чатов
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1 px-2 py-2">
       {chats.map((chat) => (
         <ChatListItem
           key={chat.id}

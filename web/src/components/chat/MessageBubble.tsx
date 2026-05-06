@@ -4,6 +4,7 @@ import {
   Check,
   CheckCheck,
   Clock3,
+  Ellipsis,
   Pencil,
   RotateCcw,
   Trash2,
@@ -15,24 +16,24 @@ import { Button } from "../ui/Button";
 
 const messageStatusMeta = {
   sending: {
-    label: "Sending",
     icon: Clock3,
+    label: "Отправляется",
   },
   sent: {
-    label: "Sent",
     icon: Check,
+    label: "Отправлено",
   },
   delivered: {
-    label: "Delivered",
     icon: CheckCheck,
+    label: "Доставлено",
   },
   read: {
-    label: "Read",
     icon: CheckCheck,
+    label: "Прочитано",
   },
   failed: {
-    label: "Failed",
     icon: AlertCircle,
+    label: "Не отправлено",
   },
 } as const;
 
@@ -42,14 +43,14 @@ function getMessageStatusMeta(status: MessageStatus) {
 
 function getMessageText(message: Message) {
   if (message.deletedAt) {
-    return message.text || "Message deleted";
+    return message.text || "Сообщение удалено";
   }
 
   if (message.text) {
     return message.text;
   }
 
-  return message.kind === "image" ? "Image attachment" : "Message";
+  return message.kind === "image" ? "Изображение" : "Сообщение";
 }
 
 export function MessageBubble({
@@ -71,9 +72,13 @@ export function MessageBubble({
   const [isEditing, setEditing] = useState(false);
   const [isSaving, setSaving] = useState(false);
   const [isDeleting, setDeleting] = useState(false);
+  const [isMenuOpen, setMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const statusMeta = getMessageStatusMeta(message.status);
   const StatusIcon = statusMeta.icon;
+  const canManage = Boolean(
+    isOwn && !isEditing && !message.deletedAt && (onEditMessage || onDeleteMessage),
+  );
 
   async function handleSave() {
     if (!onEditMessage) {
@@ -82,11 +87,11 @@ export function MessageBubble({
 
     setSaving(true);
     try {
-      await onEditMessage(draft);
+      await onEditMessage(draft.trim());
       setActionError(null);
       setEditing(false);
     } catch {
-      setActionError("Could not update message.");
+      setActionError("Не удалось изменить");
     } finally {
       setSaving(false);
     }
@@ -101,37 +106,58 @@ export function MessageBubble({
     try {
       await onDeleteMessage();
       setActionError(null);
+      setMenuOpen(false);
     } catch {
-      setActionError("Could not delete message.");
+      setActionError("Не удалось удалить");
     } finally {
       setDeleting(false);
     }
   }
 
   return (
-    <div className={clsx("flex", isOwn ? "justify-end" : "justify-start")}>
-      <div className={clsx("max-w-[88%] space-y-2", isOwn && "items-end")}>
+    <div
+      className={clsx(
+        "group flex",
+        isOwn ? "justify-end" : "justify-start",
+      )}
+    >
+      <div className="relative max-w-[84%] sm:max-w-[78%]">
         {showAuthor && !isOwn ? (
-          <p className="px-1 text-xs font-medium text-cyan-200">
+          <p className="mb-1 px-1 text-xs font-medium text-cyan-200">
             {message.authorName}
           </p>
         ) : null}
 
+        {canManage ? (
+          <button
+            type="button"
+            aria-label="Действия"
+            className={clsx(
+              "absolute top-2 z-10 rounded-full border border-white/10 bg-slate-950/92 p-1.5 text-slate-300 shadow-[0_12px_30px_rgba(3,8,20,0.28)] transition hover:bg-slate-900 hover:text-white",
+              "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+              isOwn ? "-left-10" : "-right-10",
+            )}
+            onClick={() => setMenuOpen((value) => !value)}
+          >
+            <Ellipsis className="h-4 w-4" />
+          </button>
+        ) : null}
+
         <div
           className={clsx(
-            "rounded-[26px] border px-4 py-3 shadow-[0_18px_42px_rgba(15,23,42,0.22)]",
+            "rounded-[22px] px-3.5 py-2.5 shadow-[0_16px_38px_rgba(5,12,24,0.18)]",
             isOwn
-              ? "border-cyan-300/12 bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-500 text-white"
-              : "border-white/10 bg-white/[0.07] text-white backdrop-blur-xl",
+              ? "rounded-br-md bg-[linear-gradient(135deg,#0ea5e9,#2563eb)] text-white"
+              : "rounded-bl-md border border-white/8 bg-white/[0.06] text-white",
             message.status === "failed" &&
-              "border-rose-400/25 bg-rose-500/18 text-rose-50",
-            message.status === "sending" && "opacity-85",
+              "border border-rose-400/20 bg-rose-500/14 text-rose-50",
+            message.status === "sending" && "opacity-90",
           )}
         >
           {isEditing ? (
             <div className="space-y-3">
               <textarea
-                className="min-h-[88px] w-full rounded-2xl border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/60"
+                className="min-h-[88px] w-full rounded-[18px] border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/60"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={4000}
@@ -146,86 +172,103 @@ export function MessageBubble({
                     setActionError(null);
                   }}
                 >
-                  Cancel
+                  Отмена
                 </Button>
                 <Button
                   size="sm"
                   disabled={isSaving || draft.trim().length === 0}
                   onClick={() => void handleSave()}
                 >
-                  {isSaving ? "Saving..." : "Save"}
+                  {isSaving ? "Сохранение..." : "Сохранить"}
                 </Button>
               </div>
             </div>
           ) : (
-            <p
-              className={clsx(
-                "whitespace-pre-wrap break-words text-sm leading-6",
-                message.deletedAt && "italic opacity-80",
-              )}
-            >
-              {getMessageText(message)}
-            </p>
+            <>
+              <p
+                className={clsx(
+                  "whitespace-pre-wrap break-words text-sm leading-6",
+                  message.deletedAt && "italic opacity-80",
+                )}
+              >
+                {getMessageText(message)}
+              </p>
+
+              <div
+                className={clsx(
+                  "mt-2 flex items-center gap-1.5 text-[11px]",
+                  isOwn ? "justify-end text-white/78" : "justify-end text-slate-400",
+                  message.status === "failed" && "text-rose-100",
+                )}
+              >
+                {message.editedAt ? <span>изм.</span> : null}
+                <span>{formatMessageTimestamp(message.createdAt)}</span>
+                {isOwn ? (
+                  <span
+                    aria-label={statusMeta.label}
+                    className="inline-flex items-center"
+                  >
+                    <StatusIcon className="h-3.5 w-3.5" />
+                  </span>
+                ) : null}
+              </div>
+            </>
           )}
         </div>
 
-        <div
-          className={clsx(
-            "flex flex-wrap items-center gap-2 px-1 text-[11px]",
-            isOwn ? "justify-end text-slate-300" : "text-slate-400",
-          )}
-        >
-          <span>{formatMessageTimestamp(message.createdAt)}</span>
-          {message.editedAt ? <span>Edited</span> : null}
-          <span
-            className={clsx(
-              "inline-flex items-center gap-1 rounded-full border px-2 py-1",
-              message.status === "failed"
-                ? "border-rose-400/20 bg-rose-500/10 text-rose-100"
-                : "border-white/10 bg-white/[0.05]",
-            )}
-          >
-            <StatusIcon className="h-3.5 w-3.5" />
-            {statusMeta.label}
-          </span>
-          {message.status === "failed" && onRetry ? (
-            <Button variant="ghost" size="sm" onClick={onRetry}>
-              <RotateCcw className="h-3.5 w-3.5" />
-              Retry
-            </Button>
-          ) : null}
-          {isOwn && !isEditing && !message.deletedAt ? (
-            <>
-              {onEditMessage ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditing(true)}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit
-                </Button>
-              ) : null}
-              {onDeleteMessage ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={isDeleting}
-                  onClick={() => void handleDelete()}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </Button>
-              ) : null}
-            </>
-          ) : null}
-        </div>
+        {message.status === "failed" && onRetry ? (
+          <div className={clsx("mt-1.5 flex", isOwn ? "justify-end" : "justify-start")}>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] text-rose-200 transition hover:bg-rose-500/10 hover:text-rose-100"
+              onClick={onRetry}
+            >
+              <RotateCcw className="h-3 w-3" />
+              Повторить
+            </button>
+          </div>
+        ) : null}
 
         {message.status === "failed" && message.error ? (
-          <p className="px-1 text-[11px] text-rose-200">{message.error}</p>
+          <p className="mt-1 px-1 text-[11px] text-rose-200">{message.error}</p>
         ) : null}
+
         {actionError ? (
-          <p className="px-1 text-[11px] text-rose-200">{actionError}</p>
+          <p className="mt-1 px-1 text-[11px] text-rose-200">{actionError}</p>
+        ) : null}
+
+        {isMenuOpen ? (
+          <div
+            className={clsx(
+              "absolute top-full z-20 mt-2 min-w-[156px] rounded-[16px] border border-white/10 bg-[#0b1420]/96 p-1.5 shadow-[0_22px_60px_rgba(3,8,20,0.46)] backdrop-blur-2xl",
+              isOwn ? "right-0" : "left-0",
+            )}
+          >
+            {onEditMessage ? (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                onClick={() => {
+                  setEditing(true);
+                  setMenuOpen(false);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+                Изменить
+              </button>
+            ) : null}
+            {onDeleteMessage ? (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm text-rose-100 transition hover:bg-rose-500/12"
+                disabled={isDeleting}
+                onClick={() => void handleDelete()}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? "Удаление..." : "Удалить"}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>

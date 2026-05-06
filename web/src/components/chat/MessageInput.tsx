@@ -1,17 +1,11 @@
 import { SendHorizonal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
-import { Button } from "../ui/Button";
-import { Textarea } from "../ui/Input";
-import { ConnectionBadge } from "./ConnectionBadge";
 
 export function MessageInput({
-  connectionState,
   onSend,
   onTypingStart,
   onTypingStop,
 }: {
-  connectionState: ConnectionState;
   onSend: (text: string) => Promise<void>;
   onTypingStart: () => void;
   onTypingStop: () => void;
@@ -28,7 +22,7 @@ export function MessageInput({
     }
 
     element.style.height = "0px";
-    element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
+    element.style.height = `${Math.min(element.scrollHeight, 132)}px`;
   }, [value]);
 
   useEffect(
@@ -77,21 +71,20 @@ export function MessageInput({
   };
 
   return (
-    <div className="border-t border-white/8 bg-slate-950/55 p-3 sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-400">
-          Enter отправляет сообщение, Shift+Enter переносит строку
-        </p>
-        <ConnectionBadge state={connectionState} />
-      </div>
-
-      <div className="flex items-end gap-3">
-        <Textarea
+    <form
+      className="border-t border-white/8 bg-slate-950/48 px-3 py-3 sm:px-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="flex items-end gap-2 rounded-[22px] border border-white/8 bg-white/[0.03] px-2 py-2">
+        <textarea
           ref={textareaRef}
           rows={1}
-          aria-label="Message input"
+          aria-label="Сообщение"
           value={value}
-          placeholder="Write a message…"
+          placeholder="Сообщение"
           onBlur={clearTyping}
           onChange={(event) => {
             const nextValue = event.target.value;
@@ -104,24 +97,23 @@ export function MessageInput({
               clearTyping();
             }
           }}
-          onKeyDown={async (event) => {
+          onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              await submit();
+              void submit();
             }
           }}
-          className="max-h-40 min-h-[52px]"
+          className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
         />
-        <Button
-          className="h-[52px] px-4"
+        <button
+          type="submit"
+          aria-label="Отправить"
           disabled={!value.trim() || isSending}
-          isLoading={isSending}
-          onClick={() => void submit()}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-300 text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {!isSending ? <SendHorizonal className="h-4 w-4" /> : null}
-          <span className="sr-only">Send message</span>
-        </Button>
+          <SendHorizonal className="h-4 w-4" />
+        </button>
       </div>
-    </div>
+    </form>
   );
 }

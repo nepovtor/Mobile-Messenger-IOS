@@ -1,5 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { Menu, Radio } from "lucide-react";
+import clsx from "clsx";
 import { useEffect, useMemo, useState } from "react";
 import { chatApi } from "../../api/chatApi";
 import { contactsApi } from "../../api/contactsApi";
@@ -11,12 +10,13 @@ import {
   mapContactErrorMessage,
   validateContactPhone,
 } from "../../utils/contacts";
-import { Button } from "../ui/Button";
-import { Card } from "../ui/Card";
-import { InlineAlert } from "../ui/InlineAlert";
 import { ChatPanel } from "./ChatPanel";
-import { EmptyState } from "./EmptyState";
 import { Sidebar } from "./Sidebar";
+
+type TransportNotice = {
+  tone: "warning" | "danger";
+  message: string;
+};
 
 export function AppShell({
   currentUser,
@@ -44,7 +44,7 @@ export function AppShell({
   const connectionState = realtimeStore((state) => state.connectionState);
   const realtimeError = realtimeStore((state) => state.lastError);
   const chatError = chatStore((state) => state.error);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [contacts, setContacts] = useState<ContactEntry[]>([]);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [contactsNotice, setContactsNotice] = useState<string | null>(null);
@@ -60,51 +60,39 @@ export function AppShell({
     [chats, selectedChatId],
   );
 
-  const unreadCount = useMemo(
-    () => chats.reduce((total, chat) => total + chat.unreadCount, 0),
-    [chats],
-  );
-
-  const statusBanner = useMemo(() => {
+  const transportNotice = useMemo<TransportNotice | null>(() => {
     if (chatError) {
       return {
-        tone: "danger" as const,
-        title: "Ошибка чата",
+        tone: "danger",
         message: chatError,
       };
     }
 
     if (realtimeError) {
       return {
-        tone: "danger" as const,
-        title: "Состояние realtime",
+        tone: "danger",
         message: realtimeError,
       };
     }
 
     if (connectionState === "reconnecting") {
       return {
-        tone: "warning" as const,
-        title: "Состояние realtime",
-        message:
-          "Соединение восстанавливается. История сообщений остаётся на экране, пока сокет переподключается.",
+        tone: "warning",
+        message: "Соединение восстанавливается",
       };
     }
 
     if (connectionState === "disconnected") {
       return {
-        tone: "warning" as const,
-        title: "Состояние realtime",
-        message:
-          "Live-обновления временно недоступны. Можно продолжать читать историю и переподключиться вручную.",
+        tone: "warning",
+        message: "Нет соединения",
       };
     }
 
     if (connectionState === "failed") {
       return {
-        tone: "danger" as const,
-        title: "Состояние realtime",
-        message: "Обнаружена проблема с соединением. Переподключите сокет.",
+        tone: "danger",
+        message: "Соединение недоступно",
       };
     }
 
@@ -133,7 +121,7 @@ export function AppShell({
           return;
         }
         setContactsError(
-          mapContactErrorMessage(error, "Could not load contacts."),
+          mapContactErrorMessage(error, "Не удалось загрузить контакты."),
         );
       })
       .finally(() => {
@@ -155,6 +143,7 @@ export function AppShell({
 
   useEffect(() => {
     if (!selectedChat) {
+      setSidebarOpen(true);
       return;
     }
 
@@ -182,7 +171,7 @@ export function AppShell({
     if (validationMessage) {
       setContactsNotice(null);
       setContactsError(validationMessage);
-      return;
+      return false;
     }
 
     setAddingContact(true);
@@ -197,12 +186,14 @@ export function AppShell({
       });
       setContactsError(null);
       setContactsNotice(
-        result.alreadyExists
-          ? "Контакт уже есть в списке."
-          : "Контакт добавлен.",
+        result.alreadyExists ? "Контакт уже есть" : "Контакт добавлен",
       );
+      return true;
     } catch (error: unknown) {
-      setContactsError(mapContactErrorMessage(error, "Could not add contact."));
+      setContactsError(
+        mapContactErrorMessage(error, "Не удалось добавить контакт."),
+      );
+      return false;
     } finally {
       setAddingContact(false);
     }
@@ -217,11 +208,13 @@ export function AppShell({
         existing.filter((item) => item.id !== contact.id),
       );
       setContactsError(null);
-      setContactsNotice("Контакт удалён.");
+      setContactsNotice("Контакт удалён");
+      return true;
     } catch (error: unknown) {
       setContactsError(
-        mapContactErrorMessage(error, "Could not remove contact."),
+        mapContactErrorMessage(error, "Не удалось удалить контакт."),
       );
+      return false;
     } finally {
       setRemovingContactId(null);
     }
@@ -239,98 +232,30 @@ export function AppShell({
       await loadChats();
       selectChat(chat.id);
       setSidebarOpen(false);
+      return true;
     } catch (error: unknown) {
       setContactsError(
-        mapContactErrorMessage(error, "Could not open direct chat."),
+        mapContactErrorMessage(error, "Не удалось открыть чат."),
       );
+      return false;
     } finally {
       setOpeningContactId(null);
     }
   }
 
   return (
-    <div className="app-page app-page--workspace px-4 py-4 sm:px-6 sm:py-6">
-      <div className="app-grid-fade" />
-      <div className="glass-orb left-[-4rem] top-[4rem] h-44 w-44 bg-cyan-400/22" />
-      <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-amber-400/14" />
+    <div className="app-page app-page--workspace px-0 py-0 sm:px-3 sm:py-3">
+      <div className="glass-orb left-[3%] top-[8%] h-40 w-40 bg-sky-400/18" />
+      <div className="glass-orb right-[6%] top-[12%] h-52 w-52 bg-cyan-300/12" />
 
-      <div className="relative z-10 mx-auto flex h-[calc(100vh-2rem)] max-w-[1480px] flex-col gap-4 sm:h-[calc(100vh-3rem)]">
-        <header className="app-shell rounded-[34px] p-4 sm:p-6">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <div className="app-kicker">
-                <Radio className="h-3.5 w-3.5" />
-                Live workspace
-              </div>
-              <h1 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
-                Mobile Messenger
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-                {selectedChat
-                  ? `Сейчас открыт диалог «${selectedChat.title}». Можно продолжать переписку, видеть realtime-обновления и переключаться между зонами без потери контекста.`
-                  : "Выберите диалог, чтобы продолжить переписку, открыть контакты или перейти к карте. Весь веб-клиент теперь работает как единое пространство."}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Card className="p-4">
-                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Chats
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-white">
-                  {chats.length}
-                </p>
-              </Card>
-              <Card className="p-4">
-                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Contacts
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-white">
-                  {contacts.length}
-                </p>
-              </Card>
-              <Card className="p-4">
-                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Unread
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-white">
-                  {unreadCount}
-                </p>
-              </Card>
-              <Card className="p-4">
-                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Realtime
-                </p>
-                <p className="mt-2 text-sm font-semibold capitalize text-white">
-                  {connectionState}
-                </p>
-              </Card>
-            </div>
-          </div>
-        </header>
-
-        {statusBanner ? (
-          <InlineAlert
-            tone={statusBanner.tone}
-            title={statusBanner.title}
-            action={
-              connectionState !== "connected" ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => realtimeStore.getState().reconnect()}
-                >
-                  Переподключить
-                </Button>
-              ) : undefined
-            }
+      <div className="relative z-10 mx-auto h-screen max-w-[1600px] sm:h-[calc(100vh-1.5rem)]">
+        <div className="app-shell flex h-full overflow-hidden rounded-none border-white/8 sm:rounded-[28px]">
+          <div
+            className={clsx(
+              "min-h-0 w-full flex-col md:flex md:w-[360px] md:shrink-0 md:border-r md:border-white/8",
+              isSidebarOpen ? "flex" : "hidden md:flex",
+            )}
           >
-            {statusBanner.message}
-          </InlineAlert>
-        ) : null}
-
-        <div className="min-h-0 flex flex-1 gap-4">
-          <div className="app-shell hidden w-[372px] shrink-0 rounded-[34px] p-4 md:block">
             <Sidebar
               user={currentUser}
               chats={chats}
@@ -346,121 +271,83 @@ export function AppShell({
               removingContactId={removingContactId}
               onSelectChat={(chatId) => {
                 selectChat(chatId);
+                setSidebarOpen(false);
               }}
-              onOpenContact={(contact) => void handleOpenContact(contact)}
-              onAddContact={(phone) => void handleAddContact(phone)}
-              onRemoveContact={(contact) => void handleRemoveContact(contact)}
+              onOpenContact={handleOpenContact}
+              onAddContact={handleAddContact}
+              onRemoveContact={handleRemoveContact}
               onUpdateDisplayName={onUpdateDisplayName}
               onLogout={onLogout}
             />
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="mb-3 flex items-center justify-between gap-3 md:hidden">
-              <Button variant="secondary" onClick={() => setSidebarOpen(true)}>
-                <Menu className="h-4 w-4" />
-                Навигация
-              </Button>
-              <div className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-slate-300">
-                {unreadCount} unread
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1">
-              {selectedChat ? (
-                <ChatPanel
-                  chat={selectedChat}
-                  messages={messagesByChatId[selectedChat.id] ?? []}
-                  currentUser={currentUser}
-                  connectionState={connectionState}
-                  isLoadingMessages={isLoadingMessages}
-                  onBack={() => setSidebarOpen(true)}
-                  onSend={(text) =>
-                    sendMessage(selectedChat.id, text, currentUser)
+          <div
+            className={clsx(
+              "min-h-0 flex-1 flex-col md:flex",
+              selectedChat ? "flex" : "hidden md:flex",
+            )}
+          >
+            {selectedChat ? (
+              <ChatPanel
+                chat={selectedChat}
+                messages={messagesByChatId[selectedChat.id] ?? []}
+                currentUser={currentUser}
+                connectionState={connectionState}
+                statusNotice={transportNotice}
+                isLoadingMessages={isLoadingMessages}
+                onBack={() => setSidebarOpen(true)}
+                onReconnect={() => realtimeStore.getState().reconnect()}
+                onSend={(text) => sendMessage(selectedChat.id, text, currentUser)}
+                onRetry={(clientMessageId) =>
+                  void retryMessage(
+                    selectedChat.id,
+                    clientMessageId,
+                    currentUser,
+                  )
+                }
+                onEditMessage={(messageId, text) =>
+                  editMessage(selectedChat.id, messageId, text)
+                }
+                onDeleteMessage={(messageId) =>
+                  deleteMessage(selectedChat.id, messageId)
+                }
+                onTypingStart={() => {
+                  try {
+                    realtimeStore.getState().sendEvent("typing.started", {
+                      chatID: selectedChat.id,
+                    });
+                  } catch {
+                    void 0;
                   }
-                  onRetry={(clientMessageId) =>
-                    void retryMessage(
-                      selectedChat.id,
-                      clientMessageId,
-                      currentUser,
-                    )
+                }}
+                onTypingStop={() => {
+                  try {
+                    realtimeStore.getState().sendEvent("typing.stopped", {
+                      chatID: selectedChat.id,
+                    });
+                  } catch {
+                    void 0;
                   }
-                  onEditMessage={(messageId, text) =>
-                    editMessage(selectedChat.id, messageId, text)
-                  }
-                  onDeleteMessage={(messageId) =>
-                    deleteMessage(selectedChat.id, messageId)
-                  }
-                  onTypingStart={() => {
-                    try {
-                      realtimeStore.getState().sendEvent("typing.started", {
-                        chatID: selectedChat.id,
-                      });
-                    } catch {
-                      void 0;
-                    }
-                  }}
-                  onTypingStop={() => {
-                    try {
-                      realtimeStore.getState().sendEvent("typing.stopped", {
-                        chatID: selectedChat.id,
-                      });
-                    } catch {
-                      void 0;
-                    }
-                  }}
-                />
-              ) : (
-                <div className="app-shell h-full rounded-[34px]">
-                  <EmptyState />
+                }}
+              />
+            ) : (
+              <div className="flex h-full flex-1 items-center justify-center px-6">
+                <div className="text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] border border-white/10 bg-white/[0.04] text-cyan-100 shadow-[0_18px_40px_rgba(5,12,24,0.24)]">
+                    <span className="text-xl">+</span>
+                  </div>
+                  <h2 className="mt-4 text-lg font-semibold text-white">
+                    Выберите чат
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Откройте диалог слева
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      <AnimatePresence>
-        {isSidebarOpen ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-30 bg-slate-950/80 p-4 backdrop-blur-sm md:hidden"
-          >
-            <motion.div
-              initial={{ x: -24, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -24, opacity: 0 }}
-              className="app-shell mx-auto h-full max-w-md rounded-[34px] p-4"
-            >
-              <Sidebar
-                user={currentUser}
-                chats={chats}
-                contacts={contacts}
-                selectedChatId={selectedChatId}
-                isLoading={isLoadingChats}
-                isLoadingContacts={isLoadingContacts}
-                connectionState={connectionState}
-                contactsError={contactsError}
-                contactsNotice={contactsNotice}
-                isAddingContact={isAddingContact}
-                openingContactId={openingContactId}
-                removingContactId={removingContactId}
-                onSelectChat={(chatId) => {
-                  selectChat(chatId);
-                  setSidebarOpen(false);
-                }}
-                onOpenContact={(contact) => void handleOpenContact(contact)}
-                onAddContact={(phone) => void handleAddContact(phone)}
-                onRemoveContact={(contact) => void handleRemoveContact(contact)}
-                onUpdateDisplayName={onUpdateDisplayName}
-                onLogout={onLogout}
-              />
-            </motion.div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
     </div>
   );
 }

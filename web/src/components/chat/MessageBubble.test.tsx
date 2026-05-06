@@ -25,11 +25,11 @@ function buildMessage(status: MessageStatus): Message {
 
 describe("MessageBubble", () => {
   it.each([
-    ["sending", "Sending"],
-    ["sent", "Sent"],
-    ["delivered", "Delivered"],
-    ["read", "Read"],
-    ["failed", "Failed"],
+    ["sending", "Отправляется"],
+    ["sent", "Отправлено"],
+    ["delivered", "Доставлено"],
+    ["read", "Прочитано"],
+    ["failed", "Не отправлено"],
   ] as const)("renders %s message status", (status, label) => {
     render(
       <MessageBubble
@@ -40,6 +40,6 @@ describe("MessageBubble", () => {
       />,
     );
 
-    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByLabelText(label)).toBeInTheDocument();
   });
 });

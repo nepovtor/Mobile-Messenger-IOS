@@ -10,6 +10,7 @@ export function MessageList({
   currentUserId,
   isLoading,
   typingParticipants,
+  showAuthors,
   onRetry,
   onEditMessage,
   onDeleteMessage,
@@ -18,6 +19,7 @@ export function MessageList({
   currentUserId: string;
   isLoading: boolean;
   typingParticipants: string[];
+  showAuthors: boolean;
   onRetry: (clientMessageId: string) => void;
   onEditMessage: (messageId: string, text: string) => Promise<void>;
   onDeleteMessage: (messageId: string) => Promise<void>;
@@ -30,10 +32,10 @@ export function MessageList({
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col gap-3 overflow-y-auto px-3 py-4 sm:px-6">
-        <Skeleton className="h-16 w-2/3" />
-        <Skeleton className="ml-auto h-20 w-3/4" />
-        <Skeleton className="h-16 w-1/2" />
+      <div className="flex h-full flex-col gap-2 overflow-y-auto px-3 py-4 sm:px-4">
+        <Skeleton className="h-16 w-2/3 rounded-[18px]" />
+        <Skeleton className="ml-auto h-20 w-3/4 rounded-[18px]" />
+        <Skeleton className="h-16 w-1/2 rounded-[18px]" />
       </div>
     );
   }
@@ -41,16 +43,15 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-[30px] border border-dashed border-white/10 bg-white/[0.04] px-6 py-8">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+        <div>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] border border-white/10 bg-white/[0.04] text-cyan-100 shadow-[0_18px_40px_rgba(5,12,24,0.22)]">
             <MessageCircleMore className="h-6 w-6" />
           </div>
-          <h3 className="mt-5 text-xl font-semibold text-white">
-            Начните первый обмен
+          <h3 className="mt-4 text-lg font-semibold text-white">
+            Нет сообщений
           </h3>
-          <p className="mt-3 text-sm leading-6 text-slate-400">
-            Диалог уже готов к живым сообщениям. Отправьте первый текст, чтобы
-            сразу увидеть доставку, read state и realtime-обновления.
+          <p className="mt-2 text-sm text-slate-400">
+            Напишите первое сообщение
           </p>
         </div>
       </div>
@@ -58,22 +59,25 @@ export function MessageList({
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto px-3 py-4 sm:px-6">
+    <div className="flex h-full flex-col gap-2 overflow-y-auto px-3 py-4 sm:px-4">
       {messages.map((message, index) => {
         const previous = messages[index - 1];
         const isOwn = message.authorID === currentUserId;
-        const showAuthor = !previous || previous.authorID !== message.authorID;
+        const showAuthor =
+          showAuthors && !previous
+            ? true
+            : showAuthors && previous.authorID !== message.authorID;
         const showDayDivider =
           !previous || !isSameMessageDay(previous.createdAt, message.createdAt);
 
         return (
           <div
             key={`${message.id}:${message.clientMessageId ?? ""}`}
-            className="space-y-3"
+            className="space-y-2"
           >
             {showDayDivider ? (
               <div className="flex justify-center py-1">
-                <span className="app-mono rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-slate-400">
                   {formatMessageDayLabel(message.createdAt)}
                 </span>
               </div>
@@ -105,8 +109,8 @@ export function MessageList({
 
       {typingParticipants.length > 0 ? (
         <div className="flex justify-start">
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-cyan-100 backdrop-blur-xl">
-            {typingParticipants.join(", ")} печатает…
+          <div className="rounded-[20px] rounded-bl-md bg-white/[0.05] px-3 py-2 text-sm text-cyan-200">
+            {typingParticipants.join(", ")} печатает...
           </div>
         </div>
       ) : null}

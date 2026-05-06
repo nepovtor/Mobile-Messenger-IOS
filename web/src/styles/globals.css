@@ -123,16 +123,21 @@ a {
 .app-page--workspace {
   background:
     radial-gradient(
-      circle at 10% 12%,
-      rgba(56, 189, 248, 0.16),
+      circle at 12% 10%,
+      rgba(56, 189, 248, 0.12),
+      transparent 22%
+    ),
+    radial-gradient(
+      circle at 88% 14%,
+      rgba(45, 212, 191, 0.1),
       transparent 24%
     ),
     radial-gradient(
-      circle at 86% 18%,
-      rgba(251, 146, 60, 0.14),
-      transparent 24%
+      circle at 50% 100%,
+      rgba(59, 130, 246, 0.08),
+      transparent 32%
     ),
-    linear-gradient(180deg, #09111d 0%, #071320 48%, #040912 100%);
+    linear-gradient(180deg, #07111b 0%, #071420 48%, #040912 100%);
 }
 
 .app-page--map {

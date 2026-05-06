@@ -1,22 +1,28 @@
-import { ArrowLeft, Users } from "lucide-react";
+import clsx from "clsx";
+import { ArrowLeft } from "lucide-react";
 import type { ChatSummary } from "../../types/chat";
 import type { Message } from "../../types/message";
 import type { CurrentUser } from "../../types/auth";
 import type { ConnectionState } from "../../realtime/realtimeTypes";
-import { formatRelativeStatus } from "../../utils/date";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
-import { ConnectionBadge } from "../chat/ConnectionBadge";
 import { MessageInput } from "../chat/MessageInput";
 import { MessageList } from "../chat/MessageList";
+
+type StatusNotice = {
+  tone: "warning" | "danger";
+  message: string;
+} | null;
 
 export function ChatPanel({
   chat,
   messages,
   currentUser,
   connectionState,
+  statusNotice,
   isLoadingMessages,
   onBack,
+  onReconnect,
   onSend,
   onRetry,
   onEditMessage,
@@ -28,8 +34,10 @@ export function ChatPanel({
   messages: Message[];
   currentUser: CurrentUser;
   connectionState: ConnectionState;
+  statusNotice: StatusNotice;
   isLoadingMessages: boolean;
   onBack: () => void;
+  onReconnect: () => void;
   onSend: (text: string) => Promise<void>;
   onRetry: (clientMessageId: string) => void;
   onEditMessage: (messageId: string, text: string) => Promise<void>;
@@ -37,15 +45,23 @@ export function ChatPanel({
   onTypingStart: () => void;
   onTypingStop: () => void;
 }) {
+  const isDirectChat = chat.participantCount <= 2;
+  const subtitle =
+    chat.typingParticipants.length > 0
+      ? `${chat.typingParticipants.join(", ")} печатает...`
+      : isDirectChat
+        ? "онлайн"
+        : `${chat.participantCount} участников`;
+
   return (
-    <section className="app-shell flex h-full min-h-0 flex-col overflow-hidden rounded-[34px]">
-      <header className="border-b border-white/8 bg-white/[0.03] px-4 py-4 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
+    <section className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,rgba(7,17,29,0.84),rgba(5,12,21,0.94))]">
+      <header className="border-b border-white/8 bg-slate-950/40 px-3 py-3 sm:px-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
-              className="md:hidden"
+              className="rounded-[16px] px-2.5 md:hidden"
               onClick={onBack}
             >
               <ArrowLeft className="h-4 w-4" />
@@ -53,50 +69,68 @@ export function ChatPanel({
             </Button>
             <Avatar
               name={chat.title}
-              size="lg"
-              className="hidden sm:inline-flex"
+              size="sm"
+              className="h-11 w-11 rounded-[16px] text-[11px]"
             />
             <div className="min-w-0">
-              <div className="app-kicker">Active thread</div>
-              <h2 className="mt-3 truncate text-lg font-semibold text-white sm:text-2xl">
+              <h2 className="truncate text-sm font-semibold text-white sm:text-base">
                 {chat.title}
               </h2>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
-                  <Users className="h-3.5 w-3.5" />
-                  {chat.participantCount} participants
-                </span>
-                <span className="app-mono rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
-                  Updated {formatRelativeStatus(chat.lastActivity)}
-                </span>
-                {chat.typingParticipants.length > 0 ? (
-                  <span className="rounded-full border border-cyan-300/16 bg-cyan-400/10 px-2.5 py-1 text-cyan-100">
-                    {chat.typingParticipants.join(", ")} typing…
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-start gap-3">
-            <ConnectionBadge state={connectionState} />
-            <div className="hidden rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3 text-right lg:block">
-              <p className="app-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                Me
-              </p>
-              <p className="mt-2 text-sm font-semibold text-white">
-                {currentUser.displayName}
+              <p
+                className={clsx(
+                  "mt-0.5 truncate text-xs",
+                  chat.typingParticipants.length > 0
+                    ? "text-cyan-200"
+                    : "text-slate-400",
+                )}
+              >
+                {subtitle}
               </p>
             </div>
           </div>
+
+          {connectionState !== "connected" ? (
+            <span
+              className={clsx(
+                "h-2.5 w-2.5 shrink-0 rounded-full",
+                connectionState === "failed" || connectionState === "disconnected"
+                  ? "bg-rose-400"
+                  : "bg-amber-400",
+              )}
+            />
+          ) : null}
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.08),_transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.26),rgba(2,6,23,0.08))]">
+      {statusNotice ? (
+        <div
+          className={clsx(
+            "flex items-center justify-between gap-3 border-b px-3 py-2 text-xs sm:px-4",
+            statusNotice.tone === "danger"
+              ? "border-rose-400/14 bg-rose-500/10 text-rose-100"
+              : "border-amber-400/14 bg-amber-500/10 text-amber-100",
+          )}
+        >
+          <span>{statusNotice.message}</span>
+          {connectionState !== "connected" ? (
+            <button
+              type="button"
+              className="shrink-0 rounded-full border border-current/20 px-2.5 py-1 text-[11px] font-medium transition hover:bg-white/8"
+              onClick={onReconnect}
+            >
+              Повторить
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.05),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.12),rgba(2,6,23,0.02))]">
         <MessageList
           messages={messages}
           currentUserId={currentUser.userID}
           isLoading={isLoadingMessages}
           typingParticipants={chat.typingParticipants}
+          showAuthors={!isDirectChat}
           onRetry={onRetry}
           onEditMessage={onEditMessage}
           onDeleteMessage={onDeleteMessage}
@@ -104,7 +138,6 @@ export function ChatPanel({
       </div>
 
       <MessageInput
-        connectionState={connectionState}
         onSend={onSend}
         onTypingStart={onTypingStart}
         onTypingStop={onTypingStop}
