@@ -1,173 +1,199 @@
 import { useState } from "react";
-import {
-  BadgeCheck,
-  Link2,
-  MessageSquareMore,
-  SendHorizonal,
-  ShieldCheck,
-} from "lucide-react";
+import clsx from "clsx";
 import { Button } from "../ui/Button";
 import { InlineAlert } from "../ui/InlineAlert";
 import { Input } from "../ui/Input";
+
+type AuthMode = "login" | "register";
 
 type LoginFormProps = {
   initialPhone?: string;
   initialCode?: string;
   isLoading: boolean;
   error: string | null;
+  status: string | null;
   codeSent: boolean;
-  helperText: string | null;
-  telegramHint: string;
-  onLinkTelegram: (payload: { phone: string }) => Promise<void>;
+  pendingAction: "pairing" | "code" | "verify" | null;
+  showTelegramButton?: boolean;
+  onResetFeedback: () => void;
+  onPhoneEdit: () => void;
+  onLinkTelegram: (payload: {
+    phone: string;
+    telegramWindow: Window | null;
+  }) => Promise<void>;
   onRequestCode: (payload: { phone: string }) => Promise<void>;
   onVerifyCode: (payload: { phone: string; code: string }) => Promise<void>;
 };
+
+const authModes = [
+  { value: "login", label: "Вход" },
+  { value: "register", label: "Регистрация" },
+] as const satisfies ReadonlyArray<{ value: AuthMode; label: string }>;
 
 export function LoginForm({
   initialPhone = "",
   initialCode = "",
   isLoading,
   error,
+  status,
   codeSent,
-  helperText,
-  telegramHint,
+  pendingAction,
+  showTelegramButton = false,
+  onResetFeedback,
+  onPhoneEdit,
   onLinkTelegram,
   onRequestCode,
   onVerifyCode,
 }: LoginFormProps) {
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [phone, setPhone] = useState(initialPhone);
   const [code, setCode] = useState(initialCode);
 
+  const submitLabel =
+    authMode === "login" ? "Войти" : "Создать аккаунт";
+
+  const resetFeedback = () => {
+    if (error || status) {
+      onResetFeedback();
+    }
+  };
+
   return (
     <form
-      className="space-y-6"
+      className="space-y-5"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (code.trim()) {
-          await onVerifyCode({ phone, code });
+        if (!phone.trim() || !code.trim()) {
           return;
         }
 
-        await onRequestCode({ phone });
+        try {
+          await onVerifyCode({ phone, code });
+        } catch {
+          return undefined;
+        }
       }}
     >
-      <div className="rounded-[30px] border border-white/12 bg-white/[0.05] p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 max-w-xl">
-            <div className="app-kicker">
-              <MessageSquareMore className="h-3.5 w-3.5" />
-              Telegram verification
-            </div>
-            <div className="mt-4 text-sm leading-7 text-slate-200">
-              {telegramHint}
-            </div>
-          </div>
-          <Button
+      <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/8 bg-black/20 p-1">
+        {authModes.map((mode) => (
+          <button
+            key={mode.value}
             type="button"
-            variant="secondary"
-            disabled={isLoading || !phone.trim()}
-            onClick={() => void onLinkTelegram({ phone })}
+            aria-pressed={authMode === mode.value}
+            className={clsx(
+              "rounded-[18px] px-4 py-3 text-sm font-medium transition",
+              authMode === mode.value
+                ? "bg-white/[0.1] text-white shadow-[0_12px_30px_rgba(5,12,24,0.28)]"
+                : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100",
+            )}
+            onClick={() => {
+              setAuthMode(mode.value);
+              resetFeedback();
+            }}
           >
-            <Link2 className="h-4 w-4" />
-            Открыть Telegram
-          </Button>
-        </div>
+            {mode.label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-white" htmlFor="phone">
+          <label className="text-sm font-medium text-slate-100" htmlFor="phone">
             Телефон
           </label>
           <Input
             id="phone"
-            aria-label="Phone number"
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            aria-label="Телефон"
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => {
+              const nextPhone = event.target.value;
+              setPhone(nextPhone);
+              if (code) {
+                setCode("");
+              }
+              onPhoneEdit();
+            }}
             placeholder="+375291234567"
           />
         </div>
+
         <div className="space-y-2">
-          <label className="text-sm font-medium text-white" htmlFor="code">
-            Одноразовый код
+          <label className="text-sm font-medium text-slate-100" htmlFor="code">
+            Код
           </label>
           <Input
             id="code"
-            aria-label="Telegram code"
+            autoComplete="one-time-code"
+            inputMode="numeric"
+            aria-label="Код"
             value={code}
-            onChange={(event) => setCode(event.target.value)}
+            onChange={(event) => {
+              setCode(event.target.value);
+              resetFeedback();
+            }}
             placeholder="123456"
             maxLength={6}
           />
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4">
-          <div className="app-kicker">
-            <Link2 className="h-3.5 w-3.5" />
-            Step 1
-          </div>
-          <p className="mt-3 text-sm font-semibold text-white">
-            Свяжите Telegram
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Откройте бота и подтвердите свой номер через контакт.
-          </p>
-        </div>
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4">
-          <div className="app-kicker">
-            <SendHorizonal className="h-3.5 w-3.5" />
-            Step 2
-          </div>
-          <p className="mt-3 text-sm font-semibold text-white">Запросите код</p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Код придёт через выбранный серверный провайдер авторизации.
-          </p>
-        </div>
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4">
-          <div className="app-kicker">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Step 3
-          </div>
-          <p className="mt-3 text-sm font-semibold text-white">
-            Подтвердите вход
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            После проверки код создаст сессию и откроет рабочее пространство.
-          </p>
-        </div>
-      </div>
-
-      {helperText ? (
-        <InlineAlert tone="info" title="Статус проверки">
-          {helperText}
+      {status && !error ? (
+        <InlineAlert className="rounded-[22px] px-3.5 py-3" tone="info">
+          {status}
         </InlineAlert>
       ) : null}
 
       {error ? (
-        <InlineAlert tone="danger" title="Не удалось выполнить вход">
+        <InlineAlert className="rounded-[22px] px-3.5 py-3" tone="danger">
           {error}
         </InlineAlert>
+      ) : null}
+
+      {showTelegramButton ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            isLoading={pendingAction === "pairing"}
+            disabled={isLoading || !phone.trim()}
+            className="rounded-[18px] px-0 text-cyan-100 hover:bg-transparent hover:text-cyan-50"
+            onClick={() => {
+              const telegramWindow = window.open("", "_blank");
+              void onLinkTelegram({ phone, telegramWindow }).catch(
+                () => undefined,
+              );
+            }}
+          >
+            Открыть Telegram
+          </Button>
+        </div>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Button
           block
-          disabled={isLoading || !phone.trim()}
           type="button"
-          onClick={() => void onRequestCode({ phone })}
+          variant="secondary"
+          isLoading={pendingAction === "code"}
+          disabled={isLoading || !phone.trim()}
+          onClick={() => {
+            void onRequestCode({ phone }).catch(() => undefined);
+          }}
         >
-          <SendHorizonal className="h-4 w-4" />
-          {isLoading && !codeSent ? "Запрашиваем..." : "Запросить код"}
+          Получить код
         </Button>
         <Button
           block
+          type="submit"
+          isLoading={pendingAction === "verify"}
           variant={codeSent ? "primary" : "secondary"}
           disabled={isLoading || !phone.trim() || !code.trim()}
         >
-          <BadgeCheck className="h-4 w-4" />
-          {isLoading && codeSent ? "Проверяем..." : "Открыть веб-клиент"}
+          {submitLabel}
         </Button>
       </div>
     </form>
