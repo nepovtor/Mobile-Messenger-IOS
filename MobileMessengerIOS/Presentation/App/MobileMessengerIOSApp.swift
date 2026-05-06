@@ -46,4 +46,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             PushNotificationManager.shared.didFailToRegister(error: error)
         }
     }
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        _ = application
+        PushNotificationManager.shared.handleRemoteNotification(userInfo: userInfo) {
+            completionHandler(.noData)
+        }
+    }
 }

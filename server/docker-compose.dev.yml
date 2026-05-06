@@ -2,16 +2,22 @@ services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    user: "999:999"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: messenger
+      POSTGRES_HOST_AUTH_METHOD: md5
+    command: 
+      - "postgres"
+      - "-c"
+      - "password_encryption=md5"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d messenger"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d messenger"]
       interval: 5s
       timeout: 5s
       retries: 10

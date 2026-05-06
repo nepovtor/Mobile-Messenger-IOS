@@ -237,12 +237,18 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func didRegister(deviceToken: Data) {
+#if DEBUG
+        print("[Push] Failed to register for remote notifications: \(error.localizedDescription)")
+#endif
         let normalizedToken = deviceToken
             .map { String(format: "%02x", $0) }
             .joined()
 
         latestDeviceToken = normalizedToken
         lastErrorMessage = nil
+#if DEBUG
+        print("[Push] Registered with APNs token: \(normalizedToken)")
+#endif
         analytics.track(
             event: AppAnalyticsEvent(
                 kind: .pushRegistered,
@@ -258,6 +264,9 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func didFailToRegister(error: Error) {
+#if DEBUG
+        print("[Push] Failed to register for remote notifications: \(error.localizedDescription)")
+#endif
         syncState = .failed
         lastErrorMessage = error.localizedDescription
         analytics.track(error: error, context: "push_register")
@@ -340,6 +349,17 @@ final class PushNotificationManager: NSObject, ObservableObject {
 
         return UUID(uuidString: rawChatID)
     }
+
+    nonisolated func handleRemoteNotification(
+        userInfo: [AnyHashable: Any],
+        completion: (() -> Void)? = nil
+    ) {
+        let chatID = Self.chatID(from: userInfo)
+        Task { @MainActor [weak self] in
+            self?.routeHandler(chatID)
+            completion?()
+        }
+    }
 }
 
 extension PushNotificationManager: UNUserNotificationCenterDelegate {
@@ -363,3 +383,4 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         }
     }
 }
+
