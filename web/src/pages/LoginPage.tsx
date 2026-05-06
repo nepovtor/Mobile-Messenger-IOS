@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
-import { MessageCircleMore } from "lucide-react";
 import { useState } from "react";
+import appIcon from "../../../MobileMessengerIOS/Assets.xcassets/AppIcon.appiconset/icon-180.png";
 import { LoginForm } from "../components/auth/LoginForm";
 import { Card } from "../components/ui/Card";
 import { authStore } from "../store/authStore";
@@ -44,9 +44,13 @@ export function LoginPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mx-auto flex w-full max-w-[420px] items-center gap-4"
         >
-          <div className="flex h-14 w-14 items-center justify-center rounded-[20px] border border-white/12 bg-white/[0.08] shadow-[0_18px_40px_rgba(6,14,28,0.36)] backdrop-blur-2xl">
-            <MessageCircleMore className="h-6 w-6 text-cyan-50" />
-          </div>
+          <img
+            src={appIcon}
+            alt=""
+            aria-hidden="true"
+            className="h-14 w-14 rounded-[20px] shadow-[0_18px_40px_rgba(6,14,28,0.36)]"
+            draggable={false}
+          />
           <div className="text-lg font-semibold tracking-[-0.02em] text-white">
             Mobile Messenger
           </div>
