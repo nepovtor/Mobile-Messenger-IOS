@@ -40,7 +40,7 @@ export function InlineAlert({
     <div
       role="status"
       className={clsx(
-        "flex gap-3 rounded-3xl border px-4 py-3 backdrop-blur-xl",
+        "flex gap-3 rounded-[26px] border px-4 py-3.5 backdrop-blur-xl",
         toneClasses[tone],
         className,
       )}

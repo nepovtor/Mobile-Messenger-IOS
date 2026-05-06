@@ -80,7 +80,7 @@ export function MessageInput({
     <div className="border-t border-white/8 bg-slate-950/55 p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-slate-400">
-          Enter to send, Shift+Enter for a new line
+          Enter отправляет сообщение, Shift+Enter переносит строку
         </p>
         <ConnectionBadge state={connectionState} />
       </div>

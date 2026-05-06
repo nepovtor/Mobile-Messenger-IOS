@@ -28,9 +28,9 @@ export function Avatar({
     <div
       aria-hidden="true"
       className={clsx(
-        "inline-flex shrink-0 items-center justify-center rounded-2xl border border-white/10",
-        "bg-[linear-gradient(135deg,rgba(34,211,238,0.24),rgba(59,130,246,0.32),rgba(129,140,248,0.22))]",
-        "font-semibold text-white shadow-[0_18px_40px_rgba(15,23,42,0.3)] backdrop-blur-xl",
+        "inline-flex shrink-0 items-center justify-center rounded-[22px] border border-white/12",
+        "bg-[linear-gradient(135deg,rgba(251,191,36,0.22),rgba(249,115,22,0.24),rgba(56,189,248,0.3))]",
+        "font-semibold text-white shadow-[0_20px_40px_rgba(15,23,42,0.32)] backdrop-blur-xl",
         sizeClasses[size],
         className,
       )}

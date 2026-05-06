@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   Crown,
+  LockKeyhole,
   MapPinned,
   ShieldCheck,
   Sparkles,
@@ -30,33 +31,33 @@ const plans: Array<{
     id: "starter",
     name: "Starter",
     price: "$4.99 / month",
-    audience: "Для личного использования",
+    audience: "Для личного использования и базового доступа",
     accentClassName:
       "border-cyan-300/20 bg-[linear-gradient(145deg,rgba(34,211,238,0.18),rgba(15,23,42,0.94))]",
     features: [
-      "7-day demo trial",
-      "быстрый доступ к новым функциям",
-      "приоритетные уведомления",
+      "личные диалоги и карта",
+      "быстрый старт из Telegram",
+      "приоритетная авторизация",
     ],
   },
   {
     id: "team",
     name: "Team",
     price: "$14.99 / month",
-    audience: "Для команд и небольших проектов",
+    audience: "Для команд, дежурных и небольших рабочих групп",
     accentClassName:
       "border-amber-300/20 bg-[linear-gradient(145deg,rgba(251,191,36,0.2),rgba(15,23,42,0.94))]",
     features: [
       "общие пространства команды",
-      "расширенная история локаций",
-      "быстрый onboarding участников",
+      "расширенные сценарии карты",
+      "быстрое подключение участников",
     ],
   },
   {
     id: "business",
     name: "Business",
     price: "$39 / month",
-    audience: "Для ops и admin-сценариев",
+    audience: "Для ops, monitoring и admin-сценариев",
     accentClassName:
       "border-emerald-300/20 bg-[linear-gradient(145deg,rgba(16,185,129,0.2),rgba(15,23,42,0.94))]",
     features: [
@@ -71,22 +72,25 @@ const benefits = [
   {
     icon: Sparkles,
     title: "Mini app in Telegram",
-    description: "Открывается прямо из бота как отдельная витрина подписки.",
+    description:
+      "Открывается прямо из бота и остаётся частью основного потока пользователя.",
   },
   {
     icon: ShieldCheck,
-    title: "Separate offer flow",
-    description: "Пользователь видит подписку отдельно от логина и привязки.",
+    title: "Clean access flow",
+    description:
+      "Выбор доступа вынесен в отдельный экран и не перегружает сценарий логина.",
   },
   {
     icon: MapPinned,
     title: "Product scenarios",
-    description: "Показывает, зачем нужен тариф для geo, chat и admin use cases.",
+    description:
+      "Показывает ценность тарифов для chat, geo и admin use cases без лишнего шума.",
   },
   {
     icon: Users,
-    title: "Team upsell",
-    description: "Есть отдельные варианты для personal, team и business.",
+    title: "Team segmentation",
+    description: "Есть понятные уровни для personal, team и business-контуров.",
   },
 ] as const;
 
@@ -155,26 +159,27 @@ export function TelegramSubscriptionPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(250,204,21,0.16),_transparent_28%),radial-gradient(circle_at_bottom,_rgba(16,185,129,0.14),_transparent_32%),linear-gradient(180deg,#020617_0%,#0f172a_46%,#020617_100%)] px-4 py-5 sm:px-6 sm:py-8">
+    <div className="app-page app-page--telegram px-4 py-5 sm:px-6 sm:py-8">
+      <div className="app-grid-fade" />
       <div className="glass-orb left-[-4rem] top-[2rem] h-40 w-40 bg-sky-400/20" />
       <div className="glass-orb right-[5%] top-[10%] h-48 w-48 bg-amber-400/18" />
 
-      <div className="mx-auto max-w-6xl space-y-5">
+      <div className="relative z-10 mx-auto max-w-6xl space-y-5">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <Badge tone="success">Telegram Mini App</Badge>
-              <Badge tone="warning">Demo subscription</Badge>
+              <Badge tone="warning">Access tiers</Badge>
               <Badge tone="neutral">Mobile Messenger Plus</Badge>
             </div>
 
             <div className="space-y-3">
               <h1 className="bg-gradient-to-r from-sky-200 via-white to-amber-200 bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-6xl">
-                Subscription Showcase
+                Telegram Access Hub
               </h1>
               <p className="max-w-3xl text-sm leading-7 text-slate-300 sm:text-base">
-                Отдельное Telegram-приложение, которое предлагает подписку в
-                понятном формате: тарифы, преимущества и быстрый возврат в чат.
+                Отдельный экран для выбора тарифа, преимуществ и быстрого
+                возврата в бот без перегруза основного сценария авторизации.
               </p>
             </div>
           </div>
@@ -185,14 +190,14 @@ export function TelegramSubscriptionPage() {
           </Button>
         </header>
 
-        <InlineAlert tone="info" title="Demo mode">
-          Это витрина подписки. Платёжный checkout в этой сборке пока не
-          подключён, но страница уже готова для показа в Telegram.
+        <InlineAlert tone="info" title="Как работает этот экран">
+          Выбор плана передаст обратно в Telegram нужный `start`-параметр.
+          Полноценный checkout в этой сборке ещё не подключён.
         </InlineAlert>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_440px]">
           <section className="space-y-5">
-            <Card className="overflow-hidden border-white/12 p-6 sm:p-8">
+            <Card className="app-shell overflow-hidden border-white/12 p-6 sm:p-8">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.24em] text-sky-200/80">
@@ -234,7 +239,7 @@ export function TelegramSubscriptionPage() {
                   }}
                 >
                   <Zap className="h-4 w-4" />
-                  Выбрать {activePlan.name}
+                  Продолжить с {activePlan.name}
                 </Button>
                 <Button variant="secondary" onClick={handleClose}>
                   <BadgeCheck className="h-4 w-4" />
@@ -247,8 +252,11 @@ export function TelegramSubscriptionPage() {
               {benefits.map((benefit) => {
                 const Icon = benefit.icon;
                 return (
-                  <Card key={benefit.title} className="border-white/10 p-5">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 w-fit">
+                  <Card
+                    key={benefit.title}
+                    className="app-shell border-white/10 p-5"
+                  >
+                    <div className="w-fit rounded-2xl border border-white/10 bg-white/[0.05] p-3">
                       <Icon className="h-5 w-5 text-sky-200" />
                     </div>
                     <h3 className="mt-4 text-lg font-semibold text-white">
@@ -264,11 +272,30 @@ export function TelegramSubscriptionPage() {
           </section>
 
           <aside className="space-y-4">
+            <Card className="app-shell p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.06]">
+                  <LockKeyhole className="h-5 w-5 text-amber-100" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">
+                    Clean upgrade flow
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    Пользователь выбирает нужный уровень доступа, а бот
+                    продолжает сценарий уже с нужным контекстом.
+                  </p>
+                </div>
+              </div>
+            </Card>
+
             {plans.map((plan) => (
-              <Card
+              <button
                 key={plan.id}
+                type="button"
                 className={clsx(
-                  "cursor-pointer border p-5 transition hover:-translate-y-0.5 hover:border-white/20",
+                  "app-shell w-full cursor-pointer border p-5 text-left transition hover:-translate-y-0.5 hover:border-white/20",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/70",
                   plan.accentClassName,
                   selectedPlan === plan.id && "ring-2 ring-white/22",
                 )}
@@ -301,7 +328,7 @@ export function TelegramSubscriptionPage() {
                     </div>
                   ))}
                 </div>
-              </Card>
+              </button>
             ))}
           </aside>
         </div>

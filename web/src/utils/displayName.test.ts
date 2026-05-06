@@ -19,6 +19,6 @@ describe("validateDisplayName", () => {
   });
 
   it("accepts a valid display name", () => {
-    expect(validateDisplayName("Anna Demo")).toBeNull();
+    expect(validateDisplayName("Anna Reed")).toBeNull();
   });
 });

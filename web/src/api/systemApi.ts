@@ -23,12 +23,9 @@ export const systemApi = {
   },
 
   getErrorLogs(limit = 20) {
-    return httpRequest<SystemLogEntry[]>(
-      `/system/logs/errors?limit=${limit}`,
-      {
-        authMode: "admin",
-      },
-    );
+    return httpRequest<SystemLogEntry[]>(`/system/logs/errors?limit=${limit}`, {
+      authMode: "admin",
+    });
   },
 
   getVersion() {

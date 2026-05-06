@@ -59,7 +59,7 @@ describe("authStore", () => {
       chats: [
         {
           id: "chat-1",
-          title: "Demo",
+          title: "General",
           lastMessagePreview: null,
           lastActivity: new Date().toISOString(),
           unreadCount: 0,
@@ -111,7 +111,7 @@ describe("authStore", () => {
     await authStore.getState().login({
       method: "phone",
       contact: "+15550002",
-      password: "demo2222",
+      password: "pass2222",
     });
 
     expect(authStore.getState().currentUser?.displayName).toBe("Boris");
@@ -156,8 +156,8 @@ describe("authStore", () => {
 
   it("requestTelegramPairing stores the pairing payload", async () => {
     vi.mocked(authApi.requestTelegramPairing).mockResolvedValue({
-      botUsername: "mobile_demo_bot",
-      telegramStartUrl: "https://t.me/mobile_demo_bot?start=secure-pair-token",
+      botUsername: "mobile_auth_bot",
+      telegramStartUrl: "https://t.me/mobile_auth_bot?start=secure-pair-token",
       expiresIn: 600,
     });
 

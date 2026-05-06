@@ -81,7 +81,7 @@ export const authStore = create<AuthStore>((set, get) => ({
       set({
         error: mapAuthErrorMessage(
           error,
-          "Sign in failed. Please check your demo credentials.",
+          "Sign in failed. Please check your credentials.",
         ),
         isLoading: false,
       });

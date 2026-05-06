@@ -33,7 +33,8 @@ export function UserMenu({
   }, [user.displayName]);
 
   return (
-    <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-4">
+    <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-4">
+      <div className="app-kicker">Profile</div>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar name={user.displayName} size="lg" />
@@ -51,12 +52,12 @@ export function UserMenu({
         </div>
         <Button variant="ghost" size="sm" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
-          Logout
+          Выйти
         </Button>
       </div>
 
       <p className="mt-4 text-xs leading-5 text-slate-400">
-        Session token is stored locally and cleared on logout.
+        Токен сессии хранится локально в браузере и очищается при выходе.
       </p>
 
       {isEditing ? (
@@ -66,7 +67,7 @@ export function UserMenu({
               className="text-sm font-medium text-slate-200"
               htmlFor="display-name"
             >
-              Display name
+              Имя профиля
             </label>
             <Input
               id="display-name"
@@ -125,7 +126,7 @@ export function UserMenu({
                 }
               }}
             >
-              Save
+              Сохранить
             </Button>
           </div>
         </div>
@@ -140,7 +141,7 @@ export function UserMenu({
             }}
           >
             <PencilLine className="h-4 w-4" />
-            Edit display name
+            Изменить имя
           </Button>
         </div>
       )}

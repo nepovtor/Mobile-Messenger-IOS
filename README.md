@@ -8,14 +8,13 @@ Portfolio-ready messenger project with three clients:
 - `web/`: React + TypeScript web client
 - `server/`: NestJS backend with REST + WebSocket realtime
 
-The project keeps the existing backend contract, Telegram verification flow, demo accounts, Railway deployment setup, and native WebSocket realtime.
+The project keeps the existing backend contract, Telegram verification flow, Railway deployment setup, and native WebSocket realtime.
 
 ## Features
 
 ### iOS
 
 - phone auth with Telegram verification
-- demo accounts for portfolio demos
 - chat list and direct/group chat threads
 - native WebSocket realtime, typing, read state, delivery state
 - contacts screen with add-by-phone, empty/loading/error states, and direct chat opening
@@ -34,6 +33,7 @@ The project keeps the existing backend contract, Telegram verification flow, dem
 - contacts tab with add-by-phone and direct chat opening
 - profile display name editing in the user menu
 - map page with Leaflet + OpenStreetMap
+- redesigned product-style landing, messenger workspace, map workspace, and admin entry
 - protected system dashboard for labs 7-11 overview
 - JWT session payload preview, backend status, and recent logs in the browser
 - opt-in location sharing with browser permission prompt
@@ -85,16 +85,6 @@ Realtime remains WebSocket-based through the existing gateway.
 - only the latest location point is stored
 - no location history is kept
 - contacts can see only locations that were explicitly shared with them
-
-## Demo Accounts
-
-| User | Phone | Password |
-| --- | --- | --- |
-| Анна Demo | `+15551230011` | `demo1111` |
-| Борис Demo | `+15551230012` | `demo2222` |
-| Вера Demo | `+15551230013` | `demo3333` |
-| Глеб Demo | `+15551230014` | `demo4444` |
-| Даша Demo | `+15551230015` | `demo5555` |
 
 ## Screenshots
 

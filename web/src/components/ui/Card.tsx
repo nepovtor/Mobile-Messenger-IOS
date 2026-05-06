@@ -9,8 +9,9 @@ export function Card({
   return (
     <div
       className={clsx(
-        "rounded-[28px] border border-white/10 bg-white/[0.07] backdrop-blur-2xl",
-        "shadow-[0_24px_80px_rgba(2,6,23,0.45)]",
+        "rounded-[30px] border border-white/10",
+        "bg-[linear-gradient(180deg,rgba(14,20,34,0.92),rgba(8,13,24,0.84))] backdrop-blur-2xl",
+        "shadow-[0_30px_90px_rgba(3,8,20,0.46)]",
         className,
       )}
       {...props}

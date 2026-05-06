@@ -8,9 +8,9 @@ import { Button } from "../ui/Button";
 function buildMarker(label: string, tint: string) {
   return L.divIcon({
     className: "",
-    html: `<div style="width:46px;height:46px;border-radius:18px;background:${tint};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;box-shadow:0 12px 24px rgba(15,23,42,.28);border:2px solid rgba(255,255,255,.22)">${label}</div>`,
-    iconSize: [46, 46],
-    iconAnchor: [23, 23],
+    html: `<div style="width:48px;height:48px;border-radius:18px;background:${tint};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;box-shadow:0 14px 30px rgba(15,23,42,.32);border:2px solid rgba(255,255,255,.18)">${label}</div>`,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
     popupAnchor: [0, -16],
   });
 }
@@ -39,7 +39,7 @@ export function LocationMap({
       center={center}
       zoom={12}
       scrollWheelZoom
-      className="h-[560px] w-full rounded-[28px]"
+      className="h-[560px] w-full rounded-[30px]"
     >
       <RecenterMap center={center} />
       <TileLayer
@@ -52,15 +52,17 @@ export function LocationMap({
       myLocation.longitude != null ? (
         <Marker
           position={[myLocation.latitude, myLocation.longitude]}
-          icon={buildMarker("ME", "linear-gradient(135deg,#22c55e,#0ea5e9)")}
+          icon={buildMarker("YOU", "linear-gradient(135deg,#22c55e,#0ea5e9)")}
         >
           <Popup>
-            <div className="space-y-2">
-              <p className="font-semibold">You</p>
-              <p className="text-sm text-slate-600">
-                Shared with contacts while sharing is enabled.
-              </p>
-              <p className="text-xs text-slate-500">
+            <div className="min-w-[220px] space-y-3 p-4">
+              <div>
+                <p className="font-semibold text-white">Вы</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  Точка видна контактам только пока sharing включён.
+                </p>
+              </div>
+              <p className="text-xs text-slate-400">
                 {formatLocationUpdatedAt(myLocation.updatedAt)}
               </p>
             </div>
@@ -74,24 +76,24 @@ export function LocationMap({
           position={[contact.latitude, contact.longitude]}
           icon={buildMarker(
             initials(contact.displayName),
-            "linear-gradient(135deg,#2563eb,#8b5cf6)",
+            "linear-gradient(135deg,#f59e0b,#0ea5e9)",
           )}
         >
           <Popup>
-            <div className="min-w-[220px] space-y-3">
+            <div className="min-w-[240px] space-y-3 p-4">
               <div>
-                <p className="font-semibold text-slate-900">
+                <p className="font-semibold text-white">
                   {contact.displayName}
                 </p>
-                <p className="text-sm text-slate-600">{contact.phone}</p>
+                <p className="text-sm text-slate-300">{contact.phone}</p>
               </div>
-              <div className="space-y-1 text-xs text-slate-500">
+              <div className="space-y-1 text-xs text-slate-400">
                 <p>{formatLocationUpdatedAt(contact.updatedAt)}</p>
                 {contact.accuracy != null ? (
                   <p>Accuracy: ~{Math.round(contact.accuracy)} m</p>
                 ) : null}
                 {contact.isOutdated ? (
-                  <p className="font-semibold text-amber-600">
+                  <p className="font-semibold text-amber-300">
                     Location outdated
                   </p>
                 ) : null}
@@ -100,7 +102,7 @@ export function LocationMap({
                 className="w-full px-3 py-2"
                 onClick={() => onOpenChat(contact)}
               >
-                Open chat
+                Открыть чат
               </Button>
             </div>
           </Popup>

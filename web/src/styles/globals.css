@@ -1,14 +1,19 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
   color-scheme: dark;
-  font-family: "Space Grotesk", sans-serif;
-  background: #020617;
-  --app-bg: #020617;
-  --app-surface: rgba(15, 23, 42, 0.68);
-  --app-border: rgba(255, 255, 255, 0.12);
-  --app-text-muted: rgba(203, 213, 225, 0.72);
+  font-family: "Sora", sans-serif;
+  background: #07101b;
+  --app-bg: #07101b;
+  --app-surface: rgba(12, 19, 31, 0.78);
+  --app-surface-strong: rgba(10, 16, 27, 0.92);
+  --app-surface-soft: rgba(255, 255, 255, 0.05);
+  --app-border: rgba(255, 255, 255, 0.1);
+  --app-border-strong: rgba(255, 255, 255, 0.16);
+  --app-text: #f8fafc;
+  --app-text-muted: rgba(215, 224, 237, 0.72);
+  --app-shadow: 0 30px 90px rgba(3, 8, 20, 0.48);
 }
 
 * {
@@ -23,16 +28,39 @@ body,
 }
 
 body {
-  color: white;
+  color: var(--app-text);
   background:
     radial-gradient(
       circle at top left,
-      rgba(56, 189, 248, 0.12),
+      rgba(251, 146, 60, 0.16),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(56, 189, 248, 0.15),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at bottom,
+      rgba(45, 212, 191, 0.12),
       transparent 32%
     ),
-    linear-gradient(180deg, #020617 0%, #0f172a 100%);
+    linear-gradient(180deg, #07101b 0%, #091525 52%, #040912 100%);
   background-attachment: fixed;
   overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black, transparent 88%);
+  opacity: 0.4;
 }
 
 button,
@@ -46,7 +74,7 @@ button {
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.3);
+  background: rgba(251, 146, 60, 0.28);
   color: white;
 }
 
@@ -54,11 +82,151 @@ a {
   color: inherit;
 }
 
+.app-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.app-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    transparent 20%,
+    rgba(4, 9, 18, 0.42) 100%
+  );
+}
+
+.app-page--auth {
+  background:
+    radial-gradient(
+      circle at 12% 14%,
+      rgba(251, 146, 60, 0.18),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 82% 12%,
+      rgba(56, 189, 248, 0.16),
+      transparent 24%
+    ),
+    linear-gradient(180deg, #09111e 0%, #091524 45%, #040912 100%);
+}
+
+.app-page--workspace {
+  background:
+    radial-gradient(
+      circle at 10% 12%,
+      rgba(56, 189, 248, 0.16),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 86% 18%,
+      rgba(251, 146, 60, 0.14),
+      transparent 24%
+    ),
+    linear-gradient(180deg, #09111d 0%, #071320 48%, #040912 100%);
+}
+
+.app-page--map {
+  background:
+    radial-gradient(
+      circle at 12% 14%,
+      rgba(45, 212, 191, 0.16),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 84% 12%,
+      rgba(56, 189, 248, 0.14),
+      transparent 24%
+    ),
+    linear-gradient(180deg, #07111b 0%, #071724 50%, #030813 100%);
+}
+
+.app-page--admin {
+  background:
+    radial-gradient(
+      circle at 10% 16%,
+      rgba(250, 204, 21, 0.14),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 86% 10%,
+      rgba(56, 189, 248, 0.13),
+      transparent 24%
+    ),
+    linear-gradient(180deg, #09111d 0%, #081420 48%, #040812 100%);
+}
+
+.app-page--telegram {
+  background:
+    radial-gradient(
+      circle at 12% 12%,
+      rgba(56, 189, 248, 0.16),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 88% 12%,
+      rgba(251, 191, 36, 0.15),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 50% 100%,
+      rgba(45, 212, 191, 0.11),
+      transparent 30%
+    ),
+    linear-gradient(180deg, #09111d 0%, #081624 46%, #040912 100%);
+}
+
+.app-mono {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.app-grid-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(circle at center, black, transparent 85%);
+  opacity: 0.42;
+}
+
+.app-shell {
+  position: relative;
+  border: 1px solid var(--app-border);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 38, 0.86),
+    rgba(8, 13, 24, 0.82)
+  );
+  box-shadow: var(--app-shadow);
+  backdrop-filter: blur(26px);
+}
+
+.app-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.68rem;
+  color: rgba(241, 245, 249, 0.86);
+}
+
 .glass-orb {
   position: absolute;
   border-radius: 999px;
-  filter: blur(42px);
-  opacity: 0.55;
+  filter: blur(54px);
+  opacity: 0.45;
   pointer-events: none;
   animation: drift 18s ease-in-out infinite;
 }
@@ -95,4 +263,26 @@ a {
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.24);
+}
+
+.leaflet-container {
+  background: linear-gradient(180deg, #0b1321 0%, #0a1727 100%);
+  font-family: "Sora", sans-serif;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgba(8, 13, 24, 0.92);
+  color: white;
+  box-shadow: 0 22px 60px rgba(3, 8, 20, 0.5);
+}
+
+.leaflet-popup-content {
+  margin: 0;
+}
+
+.leaflet-control-zoom a {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(8, 13, 24, 0.86) !important;
+  color: white !important;
 }

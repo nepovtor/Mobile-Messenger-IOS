@@ -37,10 +37,11 @@ export default function App() {
 
   if (isUserLoading || isAdminLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-200">
-        <Card className="flex items-center gap-3 px-5 py-4">
+      <div className="app-page app-page--workspace flex items-center justify-center px-4 text-slate-200">
+        <div className="app-grid-fade" />
+        <Card className="app-shell relative z-10 flex items-center gap-3 px-5 py-4">
           <Spinner />
-          Restoring sessions…
+          Восстанавливаем сессии…
         </Card>
       </div>
     );

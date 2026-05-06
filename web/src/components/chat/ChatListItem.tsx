@@ -16,10 +16,10 @@ export function ChatListItem({
   return (
     <button
       className={clsx(
-        "w-full rounded-[26px] border p-4 text-left transition duration-200",
+        "w-full rounded-[28px] border p-4 text-left transition duration-200",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
         isActive
-          ? "border-cyan-300/30 bg-cyan-400/12 shadow-[0_16px_40px_rgba(34,211,238,0.14)]"
+          ? "border-cyan-300/28 bg-cyan-400/10 shadow-[0_20px_44px_rgba(34,211,238,0.14)]"
           : "border-white/8 bg-white/[0.04] hover:-translate-y-0.5 hover:border-white/12 hover:bg-white/[0.08]",
       )}
       onClick={onClick}
@@ -38,11 +38,11 @@ export function ChatListItem({
               </div>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-2">
-              <span className="text-[11px] text-slate-500">
+              <span className="app-mono text-[11px] text-slate-500">
                 {formatChatTimestamp(chat.lastActivity)}
               </span>
               {chat.unreadCount > 0 ? (
-                <span className="rounded-full bg-gradient-to-r from-cyan-300 to-blue-500 px-2 py-0.5 text-[11px] font-semibold text-slate-950">
+                <span className="rounded-full bg-[linear-gradient(135deg,#fbbf24,#67e8f9)] px-2 py-0.5 text-[11px] font-semibold text-slate-950">
                   {chat.unreadCount}
                 </span>
               ) : null}
@@ -58,7 +58,7 @@ export function ChatListItem({
           >
             {chat.typingParticipants.length > 0
               ? `${chat.typingParticipants.join(", ")} typing…`
-              : chat.lastMessagePreview || "No messages yet"}
+              : chat.lastMessagePreview || "Новых сообщений пока нет"}
           </p>
         </div>
       </div>

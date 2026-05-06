@@ -572,15 +572,16 @@ export function SystemPage() {
   const recentMessages = overview?.database.recentMessages ?? [];
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(249,115,22,0.14),_transparent_26%),linear-gradient(180deg,#020617_0%,#111827_48%,#030712_100%)] px-4 py-4 sm:px-6 sm:py-6">
+    <div className="app-page app-page--admin px-4 py-4 sm:px-6 sm:py-6">
+      <div className="app-grid-fade" />
       <div className="glass-orb left-[-4rem] top-[4rem] h-44 w-44 bg-cyan-400/20" />
       <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-orange-400/14" />
 
-      <div className="mx-auto flex max-w-[1520px] flex-col gap-4">
-        <Card className="overflow-hidden p-4 sm:p-5">
+      <div className="relative z-10 mx-auto flex max-w-[1520px] flex-col gap-4">
+        <Card className="app-shell overflow-hidden p-4 sm:p-5">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-100">
+              <p className="app-kicker">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 Admin Console
               </p>
@@ -633,7 +634,7 @@ export function SystemPage() {
         </Card>
 
         <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="rounded-[32px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl">
+          <aside className="app-shell rounded-[32px] p-4">
             <div className="space-y-4">
               <Card className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -819,18 +820,6 @@ export function SystemPage() {
                       </Badge>
                       <Badge tone="neutral">
                         Expires: {displayedJwtExpiresIn}
-                      </Badge>
-                      <Badge
-                        tone={
-                          overview?.authentication.demoAccountsEnabled
-                            ? "success"
-                            : "warning"
-                        }
-                      >
-                        Demo accounts{" "}
-                        {overview?.authentication.demoAccountsEnabled
-                          ? "enabled"
-                          : "unknown"}
                       </Badge>
                       <Badge
                         tone={

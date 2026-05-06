@@ -82,7 +82,6 @@ export type SystemOverview = {
     adminLogin: string;
     verificationProvider: string;
     smsProvider: string;
-    demoAccountsEnabled: boolean;
     passwordLoginEnabled: boolean;
     protectedRoutes: string[];
   };

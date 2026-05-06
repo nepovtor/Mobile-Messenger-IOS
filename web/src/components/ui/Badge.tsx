@@ -12,13 +12,13 @@ export function Badge({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-[0.02em]",
-        tone === "neutral" && "border-white/10 bg-white/8 text-slate-300",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em]",
+        tone === "neutral" && "border-white/10 bg-white/[0.06] text-slate-300",
         tone === "success" &&
-          "border-emerald-400/20 bg-emerald-400/15 text-emerald-100",
+          "border-emerald-400/20 bg-emerald-400/12 text-emerald-100",
         tone === "warning" &&
-          "border-amber-400/20 bg-amber-400/15 text-amber-100",
-        tone === "danger" && "border-rose-500/20 bg-rose-500/15 text-rose-100",
+          "border-amber-400/20 bg-amber-400/12 text-amber-100",
+        tone === "danger" && "border-rose-500/20 bg-rose-500/12 text-rose-100",
       )}
     >
       {pulseDot ? (

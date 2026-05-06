@@ -82,17 +82,34 @@ export function Sidebar({
 
   return (
     <aside className="flex h-full flex-col gap-4">
-      <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-4">
-        <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/80">
-          Workspace
-        </p>
-        <h2 className="mt-3 text-xl font-semibold text-white">
-          Messenger dashboard
+      <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-5">
+        <div className="app-kicker">Workspace</div>
+        <h2 className="mt-4 text-2xl font-semibold text-white">
+          Messenger control rail
         </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          Realtime chats, direct contacts, profile controls, and map access in
-          one presentation-friendly layout.
+        <p className="mt-3 text-sm leading-7 text-slate-300">
+          Быстрый доступ к диалогам, контактам, карте и профилю без перегруза
+          основного экрана.
         </p>
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
+              Chats
+            </p>
+            <p className="mt-2 text-lg font-semibold text-white">
+              {chats.length}
+            </p>
+          </div>
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
+              Contacts
+            </p>
+            <p className="mt-2 text-lg font-semibold text-white">
+              {contacts.length}
+            </p>
+          </div>
+        </div>
       </div>
 
       <UserMenu
@@ -104,30 +121,30 @@ export function Sidebar({
 
       <WorkspaceSwitcher />
 
-      <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/10 bg-white/[0.06] p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-[26px] border border-white/10 bg-white/[0.05] p-1.5">
         <button
           type="button"
           aria-pressed={activeTab === "chats"}
-          className={`rounded-[18px] px-3 py-2 text-sm font-medium transition ${
+          className={`rounded-[20px] px-3 py-3 text-sm font-medium transition ${
             activeTab === "chats"
-              ? "bg-white/[0.12] text-white"
+              ? "bg-white/[0.12] text-white shadow-[0_12px_30px_rgba(3,8,20,0.22)]"
               : "text-slate-400"
           }`}
           onClick={() => setActiveTab("chats")}
         >
-          Chats ({chats.length})
+          Диалоги ({chats.length})
         </button>
         <button
           type="button"
           aria-pressed={activeTab === "contacts"}
-          className={`rounded-[18px] px-3 py-2 text-sm font-medium transition ${
+          className={`rounded-[20px] px-3 py-3 text-sm font-medium transition ${
             activeTab === "contacts"
-              ? "bg-white/[0.12] text-white"
+              ? "bg-white/[0.12] text-white shadow-[0_12px_30px_rgba(3,8,20,0.22)]"
               : "text-slate-400"
           }`}
           onClick={() => setActiveTab("contacts")}
         >
-          Contacts ({contacts.length})
+          Контакты ({contacts.length})
         </button>
       </div>
 
@@ -139,7 +156,7 @@ export function Sidebar({
           }
           className="pl-10"
           placeholder={
-            activeTab === "chats" ? "Search chats" : "Search contacts"
+            activeTab === "chats" ? "Поиск по диалогам" : "Поиск по контактам"
           }
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -156,18 +173,20 @@ export function Sidebar({
           />
         ) : (
           <div className="space-y-3">
-            <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-4">
-              <p className="mb-2 text-sm font-semibold text-white">
-                Add contact by phone
+            <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-4">
+              <p className="text-sm font-semibold text-white">
+                Добавить контакт
               </p>
-              <p className="mb-3 text-xs leading-5 text-slate-400">
-                Add a contact by phone to start messaging
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                Укажите телефон в международном формате, чтобы открыть личный
+                диалог без лишних шагов.
               </p>
               <Input
                 aria-label="Contact phone"
                 placeholder="+375291234567"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
+                className="mt-3"
               />
               <Button
                 block
@@ -176,18 +195,18 @@ export function Sidebar({
                 isLoading={isAddingContact}
                 onClick={() => void onAddContact(phone.trim())}
               >
-                Add contact
+                Добавить контакт
               </Button>
             </div>
 
             {contactsNotice ? (
-              <InlineAlert tone="success" title="Contacts">
+              <InlineAlert tone="success" title="Контакты">
                 {contactsNotice}
               </InlineAlert>
             ) : null}
 
             {contactsError ? (
-              <InlineAlert tone="danger" title="Contacts">
+              <InlineAlert tone="danger" title="Контакты">
                 {contactsError}
               </InlineAlert>
             ) : null}
@@ -199,15 +218,16 @@ export function Sidebar({
                 ))}
               </div>
             ) : filteredContacts.length === 0 ? (
-              <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
-                Add a contact by phone to start messaging
+              <div className="rounded-[28px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
+                Пока список пуст. Добавьте первый контакт, чтобы быстро начать
+                переписку по номеру.
               </div>
             ) : (
               <div className="space-y-3">
                 {filteredContacts.map((contact) => (
                   <div
                     key={contact.id}
-                    className="rounded-[26px] border border-white/10 bg-white/[0.06] p-4"
+                    className="rounded-[28px] border border-white/10 bg-white/[0.05] p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-3">
@@ -223,7 +243,7 @@ export function Sidebar({
                             <Users className="h-3.5 w-3.5" />
                             {contact.directChatID
                               ? "Direct chat ready"
-                              : "Chat opens on demand"}
+                              : "Opens on demand"}
                           </div>
                         </div>
                       </div>
@@ -235,8 +255,8 @@ export function Sidebar({
                           onClick={() => onOpenContact(contact)}
                         >
                           {openingContactId === contact.id
-                            ? "Opening..."
-                            : "Open"}
+                            ? "Открываем..."
+                            : "Открыть"}
                         </Button>
                         <Button
                           variant="ghost"
@@ -245,7 +265,7 @@ export function Sidebar({
                           disabled={removingContactId === contact.id}
                           onClick={() => onRemoveContact(contact)}
                         >
-                          {removingContactId === contact.id ? "..." : "Remove"}
+                          {removingContactId === contact.id ? "..." : "Удалить"}
                         </Button>
                       </div>
                     </div>

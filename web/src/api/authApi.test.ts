@@ -22,9 +22,9 @@ describe("authApi", () => {
         status: 201,
         text: async () =>
           JSON.stringify({
-            botUsername: "mobile_demo_bot",
+            botUsername: "mobile_auth_bot",
             telegramStartUrl:
-              "https://t.me/mobile_demo_bot?start=secure-pair-token",
+              "https://t.me/mobile_auth_bot?start=secure-pair-token",
             expiresIn: 600,
           }),
       }),
@@ -33,8 +33,8 @@ describe("authApi", () => {
     await expect(
       authApi.requestTelegramPairing("+375291234567"),
     ).resolves.toEqual({
-      botUsername: "mobile_demo_bot",
-      telegramStartUrl: "https://t.me/mobile_demo_bot?start=secure-pair-token",
+      botUsername: "mobile_auth_bot",
+      telegramStartUrl: "https://t.me/mobile_auth_bot?start=secure-pair-token",
       expiresIn: 600,
     });
 

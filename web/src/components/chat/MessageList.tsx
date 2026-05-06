@@ -41,16 +41,16 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-[28px] border border-dashed border-white/10 bg-white/[0.04] px-6 py-8">
+        <div className="max-w-md rounded-[30px] border border-dashed border-white/10 bg-white/[0.04] px-6 py-8">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
             <MessageCircleMore className="h-6 w-6" />
           </div>
           <h3 className="mt-5 text-xl font-semibold text-white">
-            Start the first exchange
+            Начните первый обмен
           </h3>
           <p className="mt-3 text-sm leading-6 text-slate-400">
-            This chat is ready for realtime messages. Send the first message to
-            show delivery, read states, and live updates during the demo.
+            Диалог уже готов к живым сообщениям. Отправьте первый текст, чтобы
+            сразу увидеть доставку, read state и realtime-обновления.
           </p>
         </div>
       </div>
@@ -73,7 +73,7 @@ export function MessageList({
           >
             {showDayDivider ? (
               <div className="flex justify-center py-1">
-                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                <span className="app-mono rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
                   {formatMessageDayLabel(message.createdAt)}
                 </span>
               </div>
@@ -106,7 +106,7 @@ export function MessageList({
       {typingParticipants.length > 0 ? (
         <div className="flex justify-start">
           <div className="rounded-[24px] border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-cyan-100 backdrop-blur-xl">
-            {typingParticipants.join(", ")} typing…
+            {typingParticipants.join(", ")} печатает…
           </div>
         </div>
       ) : null}

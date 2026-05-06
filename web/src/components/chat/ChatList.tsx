@@ -25,9 +25,9 @@ export function ChatList({
 
   if (chats.length === 0) {
     return (
-      <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
-        No chats found for this account yet. Open contacts to create a direct
-        conversation and continue the demo.
+      <div className="rounded-[28px] border border-dashed border-white/10 bg-white/[0.04] px-4 py-10 text-center text-sm leading-6 text-slate-400">
+        Пока нет диалогов. Откройте вкладку контактов, чтобы быстро создать
+        личную переписку по номеру телефона.
       </div>
     );
   }

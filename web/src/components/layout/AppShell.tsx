@@ -69,7 +69,7 @@ export function AppShell({
     if (chatError) {
       return {
         tone: "danger" as const,
-        title: "Chat error",
+        title: "Ошибка чата",
         message: chatError,
       };
     }
@@ -77,7 +77,7 @@ export function AppShell({
     if (realtimeError) {
       return {
         tone: "danger" as const,
-        title: "Realtime status",
+        title: "Состояние realtime",
         message: realtimeError,
       };
     }
@@ -85,26 +85,26 @@ export function AppShell({
     if (connectionState === "reconnecting") {
       return {
         tone: "warning" as const,
-        title: "Realtime status",
+        title: "Состояние realtime",
         message:
-          "Reconnecting to realtime. Messages stay on screen while the socket recovers.",
+          "Соединение восстанавливается. История сообщений остаётся на экране, пока сокет переподключается.",
       };
     }
 
     if (connectionState === "disconnected") {
       return {
         tone: "warning" as const,
-        title: "Realtime status",
+        title: "Состояние realtime",
         message:
-          "Realtime is offline. You can keep browsing chats and reconnect when ready.",
+          "Live-обновления временно недоступны. Можно продолжать читать историю и переподключиться вручную.",
       };
     }
 
     if (connectionState === "failed") {
       return {
         tone: "danger" as const,
-        title: "Realtime status",
-        message: "Connection issue detected. Reconnect to resume live updates.",
+        title: "Состояние realtime",
+        message: "Обнаружена проблема с соединением. Переподключите сокет.",
       };
     }
 
@@ -197,7 +197,9 @@ export function AppShell({
       });
       setContactsError(null);
       setContactsNotice(
-        result.alreadyExists ? "Contact already added." : "Contact added.",
+        result.alreadyExists
+          ? "Контакт уже есть в списке."
+          : "Контакт добавлен.",
       );
     } catch (error: unknown) {
       setContactsError(mapContactErrorMessage(error, "Could not add contact."));
@@ -215,7 +217,7 @@ export function AppShell({
         existing.filter((item) => item.id !== contact.id),
       );
       setContactsError(null);
-      setContactsNotice("Contact removed.");
+      setContactsNotice("Контакт удалён.");
     } catch (error: unknown) {
       setContactsError(
         mapContactErrorMessage(error, "Could not remove contact."),
@@ -247,32 +249,32 @@ export function AppShell({
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.28),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(34,211,238,0.16),_transparent_26%),linear-gradient(180deg,#020617,#0f172a)] px-4 py-4 sm:px-6 sm:py-6">
-      <div className="glass-orb left-[-4rem] top-[4rem] h-44 w-44 bg-cyan-400/25" />
-      <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-indigo-500/18" />
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20" />
+    <div className="app-page app-page--workspace px-4 py-4 sm:px-6 sm:py-6">
+      <div className="app-grid-fade" />
+      <div className="glass-orb left-[-4rem] top-[4rem] h-44 w-44 bg-cyan-400/22" />
+      <div className="glass-orb right-[10%] top-[10%] h-60 w-60 bg-amber-400/14" />
 
-      <div className="relative mx-auto flex h-[calc(100vh-2rem)] max-w-[1480px] flex-col gap-4 sm:h-[calc(100vh-3rem)]">
-        <header className="rounded-[30px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl sm:p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="relative z-10 mx-auto flex h-[calc(100vh-2rem)] max-w-[1480px] flex-col gap-4 sm:h-[calc(100vh-3rem)]">
+        <header className="app-shell rounded-[34px] p-4 sm:p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-100">
+              <div className="app-kicker">
                 <Radio className="h-3.5 w-3.5" />
-                Messenger dashboard
-              </p>
-              <h1 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">
+                Live workspace
+              </div>
+              <h1 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
                 Mobile Messenger
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
                 {selectedChat
-                  ? `Active thread: ${selectedChat.title}`
-                  : "Pick a conversation or open a contact to start the demo flow."}
+                  ? `Сейчас открыт диалог «${selectedChat.title}». Можно продолжать переписку, видеть realtime-обновления и переключаться между зонами без потери контекста.`
+                  : "Выберите диалог, чтобы продолжить переписку, открыть контакты или перейти к карте. Весь веб-клиент теперь работает как единое пространство."}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
                   Chats
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-white">
@@ -280,7 +282,7 @@ export function AppShell({
                 </p>
               </Card>
               <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
                   Contacts
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-white">
@@ -288,7 +290,7 @@ export function AppShell({
                 </p>
               </Card>
               <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
                   Unread
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-white">
@@ -296,10 +298,10 @@ export function AppShell({
                 </p>
               </Card>
               <Card className="p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                <p className="app-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">
                   Realtime
                 </p>
-                <p className="mt-2 text-sm font-semibold text-white capitalize">
+                <p className="mt-2 text-sm font-semibold capitalize text-white">
                   {connectionState}
                 </p>
               </Card>
@@ -318,7 +320,7 @@ export function AppShell({
                   size="sm"
                   onClick={() => realtimeStore.getState().reconnect()}
                 >
-                  Reconnect
+                  Переподключить
                 </Button>
               ) : undefined
             }
@@ -328,7 +330,7 @@ export function AppShell({
         ) : null}
 
         <div className="min-h-0 flex flex-1 gap-4">
-          <div className="hidden w-[372px] shrink-0 rounded-[32px] border border-white/10 bg-slate-950/40 p-4 backdrop-blur-2xl md:block">
+          <div className="app-shell hidden w-[372px] shrink-0 rounded-[34px] p-4 md:block">
             <Sidebar
               user={currentUser}
               chats={chats}
@@ -357,7 +359,7 @@ export function AppShell({
             <div className="mb-3 flex items-center justify-between gap-3 md:hidden">
               <Button variant="secondary" onClick={() => setSidebarOpen(true)}>
                 <Menu className="h-4 w-4" />
-                Chats
+                Навигация
               </Button>
               <div className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-slate-300">
                 {unreadCount} unread
@@ -409,7 +411,7 @@ export function AppShell({
                   }}
                 />
               ) : (
-                <div className="h-full rounded-[30px] border border-white/10 bg-white/[0.06] backdrop-blur-2xl">
+                <div className="app-shell h-full rounded-[34px]">
                   <EmptyState />
                 </div>
               )}
@@ -430,7 +432,7 @@ export function AppShell({
               initial={{ x: -24, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -24, opacity: 0 }}
-              className="mx-auto h-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/92 p-4"
+              className="app-shell mx-auto h-full max-w-md rounded-[34px] p-4"
             >
               <Sidebar
                 user={currentUser}
