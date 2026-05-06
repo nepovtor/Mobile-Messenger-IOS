@@ -385,7 +385,7 @@ test("push: deletes web push subscriptions without removing historical rows", as
     },
   });
 
-  const response = await api.delete("/api/push/subscriptions").send({
+  const response = await api.post("/api/push/subscriptions/delete").send({
     endpoint: "https://push.example.test/subscriptions/2",
   });
   assert.equal(response.status, 200);

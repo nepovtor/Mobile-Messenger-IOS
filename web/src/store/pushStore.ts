@@ -43,6 +43,17 @@ async function ensureServiceWorkerRegistration() {
   return navigator.serviceWorker.register("/sw.js");
 }
 
+async function getServiceWorkerRegistration(options?: {
+  registerIfMissing?: boolean;
+}) {
+  const existingRegistration = await navigator.serviceWorker.getRegistration();
+  if (existingRegistration || options?.registerIfMissing === false) {
+    return existingRegistration ?? null;
+  }
+
+  return navigator.serviceWorker.register("/sw.js");
+}
+
 function getPermissionState(): NotificationPermission | "unsupported" {
   if (!("Notification" in window)) {
     return "unsupported";
@@ -71,7 +82,7 @@ function encodeSubscription(subscription: PushSubscription) {
   const auth = serialized.keys?.auth;
 
   if (!p256dh || !auth) {
-    throw new Error("Push subscription keys are missing.");
+    throw new Error("Браузер не передал ключи push-подписки.");
   }
 
   return {
@@ -94,14 +105,20 @@ function decodeBase64Url(input: string) {
 }
 
 async function loadExistingSubscription() {
-  const registration = await ensureServiceWorkerRegistration();
+  const registration = await getServiceWorkerRegistration({
+    registerIfMissing: false,
+  });
+  if (!registration) {
+    return null;
+  }
+
   return registration.pushManager.getSubscription();
 }
 
 async function getConfiguredVapidKey() {
   const response = await pushApi.getVapidPublicKey();
   if (!response.configured || !response.publicKey) {
-    throw new Error("Web Push is not configured on the server.");
+    throw new Error("Web push пока не настроен на сервере.");
   }
 
   return response.publicKey;
@@ -199,7 +216,10 @@ export const pushStore = create<PushStore>((set, get) => ({
     }
   },
   async detachFromCurrentSession() {
-    const endpoint = get().lastKnownEndpoint;
+    const subscription = arePushNotificationsSupported()
+      ? await loadExistingSubscription().catch(() => null)
+      : null;
+    const endpoint = subscription?.endpoint ?? get().lastKnownEndpoint;
     if (!endpoint) {
       return;
     }
@@ -282,10 +302,10 @@ export const pushStore = create<PushStore>((set, get) => ({
       toastStore.getState().showToast({
         tone: "danger",
         title: "Push-уведомления",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Не удалось включить push-уведомления.",
+        message: mapPushErrorMessage(
+          error,
+          "Не удалось включить push-уведомления.",
+        ),
       });
       return false;
     }
@@ -327,12 +347,20 @@ export const pushStore = create<PushStore>((set, get) => ({
       toastStore.getState().showToast({
         tone: "danger",
         title: "Push-уведомления",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Не удалось отключить push-уведомления.",
+        message: mapPushErrorMessage(
+          error,
+          "Не удалось отключить push-уведомления.",
+        ),
       });
       return false;
     }
   },
 }));
+
+function mapPushErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && /[А-Яа-яЁё]/.test(error.message)) {
+    return error.message;
+  }
+
+  return fallback;
+}

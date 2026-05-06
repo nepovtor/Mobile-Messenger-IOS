@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authApi } from "../api/authApi";
 import { ApiError } from "../api/httpClient";
 import { profileApi } from "../api/profileApi";
+import { pushStore } from "./pushStore";
 import { authStore, mapAuthErrorMessage } from "./authStore";
 import { chatStore } from "./chatStore";
 import { realtimeStore } from "./realtimeStore";
@@ -80,14 +81,23 @@ describe("authStore", () => {
 
   it("logout clears auth, chat, and realtime state", () => {
     const clearSpy = vi.spyOn(realtimeStore.getState(), "clear");
+    const detachSpy = vi
+      .spyOn(pushStore.getState(), "detachFromCurrentSession")
+      .mockResolvedValue();
 
-    authStore.getState().logout();
+    try {
+      authStore.getState().logout();
 
-    expect(authStore.getState().token).toBeNull();
-    expect(authStore.getState().currentUser).toBeNull();
-    expect(chatStore.getState().chats).toHaveLength(0);
-    expect(chatStore.getState().selectedChatId).toBeNull();
-    expect(clearSpy).toHaveBeenCalled();
+      expect(authStore.getState().token).toBeNull();
+      expect(authStore.getState().currentUser).toBeNull();
+      expect(chatStore.getState().chats).toHaveLength(0);
+      expect(chatStore.getState().selectedChatId).toBeNull();
+      expect(clearSpy).toHaveBeenCalled();
+      expect(detachSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      clearSpy.mockRestore();
+      detachSpy.mockRestore();
+    }
   });
 
   it("stores the token before requesting current user during login", async () => {

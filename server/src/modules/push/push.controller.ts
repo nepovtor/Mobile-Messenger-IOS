@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  HttpCode,
   Param,
   Post,
   UseGuards,
@@ -47,6 +48,16 @@ export class PushController {
   @Delete("subscriptions")
   @UseGuards(AuthGuard)
   deleteWebSubscription(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DeleteWebPushSubscriptionDto,
+  ) {
+    return this.pushService.deleteWebSubscription(user.sub, dto);
+  }
+
+  @Post("subscriptions/delete")
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
+  deleteWebSubscriptionPost(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: DeleteWebPushSubscriptionDto,
   ) {

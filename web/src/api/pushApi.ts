@@ -22,8 +22,8 @@ export const pushApi = {
     });
   },
   deleteWebSubscription(payload: DeleteWebPushSubscriptionPayload) {
-    return httpRequest<{ ok: true }>("/push/subscriptions", {
-      method: "DELETE",
+    return httpRequest<{ ok: true }>("/push/subscriptions/delete", {
+      method: "POST",
       body: JSON.stringify(payload),
     });
   },

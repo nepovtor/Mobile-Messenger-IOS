@@ -10,15 +10,15 @@ function getStatusMeta(state: {
 }) {
   if (!state.isSupported || state.capabilityState === "unsupported") {
     return {
-      label: "Not supported",
+      label: "Не поддерживается",
       tone: "danger" as const,
-      detail: "Этот браузер не поддерживает Service Worker или Push API.",
+      detail: "В этом браузере web push недоступен.",
     };
   }
 
   if (state.capabilityState === "denied") {
     return {
-      label: "No permission",
+      label: "Нет разрешения",
       tone: "warning" as const,
       detail: "Разрешение на уведомления отключено в настройках браузера.",
     };
@@ -26,14 +26,14 @@ function getStatusMeta(state: {
 
   if (state.capabilityState === "enabled") {
     return {
-      label: "Enabled",
+      label: "Включены",
       tone: "success" as const,
       detail: "Новые сообщения будут приходить как реальные push-уведомления.",
     };
   }
 
   return {
-    label: "Disabled",
+    label: "Отключены",
     tone: "neutral" as const,
     detail:
       "Разрешение запрашивается только после нажатия на кнопку включения.",
@@ -96,7 +96,7 @@ export function PushNotificationsPanel({
 
       {!isServerConfigured && isSupported ? (
         <p className="mt-3 text-[11px] leading-5 text-amber-200/90">
-          Сервер пока не отдал VAPID-конфигурацию для Web Push.
+          Сервер пока не настроен для web push через VAPID.
         </p>
       ) : null}
 

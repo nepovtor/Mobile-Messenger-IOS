@@ -173,13 +173,6 @@ export function AppShell({
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("chatId", selectedChatId);
       setSearchParams(nextParams, { replace: true });
-      return;
-    }
-
-    if (!selectedChatId && currentChatId) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("chatId");
-      setSearchParams(nextParams, { replace: true });
     }
   }, [searchParams, selectedChatId, setSearchParams]);
 

@@ -31,7 +31,7 @@ export function UserMenu({
 
   return (
     <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-4">
-      <div className="app-kicker">Profile</div>
+      <div className="app-kicker">Профиль</div>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar name={user.displayName} size="lg" />
@@ -68,7 +68,7 @@ export function UserMenu({
             </label>
             <Input
               id="display-name"
-              aria-label="Display name"
+              aria-label="Имя профиля"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
             />
@@ -83,7 +83,7 @@ export function UserMenu({
                 setEditing(false);
               }}
             >
-              Cancel
+              Отмена
             </Button>
             <Button
               block

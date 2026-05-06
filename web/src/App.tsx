@@ -30,7 +30,16 @@ export default function App() {
   useEffect(() => {
     void restoreSession();
     void restoreAdminSession();
-    void pushStore.getState().initialize();
+    void pushStore
+      .getState()
+      .initialize()
+      .then(() => {
+        if (authStore.getState().isAuthenticated) {
+          return pushStore.getState().syncForAuthenticatedUser();
+        }
+
+        return undefined;
+      });
   }, [restoreAdminSession, restoreSession]);
 
   useEffect(() => {
@@ -42,10 +51,7 @@ export default function App() {
   useEffect(() => {
     if (isUserAuthenticated) {
       void pushStore.getState().syncForAuthenticatedUser();
-      return;
     }
-
-    void pushStore.getState().detachFromCurrentSession();
   }, [isUserAuthenticated]);
 
   useEffect(() => {
