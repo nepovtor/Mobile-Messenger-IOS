@@ -36,7 +36,6 @@ final class ChatViewModelTests: XCTestCase {
             retryPending: RetryPendingMessagesUseCase(repository: repository),
             markStatus: MarkMessageStatusUseCase(repository: repository),
             analytics: AnalyticsServiceSpy(),
-            notificationManager: PushNotificationManager.shared,
             reachability: reachability
         )
 

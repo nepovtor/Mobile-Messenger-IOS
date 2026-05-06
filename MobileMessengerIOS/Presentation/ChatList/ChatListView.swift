@@ -107,7 +107,16 @@ struct ChatListView: View {
                             .padding(.top, 8)
                     }
                 }
-                .task { viewModel.onAppear() }
+                .task {
+                    viewModel.onAppear()
+                    openPendingPushChatIfPossible()
+                }
+                .onChange(of: viewModel.chats) { _, _ in
+                    openPendingPushChatIfPossible()
+                }
+                .onChange(of: container.pendingPushChatID) { _, _ in
+                    openPendingPushChatIfPossible()
+                }
             }
         }
     }
@@ -115,6 +124,16 @@ struct ChatListView: View {
     private var profileInitials: String {
         let displayName = sessionStore.currentDisplayName ?? SessionStore.Constants.currentUserDisplayName
         return ProfileViewModel.makeInitials(from: displayName)
+    }
+
+    private func openPendingPushChatIfPossible() {
+        guard let chatID = container.pendingPushChatID,
+              let chat = viewModel.chats.first(where: { $0.id == chatID }) else {
+            return
+        }
+
+        createdChat = chat
+        container.consumePendingPushChatNavigation(for: chatID)
     }
 }
 

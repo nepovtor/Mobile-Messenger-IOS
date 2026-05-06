@@ -1,25 +1,21 @@
 import clsx from "clsx";
 import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
+import type { ConnectionState } from "../../realtime/realtimeTypes";
+import type { CurrentUser } from "../../types/auth";
 import type { ChatSummary } from "../../types/chat";
 import type { Message } from "../../types/message";
-import type { CurrentUser } from "../../types/auth";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
-import { Avatar } from "../ui/Avatar";
-import { Button } from "../ui/Button";
 import { MessageInput } from "../chat/MessageInput";
 import { MessageList } from "../chat/MessageList";
-
-type StatusNotice = {
-  tone: "warning" | "danger";
-  message: string;
-} | null;
+import { Avatar } from "../ui/Avatar";
+import { Button } from "../ui/Button";
 
 export function ChatPanel({
   chat,
   messages,
   currentUser,
   connectionState,
-  statusNotice,
+  connectionIndicator,
   isLoadingMessages,
   onBack,
   onReconnect,
@@ -34,7 +30,7 @@ export function ChatPanel({
   messages: Message[];
   currentUser: CurrentUser;
   connectionState: ConnectionState;
-  statusNotice: StatusNotice;
+  connectionIndicator: ReactNode;
   isLoadingMessages: boolean;
   onBack: () => void;
   onReconnect: () => void;
@@ -89,40 +85,21 @@ export function ChatPanel({
             </div>
           </div>
 
-          {connectionState !== "connected" ? (
-            <span
-              className={clsx(
-                "h-2.5 w-2.5 shrink-0 rounded-full",
-                connectionState === "failed" || connectionState === "disconnected"
-                  ? "bg-rose-400"
-                  : "bg-amber-400",
-              )}
-            />
-          ) : null}
+          <div className="flex items-center gap-2">
+            {connectionIndicator}
+            {connectionState !== "connected" ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full px-3 text-xs"
+                onClick={onReconnect}
+              >
+                Повторить
+              </Button>
+            ) : null}
+          </div>
         </div>
       </header>
-
-      {statusNotice ? (
-        <div
-          className={clsx(
-            "flex items-center justify-between gap-3 border-b px-3 py-2 text-xs sm:px-4",
-            statusNotice.tone === "danger"
-              ? "border-rose-400/14 bg-rose-500/10 text-rose-100"
-              : "border-amber-400/14 bg-amber-500/10 text-amber-100",
-          )}
-        >
-          <span>{statusNotice.message}</span>
-          {connectionState !== "connected" ? (
-            <button
-              type="button"
-              className="shrink-0 rounded-full border border-current/20 px-2.5 py-1 text-[11px] font-medium transition hover:bg-white/8"
-              onClick={onReconnect}
-            >
-              Повторить
-            </button>
-          ) : null}
-        </div>
-      ) : null}
 
       <div className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.05),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.12),rgba(2,6,23,0.02))]">
         <MessageList

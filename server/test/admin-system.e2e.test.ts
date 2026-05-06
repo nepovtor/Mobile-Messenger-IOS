@@ -14,6 +14,7 @@ import { LocationShareEntity } from "../src/entities/location-share.entity";
 import { MediaEntity } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
 import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
+import { PushSubscriptionEntity } from "../src/entities/push-subscription.entity";
 import { TelegramLinkEntity } from "../src/entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../src/entities/telegram-pairing-token.entity";
 import { UserEntity } from "../src/entities/user.entity";
@@ -47,6 +48,7 @@ async function createTestApp(): Promise<INestApplication> {
             ChatParticipantEntity,
             MessageEntity,
             MediaEntity,
+            PushSubscriptionEntity,
           ],
           synchronize: true,
         }),

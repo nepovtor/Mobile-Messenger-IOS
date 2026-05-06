@@ -30,6 +30,7 @@ The project keeps the existing backend contract, Telegram verification flow, Rai
 - login with the existing backend auth flow
 - chat list and chat thread UI
 - native WebSocket realtime
+- toast notifications with auto-dismiss after 3 seconds
 - contacts tab with add-by-phone and direct chat opening
 - profile display name editing in the user menu
 - map page with Leaflet + OpenStreetMap
@@ -37,12 +38,15 @@ The project keeps the existing backend contract, Telegram verification flow, Rai
 - protected system dashboard for labs 7-11 overview
 - JWT session payload preview, backend status, and recent logs in the browser
 - opt-in location sharing with browser permission prompt
+- real Web Push via Service Worker + Push API + backend VAPID subscriptions
 - auth/chat cleanup on logout
 
 ### Backend
 
 - NestJS REST API
 - native WebSocket realtime gateway
+- Web Push delivery via `web-push` and VAPID
+- APNs delivery for iOS device tokens
 - request and error file logging with process-level error handlers
 - contacts API
 - profile API
@@ -57,8 +61,9 @@ The project keeps the existing backend contract, Telegram verification flow, Rai
 ```text
 iOS SwiftUI / Web React
   -> REST API for auth, contacts, profile, chats, media
+  -> Push endpoints for Web Push subscriptions and APNs device tokens
   -> Native WebSocket for realtime events
-  -> NestJS modules (auth, chat, contacts, users, realtime, media)
+  -> NestJS modules (auth, chat, contacts, users, realtime, media, push)
   -> PostgreSQL / Railway deployment
 ```
 
@@ -76,6 +81,15 @@ These endpoints are used by both clients:
 - `GET /api/location/contacts`
 
 Realtime remains WebSocket-based through the existing gateway.
+
+Push-related endpoints:
+
+- `GET /api/push/vapid-public-key`
+- `GET /api/push/status`
+- `POST /api/push/subscriptions`
+- `DELETE /api/push/subscriptions`
+- `POST /api/push/devices`
+- `DELETE /api/push/devices/:token`
 
 ## Privacy Notes
 
@@ -114,6 +128,44 @@ If screenshots are not available yet, keep the placeholders above and add the re
 - backend Docker setup lives in [server/Dockerfile](./server/Dockerfile) and [Dockerfile](./Dockerfile)
 - backend keeps `process.env.PORT`, `JWT_SECRET`, `/api/health`, and Telegram provider safety checks intact
 
+## Push Setup
+
+### Web Push
+
+Backend env:
+
+- `WEB_PUSH_VAPID_PUBLIC_KEY`
+- `WEB_PUSH_VAPID_PRIVATE_KEY`
+- `WEB_PUSH_VAPID_SUBJECT`
+- optional `PUSH_ALLOW_TEST_ENDPOINT=true` for non-production/manual testing
+
+Generate VAPID keys with:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+The web client registers `web/public/sw.js`, asks for permission only after a user action, creates a real `PushSubscription`, and sends it to the backend. If the VAPID env vars are missing, the backend does not fake delivery: it logs a warning and skips Web Push sending.
+
+### iOS APNs
+
+Backend env:
+
+- `APNS_TEAM_ID`
+- `APNS_KEY_ID`
+- `APNS_BUNDLE_ID`
+- `APNS_PRIVATE_KEY`
+- `APNS_ENVIRONMENT=sandbox|production`
+
+iOS app notes:
+
+- the Xcode project now includes `aps-environment` entitlements for APNs
+- the app requests notification authorization from the profile screen
+- after permission is granted, the app registers for remote notifications, captures the APNs device token, and syncs it through `/api/push/devices`
+- logout attempts to detach the current device token from the backend session
+
+If APNs env vars are missing, the backend does not pretend push works: it logs a warning and safely skips APNs delivery.
+
 ## Local Run
 
 ### Backend
@@ -121,6 +173,7 @@ If screenshots are not available yet, keep the placeholders above and add the re
 ```bash
 cd server
 npm install
+npm run lint
 npm run build
 npm test
 npm run start:dev
@@ -180,4 +233,5 @@ xcodebuild -project MobileMessengerIOS.xcodeproj -scheme MobileMessengerIOS CODE
 
 - Do not commit `.env`, `node_modules`, `dist`, `database.sqlite`, `DerivedData`, `.DS_Store`, `xcuserdata`, `tsbuildinfo`, or secrets.
 - Telegram bot tokens and Railway secrets must stay in environment variables.
-- The project does not claim push notifications, calls, end-to-end encryption, avatar upload, or phonebook sync unless they are actually implemented.
+- Push delivery requires real VAPID/APNs secrets in the environment; without them, the app keeps realtime working and logs a warning instead of sending fake notifications.
+- The project does not claim calls, end-to-end encryption, avatar upload, or phonebook sync unless they are actually implemented.

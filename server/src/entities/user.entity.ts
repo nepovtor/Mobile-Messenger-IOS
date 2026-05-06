@@ -11,6 +11,7 @@ import { ChatParticipantEntity } from "./chat-participant.entity";
 import { ContactEntity } from "./contact.entity";
 import { MediaEntity } from "./media.entity";
 import { MessageEntity } from "./message.entity";
+import { PushSubscriptionEntity } from "./push-subscription.entity";
 
 export enum AuthMethod {
   PHONE = "phone",
@@ -60,4 +61,7 @@ export class UserEntity {
 
   @OneToMany(() => MediaEntity, (media) => media.uploadedBy)
   uploadedMedia?: MediaEntity[];
+
+  @OneToMany(() => PushSubscriptionEntity, (subscription) => subscription.user)
+  pushSubscriptions?: PushSubscriptionEntity[];
 }

@@ -38,7 +38,6 @@ public final class ChatViewModel: ObservableObject {
     private let retryPending: RetryPendingMessagesUseCase
     private let markStatus: MarkMessageStatusUseCase
     private let analytics: AnalyticsService
-    private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
 
     private var observeTask: Task<Void, Never>?
@@ -57,7 +56,6 @@ public final class ChatViewModel: ObservableObject {
         retryPending: RetryPendingMessagesUseCase,
         markStatus: MarkMessageStatusUseCase,
         analytics: AnalyticsService,
-        notificationManager: PushNotificationManager,
         reachability: ReachabilityService
     ) {
         self.chatID = chatID
@@ -72,7 +70,6 @@ public final class ChatViewModel: ObservableObject {
         self.retryPending = retryPending
         self.markStatus = markStatus
         self.analytics = analytics
-        self.notificationManager = notificationManager
         self.reachability = reachability
     }
 
@@ -249,9 +246,6 @@ public final class ChatViewModel: ObservableObject {
             await MainActor.run {
                 upsert(message: message)
                 updateBannerState()
-                if !message.isOutgoing {
-                    notificationManager.scheduleLocalNotification(for: message)
-                }
             }
         }
     }

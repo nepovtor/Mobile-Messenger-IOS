@@ -91,6 +91,13 @@ public final class AppContainer: ObservableObject {
         }
     }
 
+    public enum MainTab: Hashable {
+        case contacts
+        case map
+        case chats
+        case profile
+    }
+
     public static let shared = AppContainer()
     private enum DefaultsKeys {
         static let appearanceMode = "ui.appearance_mode"
@@ -111,6 +118,7 @@ public final class AppContainer: ObservableObject {
     private var contactsService: ContactsNetworking!
     private var profileService: ProfileNetworking!
     private var locationService: LocationNetworking!
+    private var pushService: PushDeviceNetworking!
     private var contactsRepository: ContactsRepository!
     private var profileRepository: ProfileRepository!
     private var locationRepository: LocationRepository!
@@ -127,6 +135,8 @@ public final class AppContainer: ObservableObject {
     @Published public private(set) var highContrastDarkMode: Bool
     @Published public private(set) var showPhoneNumberInProfile: Bool
     @Published public private(set) var showTechnicalDetailsInProfile: Bool
+    @Published public var selectedTab: MainTab = .contacts
+    @Published public private(set) var pendingPushChatID: UUID?
 
     @Published public private(set) var configurationRevision: Int = 0
 
@@ -189,6 +199,10 @@ public final class AppContainer: ObservableObject {
         configService.hasCustomRESTBaseURL
     }
 
+    public var isPushFeatureEnabled: Bool {
+        configService.features.isPushEnabled
+    }
+
     var profileEnvironmentInfo: ProfileEnvironmentInfo {
         let host = configService.restBaseURL.host?.lowercased() ?? ""
 
@@ -240,7 +254,6 @@ public final class AppContainer: ObservableObject {
             retryPending: RetryPendingMessagesUseCase(repository: chatRepository),
             markStatus: MarkMessageStatusUseCase(repository: chatRepository),
             analytics: analytics,
-            notificationManager: notificationManager,
             reachability: reachability
         )
     }
@@ -276,8 +289,8 @@ public final class AppContainer: ObservableObject {
             updateDisplayNameAction: { [sessionStore] displayName in
                 sessionStore.updateDisplayName(displayName)
             },
-            logoutAction: { [sessionStore] in
-                sessionStore.logout()
+            logoutAction: { [weak self] in
+                await self?.logout()
             }
         )
     }
@@ -307,29 +320,36 @@ public final class AppContainer: ObservableObject {
         chatService = RESTChatService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [sessionStore] in
-                await MainActor.run { sessionStore.logout() }
+            unauthorizedHandler: { [weak self] in
+                await self?.handleUnauthorizedSessionReset()
             }
         )
         contactsService = RESTContactsService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [sessionStore] in
-                await MainActor.run { sessionStore.logout() }
+            unauthorizedHandler: { [weak self] in
+                await self?.handleUnauthorizedSessionReset()
             }
         )
         profileService = RESTProfileService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [sessionStore] in
-                await MainActor.run { sessionStore.logout() }
+            unauthorizedHandler: { [weak self] in
+                await self?.handleUnauthorizedSessionReset()
             }
         )
         locationService = RESTLocationService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [sessionStore] in
-                await MainActor.run { sessionStore.logout() }
+            unauthorizedHandler: { [weak self] in
+                await self?.handleUnauthorizedSessionReset()
+            }
+        )
+        pushService = RESTPushDeviceService(
+            baseURL: configService.restBaseURL,
+            authTokenProvider: authTokenProvider,
+            unauthorizedHandler: { [weak self] in
+                await self?.handleUnauthorizedSessionReset()
             }
         )
         contactsRepository = DefaultContactsRepository(service: contactsService)
@@ -348,6 +368,18 @@ public final class AppContainer: ObservableObject {
             realtime: realtimeService,
             analytics: analytics,
             reachability: reachability
+        )
+        notificationManager.configure(
+            pushService: pushService,
+            isPushFeatureEnabled: { [weak self] in
+                self?.isPushFeatureEnabled ?? false
+            },
+            isSessionAuthenticated: { [weak self] in
+                self?.sessionStore.authToken != nil
+            },
+            routeHandler: { [weak self] chatID in
+                self?.openChatFromPush(chatID: chatID)
+            }
         )
     }
 
@@ -387,6 +419,7 @@ public final class AppContainer: ObservableObject {
                         await self.chatRepository?.resetLocalState()
                     }
 
+                    await self.notificationManager.syncAuthorizedStateForCurrentSession()
                     if self.isSceneActive {
                         await self.refreshApplicationState()
                     }
@@ -394,6 +427,9 @@ public final class AppContainer: ObservableObject {
             case .unauthenticated:
                 self.lastAuthenticatedUserID = nil
                 realtimeService?.handleLogout()
+                notificationManager.handleSessionEnded()
+                pendingPushChatID = nil
+                selectedTab = .contacts
                 Task { await self.chatRepository?.resetLocalState() }
                 connectionStatus = .offline
             }
@@ -421,9 +457,36 @@ public final class AppContainer: ObservableObject {
             connectionStatus = .offline
             return
         }
+        await notificationManager.syncAuthorizedStateForCurrentSession()
         realtimeService.activate()
         updateConnectionStatus()
         await chatRepository.refreshForForeground()
+    }
+
+    public func logout() async {
+        await notificationManager.detachFromCurrentSession()
+        sessionStore.logout()
+    }
+
+    public func openChatFromPush(chatID: UUID?) {
+        selectedTab = .chats
+        pendingPushChatID = chatID
+    }
+
+    public func consumePendingPushChatNavigation(for chatID: UUID) {
+        guard pendingPushChatID == chatID else { return }
+        pendingPushChatID = nil
+    }
+
+    public func clearPendingPushChatNavigation() {
+        pendingPushChatID = nil
+    }
+
+    private func handleUnauthorizedSessionReset() async {
+        await MainActor.run {
+            notificationManager.handleSessionEnded()
+            sessionStore.logout()
+        }
     }
 
     private func updateConnectionStatus() {

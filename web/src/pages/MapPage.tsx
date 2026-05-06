@@ -9,12 +9,12 @@ import { LocationMap } from "../components/map/LocationMap";
 import { LocationSummaryCard } from "../components/map/LocationSummaryCard";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { InlineAlert } from "../components/ui/InlineAlert";
 import { Skeleton } from "../components/ui/Skeleton";
 import { authStore } from "../store/authStore";
 import { chatStore } from "../store/chatStore";
 import { locationStore } from "../store/locationStore";
 import { realtimeStore } from "../store/realtimeStore";
+import { toastStore } from "../store/toastStore";
 import { mapLocationErrorMessage } from "../utils/location";
 
 function requestBrowserLocation() {
@@ -54,6 +54,7 @@ export function MapPage() {
     shareLocation,
     stopSharing,
     clearNotice,
+    clearError: clearLocationError,
   } = locationStore();
   const loadChats = chatStore((state) => state.loadChats);
   const selectChat = chatStore((state) => state.selectChat);
@@ -74,6 +75,34 @@ export function MapPage() {
       clearError();
     }
   }, [authError, clearError, navigate]);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    toastStore.getState().showToast({
+      tone: "success",
+      title: "Location",
+      message: notice,
+      dedupeKey: `location-notice:${notice}`,
+    });
+    clearNotice();
+  }, [clearNotice, notice]);
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+
+    toastStore.getState().showToast({
+      tone: "danger",
+      title: "Location",
+      message: error,
+      dedupeKey: `location-error:${error}`,
+    });
+    clearLocationError();
+  }, [clearLocationError, error]);
 
   const center = useMemo<[number, number]>(() => {
     if (
@@ -121,10 +150,12 @@ export function MapPage() {
       ]);
       await loadChats();
       selectChat(chat.id);
-      navigate("/messenger");
+      navigate(`/messenger?chatId=${chat.id}`);
     } catch (openChatError) {
-      locationStore.setState({
-        error: mapLocationErrorMessage(
+      toastStore.getState().showToast({
+        tone: "danger",
+        title: "Чаты",
+        message: mapLocationErrorMessage(
           openChatError,
           "Could not open the direct chat from the map.",
         ),
@@ -240,19 +271,6 @@ export function MapPage() {
                     <RefreshCcw className="h-4 w-4" />
                     Обновить карту
                   </Button>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {notice ? (
-                    <InlineAlert tone="success" title="Location">
-                      {notice}
-                    </InlineAlert>
-                  ) : null}
-                  {error ? (
-                    <InlineAlert tone="danger" title="Location">
-                      {error}
-                    </InlineAlert>
-                  ) : null}
                 </div>
               </div>
             </div>

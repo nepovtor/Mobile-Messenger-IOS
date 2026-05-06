@@ -19,6 +19,7 @@ import { AuthenticatedUser } from "../common/authenticated-user";
 import { normalizeContact } from "../common/contact.utils";
 import { isDemoChatSeedingEnabled } from "../common/runtime-config";
 import { MediaService } from "../media/media.service";
+import { PushService } from "../push/push.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { SendMessageDto } from "./dto/send-message.dto";
@@ -77,6 +78,7 @@ export class ChatService implements OnModuleInit {
     private readonly mediaRepository: Repository<MediaEntity>,
     private readonly realtimeService: RealtimeService,
     private readonly mediaService: MediaService,
+    private readonly pushService: PushService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -344,6 +346,19 @@ export class ChatService implements OnModuleInit {
       data: {
         chatID,
         message: payload,
+      },
+    });
+
+    void this.pushService.notifyMessageCreated({
+      authorUserId: user.sub,
+      participantUserIds: participants.map((item) => item.userId),
+      payload: {
+        type: "message.created",
+        chatId: chatID,
+        messageId: payload.id,
+        title: participants.length <= 2 ? payload.authorName : chat.title,
+        body: buildPushPreview(payload),
+        url: `/messenger?chatId=${chatID}`,
       },
     });
     return payload;
@@ -981,4 +996,17 @@ export class ChatService implements OnModuleInit {
       }
     }
   }
+}
+
+function buildPushPreview(message: MessageResponse): string {
+  if (message.kind === MessageKind.IMAGE) {
+    return "Отправил(а) изображение";
+  }
+
+  const text = (message.text ?? "").trim() || "Новое сообщение";
+  if (text.length <= 110) {
+    return text;
+  }
+
+  return `${text.slice(0, 107).trimEnd()}...`;
 }

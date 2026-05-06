@@ -274,3 +274,76 @@ export function getRealtimeHeartbeatTimeoutMs(): number {
   const value = Number(process.env.REALTIME_HEARTBEAT_TIMEOUT_MS || "45000");
   return Number.isFinite(value) && value > 0 ? value : 45000;
 }
+
+function normalizeMultilineSecret(value: string): string {
+  return value.replace(/\\n/g, "\n");
+}
+
+export function getWebPushVapidPublicKey(): string {
+  const value = process.env.WEB_PUSH_VAPID_PUBLIC_KEY?.trim();
+  if (!value) {
+    throw new Error(
+      "WEB_PUSH_VAPID_PUBLIC_KEY environment variable is required",
+    );
+  }
+  return value;
+}
+
+export function getWebPushVapidPrivateKey(): string {
+  const value = process.env.WEB_PUSH_VAPID_PRIVATE_KEY?.trim();
+  if (!value) {
+    throw new Error(
+      "WEB_PUSH_VAPID_PRIVATE_KEY environment variable is required",
+    );
+  }
+  return value;
+}
+
+export function getWebPushVapidSubject(): string {
+  const value = process.env.WEB_PUSH_VAPID_SUBJECT?.trim();
+  if (!value) {
+    throw new Error("WEB_PUSH_VAPID_SUBJECT environment variable is required");
+  }
+  return value;
+}
+
+export function hasWebPushConfig(): boolean {
+  return Boolean(
+    process.env.WEB_PUSH_VAPID_PUBLIC_KEY?.trim() &&
+    process.env.WEB_PUSH_VAPID_PRIVATE_KEY?.trim() &&
+    process.env.WEB_PUSH_VAPID_SUBJECT?.trim(),
+  );
+}
+
+export function getApnsConfig(): {
+  teamId: string;
+  keyId: string;
+  bundleId: string;
+  privateKey: string;
+  environment: "sandbox" | "production";
+} | null {
+  const teamId = process.env.APNS_TEAM_ID?.trim();
+  const keyId = process.env.APNS_KEY_ID?.trim();
+  const bundleId = process.env.APNS_BUNDLE_ID?.trim();
+  const privateKey = process.env.APNS_PRIVATE_KEY?.trim();
+  const environment =
+    process.env.APNS_ENVIRONMENT?.trim().toLowerCase() === "production"
+      ? "production"
+      : "sandbox";
+
+  if (!teamId || !keyId || !bundleId || !privateKey) {
+    return null;
+  }
+
+  return {
+    teamId,
+    keyId,
+    bundleId,
+    privateKey: normalizeMultilineSecret(privateKey),
+    environment,
+  };
+}
+
+export function isPushTestEndpointEnabled(): boolean {
+  return readBooleanEnv("PUSH_ALLOW_TEST_ENDPOINT", !isProductionEnv());
+}

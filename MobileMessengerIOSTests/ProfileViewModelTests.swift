@@ -43,18 +43,19 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.phone, "+15551230011")
     }
 
-    func testLogoutInvokesSessionAction() {
+    func testLogoutInvokesSessionAction() async {
         var logoutCalls = 0
         let viewModel = makeViewModel(logoutAction: {
             logoutCalls += 1
         })
 
         viewModel.logout()
+        await Task.yield()
 
         XCTAssertEqual(logoutCalls, 1)
     }
 
-    func testLogoutDoesNotCrashWithEmptyUserState() {
+    func testLogoutDoesNotCrashWithEmptyUserState() async {
         let viewModel = makeViewModel()
         viewModel.update(
             sessionState: .unauthenticated,
@@ -63,6 +64,7 @@ final class ProfileViewModelTests: XCTestCase {
         )
 
         viewModel.logout()
+        await Task.yield()
 
         XCTAssertEqual(viewModel.phone, "Unknown phone")
     }
@@ -173,7 +175,7 @@ final class ProfileViewModelTests: XCTestCase {
 
     private func makeViewModel(
         profile: UserProfileDTOStub = UserProfileDTOStub(),
-        logoutAction: @escaping @MainActor () -> Void = {}
+        logoutAction: @escaping @MainActor () async -> Void = {}
     ) -> ProfileViewModel {
         let service = ProfileServiceStub(profile: profile)
         return ProfileViewModel(

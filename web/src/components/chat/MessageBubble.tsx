@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { toastStore } from "../../store/toastStore";
 import type { Message, MessageStatus } from "../../types/message";
 import { formatMessageTimestamp } from "../../utils/date";
 import { Button } from "../ui/Button";
@@ -73,7 +74,6 @@ export function MessageBubble({
   const [isSaving, setSaving] = useState(false);
   const [isDeleting, setDeleting] = useState(false);
   const [isMenuOpen, setMenuOpen] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
   const statusMeta = getMessageStatusMeta(message.status);
   const StatusIcon = statusMeta.icon;
   const canManage = Boolean(
@@ -88,10 +88,14 @@ export function MessageBubble({
     setSaving(true);
     try {
       await onEditMessage(draft.trim());
-      setActionError(null);
       setEditing(false);
-    } catch {
-      setActionError("Не удалось изменить");
+    } catch (error) {
+      toastStore.getState().showToast({
+        tone: "danger",
+        title: "Сообщение",
+        message:
+          error instanceof Error ? error.message : "Не удалось изменить сообщение.",
+      });
     } finally {
       setSaving(false);
     }
@@ -105,10 +109,14 @@ export function MessageBubble({
     setDeleting(true);
     try {
       await onDeleteMessage();
-      setActionError(null);
       setMenuOpen(false);
-    } catch {
-      setActionError("Не удалось удалить");
+    } catch (error) {
+      toastStore.getState().showToast({
+        tone: "danger",
+        title: "Сообщение",
+        message:
+          error instanceof Error ? error.message : "Не удалось удалить сообщение.",
+      });
     } finally {
       setDeleting(false);
     }
@@ -169,7 +177,6 @@ export function MessageBubble({
                   onClick={() => {
                     setDraft(message.text ?? "");
                     setEditing(false);
-                    setActionError(null);
                   }}
                 >
                   Отмена
@@ -231,10 +238,6 @@ export function MessageBubble({
 
         {message.status === "failed" && message.error ? (
           <p className="mt-1 px-1 text-[11px] text-rose-200">{message.error}</p>
-        ) : null}
-
-        {actionError ? (
-          <p className="mt-1 px-1 text-[11px] text-rose-200">{actionError}</p>
         ) : null}
 
         {isMenuOpen ? (

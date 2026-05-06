@@ -87,7 +87,7 @@ final class ProfileViewModel: ObservableObject {
     private let fetchProfileUseCase: FetchProfileUseCase
     private let updateProfileUseCase: UpdateProfileUseCase
     private let updateDisplayNameAction: @MainActor (String) -> Void
-    private let logoutAction: @MainActor () -> Void
+    private let logoutAction: @MainActor () async -> Void
     private var currentUserID: UUID?
     private var lastLoadedUserID: UUID?
 
@@ -95,7 +95,7 @@ final class ProfileViewModel: ObservableObject {
         fetchProfile: FetchProfileUseCase,
         updateProfile: UpdateProfileUseCase,
         updateDisplayNameAction: @escaping @MainActor (String) -> Void,
-        logoutAction: @escaping @MainActor () -> Void
+        logoutAction: @escaping @MainActor () async -> Void
     ) {
         self.fetchProfileUseCase = fetchProfile
         self.updateProfileUseCase = updateProfile
@@ -221,7 +221,9 @@ final class ProfileViewModel: ObservableObject {
     }
 
     func logout() {
-        logoutAction()
+        Task {
+            await logoutAction()
+        }
     }
 
     var canSaveDisplayName: Bool {

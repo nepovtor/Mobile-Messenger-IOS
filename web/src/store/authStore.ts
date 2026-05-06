@@ -12,6 +12,7 @@ import type {
 import { storage } from "../utils/storage";
 import { validateDisplayName } from "../utils/displayName";
 import { chatStore } from "./chatStore";
+import { pushStore } from "./pushStore";
 import { realtimeStore } from "./realtimeStore";
 
 type AuthStore = {
@@ -89,6 +90,7 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   logout() {
+    void pushStore.getState().detachFromCurrentSession();
     storage.clearAll();
     realtimeStore.getState().clear();
     chatStore.getState().clear();

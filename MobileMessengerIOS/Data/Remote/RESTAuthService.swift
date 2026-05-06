@@ -593,6 +593,20 @@ public protocol ProfileNetworking: Sendable {
     func updateProfile(displayName: String) async throws -> UserProfileDTO
 }
 
+public enum PushDeviceEnvironment: String, Codable, Sendable {
+    case sandbox
+    case production
+}
+
+public protocol PushDeviceNetworking: Sendable {
+    func registerDevice(
+        token: String,
+        environment: PushDeviceEnvironment,
+        bundleId: String?
+    ) async throws
+    func deleteDevice(token: String) async throws
+}
+
 public struct UserProfileDTO: Decodable, Sendable {
     public let userID: UUID
     public let displayName: String
@@ -769,6 +783,87 @@ public struct RESTProfileService: ProfileNetworking {
 
         do {
             return try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    private func authorize(_ request: inout URLRequest) async throws {
+        if let token = await authTokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            throw AppError.unauthorized
+        }
+    }
+}
+
+public struct RESTPushDeviceService: PushDeviceNetworking {
+    private let baseURL: URL
+    private let session: URLSession
+    private let authTokenProvider: @Sendable () async -> String?
+    private let unauthorizedHandler: @Sendable () async -> Void
+
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        authTokenProvider: @escaping @Sendable () async -> String?,
+        unauthorizedHandler: @escaping @Sendable () async -> Void = {}
+    ) {
+        self.baseURL = baseURL
+        self.session = session
+        self.authTokenProvider = authTokenProvider
+        self.unauthorizedHandler = unauthorizedHandler
+    }
+
+    public func registerDevice(
+        token: String,
+        environment: PushDeviceEnvironment,
+        bundleId: String?
+    ) async throws {
+        var request = URLRequest(url: baseURL.appendingAPIPath("push/devices"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode([
+            "token": token,
+            "environment": environment.rawValue,
+            "bundleId": bundleId,
+        ])
+        try await authorize(&request)
+
+        do {
+            let _: EmptyResponse = try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    public func deleteDevice(token: String) async throws {
+        var request = URLRequest(
+            url: baseURL.appendingAPIPath("push/devices/\(token)")
+        )
+        request.httpMethod = "DELETE"
+        try await authorize(&request)
+
+        do {
+            let _: EmptyResponse = try await APIResponseParser.requestJSON(
                 request,
                 using: session,
                 decoder: JSONDecoder()

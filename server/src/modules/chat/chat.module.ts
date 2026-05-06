@@ -7,6 +7,7 @@ import { MessageEntity } from "../../entities/message.entity";
 import { UserEntity } from "../../entities/user.entity";
 import { AuthModule } from "../auth/auth.module";
 import { MediaModule } from "../media/media.module";
+import { PushModule } from "../push/push.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { ChatController } from "./chat.controller";
 import { ChatService } from "./chat.service";
@@ -23,6 +24,7 @@ import { ChatService } from "./chat.service";
     AuthModule,
     forwardRef(() => RealtimeModule),
     MediaModule,
+    PushModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],

@@ -3,6 +3,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { ContactEntity } from "../entities/contact.entity";
 import { LocationShareEntity } from "../entities/location-share.entity";
 import { PhoneVerificationCodeEntity } from "../entities/phone-verification-code.entity";
+import { PushSubscriptionEntity } from "../entities/push-subscription.entity";
 import { TelegramLinkEntity } from "../entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../entities/telegram-pairing-token.entity";
 import { AdminModule } from "./admin/admin.module";
@@ -14,6 +15,7 @@ import { DocsModule } from "./docs/docs.module";
 import { HealthModule } from "./health/health.module";
 import { MediaModule } from "./media/media.module";
 import { LocationModule } from "./location/location.module";
+import { PushModule } from "./push/push.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { SystemModule } from "./system/system.module";
 import { UsersModule } from "./users/users.module";
@@ -36,6 +38,7 @@ import { VersionModule } from "./version/version.module";
         ContactEntity,
         LocationShareEntity,
         PhoneVerificationCodeEntity,
+        PushSubscriptionEntity,
         TelegramLinkEntity,
         TelegramPairingTokenEntity,
       ],
@@ -49,6 +52,7 @@ import { VersionModule } from "./version/version.module";
     ContactsModule,
     LocationModule,
     RealtimeModule,
+    PushModule,
     MediaModule,
     ChatModule,
     SystemModule,

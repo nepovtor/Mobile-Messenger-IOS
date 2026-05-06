@@ -24,6 +24,8 @@
     "@nestjs/platform-ws": "^10.3.0",
     "@nestjs/typeorm": "^11.0.1",
     "@nestjs/websockets": "^10.3.0",
+    "@types/web-push": "^3.6.4",
+    "apn": "^2.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dotenv": "^16.4.5",
@@ -31,6 +33,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.28",
+    "web-push": "^3.6.7",
     "ws": "^8.18.3"
   },
   "devDependencies": {

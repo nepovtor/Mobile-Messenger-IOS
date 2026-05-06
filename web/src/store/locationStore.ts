@@ -23,6 +23,7 @@ type LocationStore = {
   stopSharing: () => Promise<void>;
   clear: () => void;
   clearNotice: () => void;
+  clearError: () => void;
 };
 
 export const locationStore = create<LocationStore>((set) => ({
@@ -114,5 +115,8 @@ export const locationStore = create<LocationStore>((set) => ({
   },
   clearNotice() {
     set({ notice: null });
+  },
+  clearError() {
+    set({ error: null });
   },
 }));

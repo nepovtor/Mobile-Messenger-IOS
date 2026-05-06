@@ -4,6 +4,7 @@ struct ProfileView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var sessionStore: SessionStore
+    @ObservedObject private var notificationManager = PushNotificationManager.shared
     @StateObject private var viewModel: ProfileViewModel
 
     @MainActor
@@ -19,6 +20,7 @@ struct ProfileView: View {
                     accountSection
                     appearanceSection
                     preferencesSection
+                    notificationsSection
                     if container.showTechnicalDetailsInProfile {
                         realtimeSection
                         securitySection
@@ -319,6 +321,69 @@ struct ProfileView: View {
         }
     }
 
+    private var notificationsSection: some View {
+        ProfileSectionCard(title: "Push notifications") {
+            ProfileInfoRow(
+                systemImage: "bell.badge.fill",
+                title: "Remote notifications",
+                value: notificationManager.statusTitle,
+                detail: notificationManager.statusDetail,
+                tint: notificationAccent
+            )
+
+            if container.showTechnicalDetailsInProfile,
+               let tokenPreview = notificationManager.deviceTokenPreview {
+                divider
+
+                ProfileInfoRow(
+                    systemImage: "number.square.fill",
+                    title: "APNs token",
+                    value: tokenPreview,
+                    detail: "Latest device token seen on this device.",
+                    tint: .indigo,
+                    monospaced: true
+                )
+            }
+
+            divider
+
+            HStack(spacing: 12) {
+                if notificationManager.canRequestAuthorization {
+                    Button {
+                        Task {
+                            await notificationManager.requestAuthorizationAndRegister()
+                        }
+                    } label: {
+                        Text("Включить push")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if notificationManager.canRefreshRegistration {
+                    Button {
+                        Task {
+                            await notificationManager.syncAuthorizedStateForCurrentSession()
+                        }
+                    } label: {
+                        Text("Обновить регистрацию")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if notificationManager.canOpenSettings {
+                    Button("Открыть Settings") {
+                        notificationManager.openApplicationSettings()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 18)
+        }
+    }
+
     private var actionsSection: some View {
         ProfileSectionCard(title: "Actions") {
             if !viewModel.isEditingDisplayName,
@@ -419,6 +484,26 @@ struct ProfileView: View {
             return .orange
         case .disconnected, .failed:
             return .red
+        }
+    }
+
+    private var notificationAccent: Color {
+        switch notificationManager.authorizationState {
+        case .authorized:
+            switch notificationManager.syncState {
+            case .synced:
+                return .green
+            case .registering:
+                return .blue
+            case .failed:
+                return .red
+            case .idle:
+                return .orange
+            }
+        case .denied:
+            return .red
+        case .notDetermined, .unknown:
+            return .orange
         }
     }
 

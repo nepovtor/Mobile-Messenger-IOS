@@ -4,6 +4,7 @@ import type { ChatSummary, MessagesByChatId } from "../types/chat";
 import type { Message } from "../types/message";
 import { dedupeMessages, upsertMessage } from "../utils/messageDedup";
 import { realtimeStore } from "./realtimeStore";
+import { toastStore } from "./toastStore";
 
 function createLocalMessage(
   chatId: string,
@@ -68,6 +69,7 @@ type ChatStore = {
   ) => void;
   markMessageRead: (chatId: string, messageId: string) => void;
   updateTyping: (chatId: string, typingParticipants: string[]) => void;
+  clearError: () => void;
   clear: () => void;
 };
 
@@ -203,6 +205,13 @@ export const chatStore = create<ChatStore>((set, get) => ({
     get().removeMessage(chatId, deleted);
   },
   markMessageFailed(chatId, clientMessageId, reason) {
+    toastStore.getState().showToast({
+      tone: "danger",
+      title: "Сообщение",
+      message: reason,
+      dedupeKey: `message-failed:${clientMessageId}`,
+    });
+
     set((state) => ({
       messagesByChatId: {
         ...state.messagesByChatId,
@@ -216,7 +225,6 @@ export const chatStore = create<ChatStore>((set, get) => ({
             : message,
         ),
       },
-      error: reason,
     }));
   },
   markMessageRead(chatId, messageId) {
@@ -237,6 +245,9 @@ export const chatStore = create<ChatStore>((set, get) => ({
         chat.id === chatId ? { ...chat, typingParticipants } : chat,
       ),
     }));
+  },
+  clearError() {
+    set({ error: null });
   },
   clear() {
     set({

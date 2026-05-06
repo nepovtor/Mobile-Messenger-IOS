@@ -1,9 +1,12 @@
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { chatApi } from "../../api/chatApi";
 import { contactsApi } from "../../api/contactsApi";
-import { realtimeStore } from "../../store/realtimeStore";
+import { ConnectionBadge } from "../chat/ConnectionBadge";
 import { chatStore } from "../../store/chatStore";
+import { realtimeStore } from "../../store/realtimeStore";
+import { toastStore } from "../../store/toastStore";
 import type { CurrentUser } from "../../types/auth";
 import type { ContactEntry } from "../../types/contact";
 import {
@@ -12,11 +15,6 @@ import {
 } from "../../utils/contacts";
 import { ChatPanel } from "./ChatPanel";
 import { Sidebar } from "./Sidebar";
-
-type TransportNotice = {
-  tone: "warning" | "danger";
-  message: string;
-};
 
 export function AppShell({
   currentUser,
@@ -36,74 +34,36 @@ export function AppShell({
     selectChat,
     loadChats,
     loadMessages,
+    error: chatError,
+    clearError: clearChatError,
     sendMessage,
     retryMessage,
     editMessage,
     deleteMessage,
   } = chatStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const connectionState = realtimeStore((state) => state.connectionState);
   const realtimeError = realtimeStore((state) => state.lastError);
-  const chatError = chatStore((state) => state.error);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [contacts, setContacts] = useState<ContactEntry[]>([]);
-  const [contactsError, setContactsError] = useState<string | null>(null);
-  const [contactsNotice, setContactsNotice] = useState<string | null>(null);
   const [isLoadingContacts, setLoadingContacts] = useState(false);
   const [isAddingContact, setAddingContact] = useState(false);
   const [openingContactId, setOpeningContactId] = useState<string | null>(null);
   const [removingContactId, setRemovingContactId] = useState<string | null>(
     null,
   );
+  const lastRealtimeToastKeyRef = useRef<string | null>(null);
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) ?? null,
     [chats, selectedChatId],
   );
-
-  const transportNotice = useMemo<TransportNotice | null>(() => {
-    if (chatError) {
-      return {
-        tone: "danger",
-        message: chatError,
-      };
-    }
-
-    if (realtimeError) {
-      return {
-        tone: "danger",
-        message: realtimeError,
-      };
-    }
-
-    if (connectionState === "reconnecting") {
-      return {
-        tone: "warning",
-        message: "Соединение восстанавливается",
-      };
-    }
-
-    if (connectionState === "disconnected") {
-      return {
-        tone: "warning",
-        message: "Нет соединения",
-      };
-    }
-
-    if (connectionState === "failed") {
-      return {
-        tone: "danger",
-        message: "Соединение недоступно",
-      };
-    }
-
-    return null;
-  }, [chatError, connectionState, realtimeError]);
+  const chatIdFromUrl = searchParams.get("chatId");
 
   useEffect(() => {
     let isCancelled = false;
+
     setContacts([]);
-    setContactsError(null);
-    setContactsNotice(null);
     setLoadingContacts(true);
 
     void contactsApi
@@ -112,17 +72,23 @@ export function AppShell({
         if (isCancelled) {
           return;
         }
+
         setContacts(result);
-        setContactsError(null);
-        setContactsNotice(null);
       })
       .catch((error: unknown) => {
         if (isCancelled) {
           return;
         }
-        setContactsError(
-          mapContactErrorMessage(error, "Не удалось загрузить контакты."),
-        );
+
+        toastStore.getState().showToast({
+          tone: "danger",
+          title: "Контакты",
+          message: mapContactErrorMessage(
+            error,
+            "Не удалось загрузить контакты.",
+          ),
+          dedupeKey: "contacts-load-error",
+        });
       })
       .finally(() => {
         if (!isCancelled) {
@@ -140,6 +106,82 @@ export function AppShell({
       void loadMessages(selectedChatId);
     }
   }, [loadMessages, messagesByChatId, selectedChatId]);
+
+  useEffect(() => {
+    if (!chatError) {
+      return;
+    }
+
+    toastStore.getState().showToast({
+      tone: "danger",
+      title: "Чаты",
+      message: chatError,
+      dedupeKey: `chat-error:${chatError}`,
+    });
+    clearChatError();
+  }, [chatError, clearChatError]);
+
+  useEffect(() => {
+    if (connectionState === "connected") {
+      lastRealtimeToastKeyRef.current = null;
+      return;
+    }
+
+    const message =
+      realtimeError ??
+      (connectionState === "failed"
+        ? "Соединение с realtime недоступно."
+        : connectionState === "disconnected"
+          ? "Realtime-соединение разорвано."
+          : null);
+
+    if (!message) {
+      return;
+    }
+
+    const dedupeKey = `realtime:${connectionState}:${message}`;
+    if (lastRealtimeToastKeyRef.current === dedupeKey) {
+      return;
+    }
+
+    lastRealtimeToastKeyRef.current = dedupeKey;
+    toastStore.getState().showToast({
+      tone: connectionState === "failed" ? "danger" : "warning",
+      title: "Realtime",
+      message,
+      dedupeKey,
+    });
+  }, [connectionState, realtimeError]);
+
+  useEffect(() => {
+    if (!chatIdFromUrl || selectedChatId === chatIdFromUrl) {
+      return;
+    }
+
+    if (!chats.some((chat) => chat.id === chatIdFromUrl)) {
+      return;
+    }
+
+    selectChat(chatIdFromUrl);
+    setSidebarOpen(false);
+  }, [chatIdFromUrl, chats, selectChat, selectedChatId]);
+
+  useEffect(() => {
+    const currentChatId = searchParams.get("chatId");
+
+    if (selectedChatId && currentChatId !== selectedChatId) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("chatId", selectedChatId);
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
+    if (!selectedChatId && currentChatId) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("chatId");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, selectedChatId, setSearchParams]);
 
   useEffect(() => {
     if (!selectedChat) {
@@ -169,13 +211,15 @@ export function AppShell({
   async function handleAddContact(phone: string) {
     const validationMessage = validateContactPhone(phone);
     if (validationMessage) {
-      setContactsNotice(null);
-      setContactsError(validationMessage);
+      toastStore.getState().showToast({
+        tone: "warning",
+        title: "Контакты",
+        message: validationMessage,
+      });
       return false;
     }
 
     setAddingContact(true);
-    setContactsNotice(null);
     try {
       const result = await contactsApi.addContact(phone);
       setContacts((existing) => {
@@ -184,15 +228,18 @@ export function AppShell({
         );
         return [result, ...withoutDuplicate];
       });
-      setContactsError(null);
-      setContactsNotice(
-        result.alreadyExists ? "Контакт уже есть" : "Контакт добавлен",
-      );
+      toastStore.getState().showToast({
+        tone: result.alreadyExists ? "info" : "success",
+        title: "Контакты",
+        message: result.alreadyExists ? "Контакт уже есть" : "Контакт добавлен",
+      });
       return true;
     } catch (error: unknown) {
-      setContactsError(
-        mapContactErrorMessage(error, "Не удалось добавить контакт."),
-      );
+      toastStore.getState().showToast({
+        tone: "danger",
+        title: "Контакты",
+        message: mapContactErrorMessage(error, "Не удалось добавить контакт."),
+      });
       return false;
     } finally {
       setAddingContact(false);
@@ -201,19 +248,23 @@ export function AppShell({
 
   async function handleRemoveContact(contact: ContactEntry) {
     setRemovingContactId(contact.id);
-    setContactsNotice(null);
     try {
       await contactsApi.removeContact(contact.id);
       setContacts((existing) =>
         existing.filter((item) => item.id !== contact.id),
       );
-      setContactsError(null);
-      setContactsNotice("Контакт удалён");
+      toastStore.getState().showToast({
+        tone: "success",
+        title: "Контакты",
+        message: "Контакт удалён",
+      });
       return true;
     } catch (error: unknown) {
-      setContactsError(
-        mapContactErrorMessage(error, "Не удалось удалить контакт."),
-      );
+      toastStore.getState().showToast({
+        tone: "danger",
+        title: "Контакты",
+        message: mapContactErrorMessage(error, "Не удалось удалить контакт."),
+      });
       return false;
     } finally {
       setRemovingContactId(null);
@@ -234,9 +285,11 @@ export function AppShell({
       setSidebarOpen(false);
       return true;
     } catch (error: unknown) {
-      setContactsError(
-        mapContactErrorMessage(error, "Не удалось открыть чат."),
-      );
+      toastStore.getState().showToast({
+        tone: "danger",
+        title: "Чаты",
+        message: mapContactErrorMessage(error, "Не удалось открыть чат."),
+      });
       return false;
     } finally {
       setOpeningContactId(null);
@@ -264,8 +317,6 @@ export function AppShell({
               isLoading={isLoadingChats}
               isLoadingContacts={isLoadingContacts}
               connectionState={connectionState}
-              contactsError={contactsError}
-              contactsNotice={contactsNotice}
               isAddingContact={isAddingContact}
               openingContactId={openingContactId}
               removingContactId={removingContactId}
@@ -293,7 +344,7 @@ export function AppShell({
                 messages={messagesByChatId[selectedChat.id] ?? []}
                 currentUser={currentUser}
                 connectionState={connectionState}
-                statusNotice={transportNotice}
+                connectionIndicator={<ConnectionBadge state={connectionState} />}
                 isLoadingMessages={isLoadingMessages}
                 onBack={() => setSidebarOpen(true)}
                 onReconnect={() => realtimeStore.getState().reconnect()}

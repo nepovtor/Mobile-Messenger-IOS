@@ -1,12 +1,13 @@
 import { LogOut, PencilLine } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ConnectionState } from "../../realtime/realtimeTypes";
+import { toastStore } from "../../store/toastStore";
 import type { CurrentUser } from "../../types/auth";
 import { validateDisplayName } from "../../utils/displayName";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
-import { InlineAlert } from "../ui/InlineAlert";
 import { Input } from "../ui/Input";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
+import { PushNotificationsPanel } from "../ui/PushNotificationsPanel";
 import { ConnectionBadge } from "./ConnectionBadge";
 
 export function UserMenu({
@@ -22,10 +23,6 @@ export function UserMenu({
 }) {
   const [isEditing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user.displayName);
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageTone, setMessageTone] = useState<"success" | "danger">(
-    "success",
-  );
   const [isSaving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -77,19 +74,12 @@ export function UserMenu({
             />
           </div>
 
-          {message ? (
-            <InlineAlert tone={messageTone} title="Profile update">
-              {message}
-            </InlineAlert>
-          ) : null}
-
           <div className="flex gap-2">
             <Button
               variant="secondary"
               block
               onClick={() => {
                 setDisplayName(user.displayName);
-                setMessage(null);
                 setEditing(false);
               }}
             >
@@ -103,24 +93,32 @@ export function UserMenu({
                 const trimmed = displayName.trim();
                 const validationMessage = validateDisplayName(trimmed);
                 if (validationMessage) {
-                  setMessage(validationMessage);
-                  setMessageTone("danger");
+                  toastStore.getState().showToast({
+                    tone: "warning",
+                    title: "Профиль",
+                    message: validationMessage,
+                  });
                   return;
                 }
 
                 setSaving(true);
                 try {
                   await onUpdateDisplayName(trimmed);
-                  setMessage("Display name updated.");
-                  setMessageTone("success");
+                  toastStore.getState().showToast({
+                    tone: "success",
+                    title: "Профиль",
+                    message: "Имя обновлено",
+                  });
                   setEditing(false);
                 } catch (error) {
-                  setMessage(
-                    error instanceof Error
-                      ? error.message
-                      : "Could not update display name.",
-                  );
-                  setMessageTone("danger");
+                  toastStore.getState().showToast({
+                    tone: "danger",
+                    title: "Профиль",
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Не удалось обновить имя.",
+                  });
                 } finally {
                   setSaving(false);
                 }
@@ -135,10 +133,7 @@ export function UserMenu({
           <Button
             variant="secondary"
             className="w-full"
-            onClick={() => {
-              setMessage(null);
-              setEditing(true);
-            }}
+            onClick={() => setEditing(true)}
           >
             <PencilLine className="h-4 w-4" />
             Изменить имя
@@ -146,13 +141,9 @@ export function UserMenu({
         </div>
       )}
 
-      {!isEditing && message ? (
-        <div className="mt-4">
-          <InlineAlert tone={messageTone} title="Profile update">
-            {message}
-          </InlineAlert>
-        </div>
-      ) : null}
+      <div className="mt-4">
+        <PushNotificationsPanel />
+      </div>
     </div>
   );
 }

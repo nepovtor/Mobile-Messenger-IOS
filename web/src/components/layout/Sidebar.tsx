@@ -10,19 +10,19 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import appIcon from "../../../../MobileMessengerIOS/Assets.xcassets/AppIcon.appiconset/icon-180.png";
+import type { ConnectionState } from "../../realtime/realtimeTypes";
+import { toastStore } from "../../store/toastStore";
 import type { CurrentUser } from "../../types/auth";
 import type { ChatSummary } from "../../types/chat";
 import type { ContactEntry } from "../../types/contact";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
 import { validateDisplayName } from "../../utils/displayName";
+import { ChatList } from "../chat/ChatList";
+import { ConnectionBadge } from "../chat/ConnectionBadge";
 import { Avatar } from "../ui/Avatar";
 import { Button } from "../ui/Button";
-import { InlineAlert } from "../ui/InlineAlert";
 import { Input } from "../ui/Input";
+import { PushNotificationsPanel } from "../ui/PushNotificationsPanel";
 import { Skeleton } from "../ui/Skeleton";
-import { ChatList } from "../chat/ChatList";
-
-type MenuMessageTone = "success" | "danger";
 
 export function Sidebar({
   user,
@@ -32,8 +32,6 @@ export function Sidebar({
   isLoading,
   isLoadingContacts,
   connectionState,
-  contactsError,
-  contactsNotice,
   isAddingContact,
   openingContactId,
   removingContactId,
@@ -51,8 +49,6 @@ export function Sidebar({
   isLoading: boolean;
   isLoadingContacts: boolean;
   connectionState: ConnectionState;
-  contactsError: string | null;
-  contactsNotice: string | null;
   isAddingContact: boolean;
   openingContactId: string | null;
   removingContactId: string | null;
@@ -69,9 +65,6 @@ export function Sidebar({
   const [isMenuOpen, setMenuOpen] = useState(false);
   const [isEditingProfile, setEditingProfile] = useState(false);
   const [displayName, setDisplayName] = useState(user.displayName);
-  const [menuMessage, setMenuMessage] = useState<string | null>(null);
-  const [menuMessageTone, setMenuMessageTone] =
-    useState<MenuMessageTone>("success");
   const [isSavingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
@@ -82,6 +75,7 @@ export function Sidebar({
     if (!query.trim()) {
       return chats;
     }
+
     const normalized = query.trim().toLowerCase();
     return chats.filter((chat) =>
       [chat.title, chat.lastMessagePreview, ...chat.participantNames]
@@ -94,6 +88,7 @@ export function Sidebar({
     if (!query.trim()) {
       return contacts;
     }
+
     const normalized = query.trim().toLowerCase();
     return contacts.filter((contact) =>
       [contact.displayName, contact.phone].some((value) =>
@@ -147,7 +142,7 @@ export function Sidebar({
             </button>
 
             {isMenuOpen ? (
-              <div className="absolute right-0 top-full z-20 mt-2 w-[286px] rounded-[20px] border border-white/10 bg-[#0b1420]/96 p-3 shadow-[0_26px_70px_rgba(3,8,20,0.48)] backdrop-blur-2xl">
+              <div className="absolute right-0 top-full z-20 mt-2 w-[310px] rounded-[20px] border border-white/10 bg-[#0b1420]/96 p-3 shadow-[0_26px_70px_rgba(3,8,20,0.48)] backdrop-blur-2xl">
                 <div className="flex items-center gap-3 border-b border-white/8 pb-3">
                   <Avatar name={user.displayName} size="md" />
                   <div className="min-w-0">
@@ -157,6 +152,9 @@ export function Sidebar({
                     <p className="truncate text-xs text-slate-400">
                       {user.phone ?? user.contact}
                     </p>
+                    <div className="mt-2">
+                      <ConnectionBadge state={connectionState} />
+                    </div>
                   </div>
                 </div>
 
@@ -177,21 +175,11 @@ export function Sidebar({
                       />
                     </div>
 
-                    {menuMessage ? (
-                      <InlineAlert
-                        className="rounded-[18px] px-3 py-2.5"
-                        tone={menuMessageTone}
-                      >
-                        {menuMessage}
-                      </InlineAlert>
-                    ) : null}
-
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         variant="secondary"
                         onClick={() => {
                           setDisplayName(user.displayName);
-                          setMenuMessage(null);
                           setEditingProfile(false);
                         }}
                       >
@@ -206,25 +194,34 @@ export function Sidebar({
                             const validationMessage = validateDisplayName(
                               trimmed,
                             );
+
                             if (validationMessage) {
-                              setMenuMessage(validationMessage);
-                              setMenuMessageTone("danger");
+                              toastStore.getState().showToast({
+                                tone: "warning",
+                                title: "Профиль",
+                                message: validationMessage,
+                              });
                               return;
                             }
 
                             setSavingProfile(true);
                             try {
                               await onUpdateDisplayName(trimmed);
-                              setMenuMessage("Имя обновлено");
-                              setMenuMessageTone("success");
+                              toastStore.getState().showToast({
+                                tone: "success",
+                                title: "Профиль",
+                                message: "Имя обновлено",
+                              });
                               setEditingProfile(false);
                             } catch (error) {
-                              setMenuMessage(
-                                error instanceof Error
-                                  ? error.message
-                                  : "Не удалось обновить имя",
-                              );
-                              setMenuMessageTone("danger");
+                              toastStore.getState().showToast({
+                                tone: "danger",
+                                title: "Профиль",
+                                message:
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Не удалось обновить имя",
+                              });
                             } finally {
                               setSavingProfile(false);
                             }
@@ -237,22 +234,10 @@ export function Sidebar({
                   </div>
                 ) : (
                   <div className="space-y-2 pt-3">
-                    {menuMessage ? (
-                      <InlineAlert
-                        className="rounded-[18px] px-3 py-2.5"
-                        tone={menuMessageTone}
-                      >
-                        {menuMessage}
-                      </InlineAlert>
-                    ) : null}
-
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 rounded-[16px] px-3 py-2.5 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
-                      onClick={() => {
-                        setMenuMessage(null);
-                        setEditingProfile(true);
-                      }}
+                      onClick={() => setEditingProfile(true)}
                     >
                       <PencilLine className="h-4 w-4" />
                       Изменить имя
@@ -267,6 +252,10 @@ export function Sidebar({
                     </button>
                   </div>
                 )}
+
+                <div className="mt-3 border-t border-white/8 pt-3">
+                  <PushNotificationsPanel />
+                </div>
               </div>
             ) : null}
           </div>
@@ -352,18 +341,6 @@ export function Sidebar({
                 </Button>
               </div>
             </div>
-
-            {contactsNotice ? (
-              <InlineAlert className="rounded-[18px] px-3 py-2.5" tone="success">
-                {contactsNotice}
-              </InlineAlert>
-            ) : null}
-
-            {contactsError ? (
-              <InlineAlert className="rounded-[18px] px-3 py-2.5" tone="danger">
-                {contactsError}
-              </InlineAlert>
-            ) : null}
 
             {isLoadingContacts ? (
               <div className="space-y-2">

@@ -7,6 +7,9 @@ struct MobileMessengerIOSApp: App {
 
     init() {
         configureAppearance()
+        Task { @MainActor in
+            PushNotificationManager.shared.installNotificationDelegate()
+        }
     }
 
     var body: some Scene {
@@ -22,11 +25,25 @@ struct MobileMessengerIOSApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        Task { @MainActor in
+            PushNotificationManager.shared.installNotificationDelegate()
+        }
+        return true
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        PushNotificationManager.shared.didRegister(deviceToken: deviceToken)
+        Task { @MainActor in
+            PushNotificationManager.shared.didRegister(deviceToken: deviceToken)
+        }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        PushNotificationManager.shared.didFailToRegister(error: error)
+        Task { @MainActor in
+            PushNotificationManager.shared.didFailToRegister(error: error)
+        }
     }
 }
