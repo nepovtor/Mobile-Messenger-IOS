@@ -10,31 +10,6 @@
 		11D6DCCADCCD144C3C1F1237 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25ACC1AABD3AC5F12D308989 /* XCTest.framework */; };
 		579479C98A319213F0A5A273 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C60C7925F3F560E1F97B5D83 /* Foundation.framework */; };
 		CA58DA612F815CAE000D87A4 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA542F815CAE000D87A4 /* AnalyticsService.swift */; };
-		D10000000000000000000001 /* Contact.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000101 /* Contact.swift */; };
-		D10000000000000000000002 /* ContactsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000102 /* ContactsRepository.swift */; };
-		D10000000000000000000003 /* ProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* ProfileRepository.swift */; };
-		D10000000000000000000004 /* DefaultContactsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000104 /* DefaultContactsRepository.swift */; };
-		D10000000000000000000005 /* DefaultProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000105 /* DefaultProfileRepository.swift */; };
-		D10000000000000000000006 /* LoadContactsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000106 /* LoadContactsUseCase.swift */; };
-		D10000000000000000000007 /* AddContactUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000107 /* AddContactUseCase.swift */; };
-		D10000000000000000000008 /* RemoveContactUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000108 /* RemoveContactUseCase.swift */; };
-		D10000000000000000000009 /* FetchProfileUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000109 /* FetchProfileUseCase.swift */; };
-		D1000000000000000000000A /* UpdateProfileUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010A /* UpdateProfileUseCase.swift */; };
-		D1000000000000000000000B /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010B /* ContactsView.swift */; };
-		D1000000000000000000000C /* ContactsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010C /* ContactsViewModel.swift */; };
-		D1000000000000000000000D /* ContactsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010D /* ContactsComponents.swift */; };
-		D1000000000000000000000E /* RESTLocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010E /* RESTLocationService.swift */; };
-		D1000000000000000000000F /* SharedLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010F /* SharedLocation.swift */; };
-		D10000000000000000000010 /* LocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000110 /* LocationRepository.swift */; };
-		D10000000000000000000011 /* DefaultLocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000111 /* DefaultLocationRepository.swift */; };
-		D10000000000000000000012 /* LoadContactLocationsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000112 /* LoadContactLocationsUseCase.swift */; };
-		D10000000000000000000013 /* LoadMyLocationUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000113 /* LoadMyLocationUseCase.swift */; };
-		D10000000000000000000014 /* UpdateMyLocationUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000114 /* UpdateMyLocationUseCase.swift */; };
-		D10000000000000000000015 /* StopLocationSharingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000115 /* StopLocationSharingUseCase.swift */; };
-		D10000000000000000000016 /* LocationPermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000116 /* LocationPermissionManager.swift */; };
-		D10000000000000000000017 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000117 /* MapView.swift */; };
-		D10000000000000000000018 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000118 /* MapViewModel.swift */; };
-		D10000000000000000000019 /* MapComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000119 /* MapComponents.swift */; };
 		CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5B2F815CAE000D87A4 /* ReachabilityService.swift */; };
 		CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA4F2F815CAE000D87A4 /* AppContainer.swift */; };
 		CA58DA642F815CAE000D87A4 /* PushNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5A2F815CAE000D87A4 /* PushNotificationManager.swift */; };
@@ -46,9 +21,6 @@
 		CA58DA6A2F815CAE000D87A4 /* MarkMessageStatusUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA322F815CAE000D87A4 /* MarkMessageStatusUseCase.swift */; };
 		CA58DA6B2F815CAE000D87A4 /* LoadChatListUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA312F815CAE000D87A4 /* LoadChatListUseCase.swift */; };
 		CA58DA6C2F815CAE000D87A4 /* KeychainTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA562F815CAE000D87A4 /* KeychainTokenStore.swift */; };
-		CA58DA952F815CAE000D87A4 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA962F815CAE000D87A4 /* ProfileView.swift */; };
-		CA58DA972F815CAE000D87A4 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */; };
-		CA58DA982F815CAE000D87A4 /* ProfileComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */; };
 		CA58DA6E2F815CAE000D87A4 /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA292F815CAE000D87A4 /* Chat.swift */; };
 		CA58DA6F2F815CAE000D87A4 /* DialogueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA412F815CAE000D87A4 /* DialogueView.swift */; };
 		CA58DA702F815CAE000D87A4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA382F815CAE000D87A4 /* ContentView.swift */; };
@@ -81,9 +53,37 @@
 		CA58DA8E2F815CAE000D87A4 /* CreateChatUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA922F815CAE000D87A4 /* CreateChatUseCase.swift */; };
 		CA58DA8F2F815CAE000D87A4 /* SendImageMessageUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA932F815CAE000D87A4 /* SendImageMessageUseCase.swift */; };
 		CA58DA902F815CAE000D87A4 /* SetTypingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA942F815CAE000D87A4 /* SetTypingUseCase.swift */; };
-		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */; };
-		FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */; };
-		FD728651F5C71B50F190D101 /* AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470911DE789761C6C36CB /* AppConfigTests.swift */; };
+		CA58DA952F815CAE000D87A4 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA962F815CAE000D87A4 /* ProfileView.swift */; };
+		CA58DA972F815CAE000D87A4 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */; };
+		CA58DA982F815CAE000D87A4 /* ProfileComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */; };
+		D10000000000000000000001 /* Contact.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000101 /* Contact.swift */; };
+		D10000000000000000000002 /* ContactsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000102 /* ContactsRepository.swift */; };
+		D10000000000000000000003 /* ProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000103 /* ProfileRepository.swift */; };
+		D10000000000000000000004 /* DefaultContactsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000104 /* DefaultContactsRepository.swift */; };
+		D10000000000000000000005 /* DefaultProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000105 /* DefaultProfileRepository.swift */; };
+		D10000000000000000000006 /* LoadContactsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000106 /* LoadContactsUseCase.swift */; };
+		D10000000000000000000007 /* AddContactUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000107 /* AddContactUseCase.swift */; };
+		D10000000000000000000008 /* RemoveContactUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000108 /* RemoveContactUseCase.swift */; };
+		D10000000000000000000009 /* FetchProfileUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000109 /* FetchProfileUseCase.swift */; };
+		D1000000000000000000000A /* UpdateProfileUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010A /* UpdateProfileUseCase.swift */; };
+		D1000000000000000000000B /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010B /* ContactsView.swift */; };
+		D1000000000000000000000C /* ContactsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010C /* ContactsViewModel.swift */; };
+		D1000000000000000000000D /* ContactsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010D /* ContactsComponents.swift */; };
+		D1000000000000000000000E /* RESTLocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010E /* RESTLocationService.swift */; };
+		D1000000000000000000000F /* SharedLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000010F /* SharedLocation.swift */; };
+		D10000000000000000000010 /* LocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000110 /* LocationRepository.swift */; };
+		D10000000000000000000011 /* DefaultLocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000111 /* DefaultLocationRepository.swift */; };
+		D10000000000000000000012 /* LoadContactLocationsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000112 /* LoadContactLocationsUseCase.swift */; };
+		D10000000000000000000013 /* LoadMyLocationUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000113 /* LoadMyLocationUseCase.swift */; };
+		D10000000000000000000014 /* UpdateMyLocationUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000114 /* UpdateMyLocationUseCase.swift */; };
+		D10000000000000000000015 /* StopLocationSharingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000115 /* StopLocationSharingUseCase.swift */; };
+		D10000000000000000000016 /* LocationPermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000116 /* LocationPermissionManager.swift */; };
+		D10000000000000000000017 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000117 /* MapView.swift */; };
+		D10000000000000000000018 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000118 /* MapViewModel.swift */; };
+		D10000000000000000000019 /* MapComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000119 /* MapComponents.swift */; };
+		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift */; };
+		FD728650F5C71B50F190D101 /* MobileMessengerIOSTests/ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */; };
+		FD728651F5C71B50F190D101 /* MobileMessengerIOSTests/AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,35 +100,10 @@
 		1C1C5E882B0B598A00A6A7E5 /* MobileMessengerIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MobileMessengerIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25ACC1AABD3AC5F12D308989 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		7B1BDB0D7A65535E6E00803C /* MobileMessengerIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MobileMessengerIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
-		A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		A72470911DE789761C6C36CB /* AppConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AppConfigTests.swift; sourceTree = SOURCE_ROOT; };
+		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
+		A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AppConfigTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		D10000000000000000000101 /* Contact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Contact.swift; sourceTree = "<group>"; };
-		D10000000000000000000102 /* ContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsRepository.swift; sourceTree = "<group>"; };
-		D10000000000000000000103 /* ProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepository.swift; sourceTree = "<group>"; };
-		D10000000000000000000104 /* DefaultContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultContactsRepository.swift; sourceTree = "<group>"; };
-		D10000000000000000000105 /* DefaultProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultProfileRepository.swift; sourceTree = "<group>"; };
-		D10000000000000000000106 /* LoadContactsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadContactsUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000107 /* AddContactUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddContactUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000108 /* RemoveContactUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveContactUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000109 /* FetchProfileUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FetchProfileUseCase.swift; sourceTree = "<group>"; };
-		D1000000000000000000010A /* UpdateProfileUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateProfileUseCase.swift; sourceTree = "<group>"; };
-		D1000000000000000000010B /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
-		D1000000000000000000010C /* ContactsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsViewModel.swift; sourceTree = "<group>"; };
-		D1000000000000000000010D /* ContactsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsComponents.swift; sourceTree = "<group>"; };
-		D1000000000000000000010E /* RESTLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTLocationService.swift; sourceTree = "<group>"; };
-		D1000000000000000000010F /* SharedLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLocation.swift; sourceTree = "<group>"; };
-		D10000000000000000000110 /* LocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationRepository.swift; sourceTree = "<group>"; };
-		D10000000000000000000111 /* DefaultLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultLocationRepository.swift; sourceTree = "<group>"; };
-		D10000000000000000000112 /* LoadContactLocationsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadContactLocationsUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000113 /* LoadMyLocationUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadMyLocationUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000114 /* UpdateMyLocationUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateMyLocationUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000115 /* StopLocationSharingUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopLocationSharingUseCase.swift; sourceTree = "<group>"; };
-		D10000000000000000000116 /* LocationPermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionManager.swift; sourceTree = "<group>"; };
-		D10000000000000000000117 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
-		D10000000000000000000118 /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
-		D10000000000000000000119 /* MapComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapComponents.swift; sourceTree = "<group>"; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		CA58DA1E2F815CAE000D87A4 /* ChatLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalStore.swift; sourceTree = "<group>"; };
@@ -179,6 +154,33 @@
 		CA58DA962F815CAE000D87A4 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 		CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileComponents.swift; sourceTree = "<group>"; };
+		CA80286F2FABFBC900AD9097 /* MobileMessengerIOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MobileMessengerIOS.entitlements; sourceTree = "<group>"; };
+		CA8028702FABFDEB00AD9097 /* MobileMessengerIOS.Free.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MobileMessengerIOS.Free.entitlements; sourceTree = "<group>"; };
+		D10000000000000000000101 /* Contact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Contact.swift; sourceTree = "<group>"; };
+		D10000000000000000000102 /* ContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000103 /* ProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000104 /* DefaultContactsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultContactsRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000105 /* DefaultProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultProfileRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000106 /* LoadContactsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadContactsUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000107 /* AddContactUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddContactUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000108 /* RemoveContactUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveContactUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000109 /* FetchProfileUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FetchProfileUseCase.swift; sourceTree = "<group>"; };
+		D1000000000000000000010A /* UpdateProfileUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateProfileUseCase.swift; sourceTree = "<group>"; };
+		D1000000000000000000010B /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
+		D1000000000000000000010C /* ContactsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsViewModel.swift; sourceTree = "<group>"; };
+		D1000000000000000000010D /* ContactsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsComponents.swift; sourceTree = "<group>"; };
+		D1000000000000000000010E /* RESTLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTLocationService.swift; sourceTree = "<group>"; };
+		D1000000000000000000010F /* SharedLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLocation.swift; sourceTree = "<group>"; };
+		D10000000000000000000110 /* LocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000111 /* DefaultLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultLocationRepository.swift; sourceTree = "<group>"; };
+		D10000000000000000000112 /* LoadContactLocationsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadContactLocationsUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000113 /* LoadMyLocationUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadMyLocationUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000114 /* UpdateMyLocationUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateMyLocationUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000115 /* StopLocationSharingUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopLocationSharingUseCase.swift; sourceTree = "<group>"; };
+		D10000000000000000000116 /* LocationPermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionManager.swift; sourceTree = "<group>"; };
+		D10000000000000000000117 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
+		D10000000000000000000118 /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		D10000000000000000000119 /* MapComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapComponents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -205,13 +207,13 @@
 			isa = PBXGroup;
 			children = (
 				CA58DA602F815CAE000D87A4 /* MobileMessengerIOS */,
-				1C1C5E872B0B598A00A6A7E5 /*  */,
+				1C1C5E872B0B598A00A6A7E5,
 				79BFD70436D0191426B2AB6F /* MobileMessengerIOSTests */,
 				DFC3355375C7C36CCE54035B /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
-		1C1C5E872B0B598A00A6A7E5 /*  */ = {
+		1C1C5E872B0B598A00A6A7E5 = {
 			isa = PBXGroup;
 			children = (
 				1C1C5E882B0B598A00A6A7E5 /* MobileMessengerIOS.app */,
@@ -222,9 +224,9 @@
 		79BFD70436D0191426B2AB6F /* MobileMessengerIOSTests */ = {
 			isa = PBXGroup;
 			children = (
-				A72470911DE789761C6C36CB /* AppConfigTests.swift */,
-				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */,
-				A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */,
+				A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */,
+				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift */,
+				A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */,
 			);
 			name = MobileMessengerIOSTests;
 			sourceTree = "<group>";
@@ -365,16 +367,6 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		CA58DA9B2F815CAE000D87A4 /* Profile */ = {
-			isa = PBXGroup;
-			children = (
-				CA58DA962F815CAE000D87A4 /* ProfileView.swift */,
-				CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */,
-				CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */,
-			);
-			path = Profile;
-			sourceTree = "<group>";
-		};
 		CA58DA3F2F815CAE000D87A4 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
@@ -409,27 +401,6 @@
 				CA58DA472F815CAE000D87A4 /* SkeletonView.swift */,
 			);
 			path = Common;
-			sourceTree = "<group>";
-		};
-		D10000000000000000000120 /* Contacts */ = {
-			isa = PBXGroup;
-			children = (
-				D1000000000000000000010B /* ContactsView.swift */,
-				D1000000000000000000010C /* ContactsViewModel.swift */,
-				D1000000000000000000010D /* ContactsComponents.swift */,
-			);
-			path = Contacts;
-			sourceTree = "<group>";
-		};
-		D10000000000000000000121 /* Map */ = {
-			isa = PBXGroup;
-			children = (
-				D10000000000000000000116 /* LocationPermissionManager.swift */,
-				D10000000000000000000117 /* MapView.swift */,
-				D10000000000000000000118 /* MapViewModel.swift */,
-				D10000000000000000000119 /* MapComponents.swift */,
-			);
-			path = Map;
 			sourceTree = "<group>";
 		};
 		CA58DA492F815CAE000D87A4 /* Presentation */ = {
@@ -510,6 +481,8 @@
 			children = (
 				CA58DA5A2F815CAE000D87A4 /* PushNotificationManager.swift */,
 				CA58DA5B2F815CAE000D87A4 /* ReachabilityService.swift */,
+				CA80286F2FABFBC900AD9097 /* MobileMessengerIOS.entitlements */,
+				CA8028702FABFDEB00AD9097 /* MobileMessengerIOS.Free.entitlements */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -541,6 +514,37 @@
 				CA58DA5F2F815CAE000D87A4 /* Info.plist */,
 			);
 			path = MobileMessengerIOS;
+			sourceTree = "<group>";
+		};
+		CA58DA9B2F815CAE000D87A4 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				CA58DA962F815CAE000D87A4 /* ProfileView.swift */,
+				CA58DA992F815CAE000D87A4 /* ProfileViewModel.swift */,
+				CA58DA9A2F815CAE000D87A4 /* ProfileComponents.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000120 /* Contacts */ = {
+			isa = PBXGroup;
+			children = (
+				D1000000000000000000010B /* ContactsView.swift */,
+				D1000000000000000000010C /* ContactsViewModel.swift */,
+				D1000000000000000000010D /* ContactsComponents.swift */,
+			);
+			path = Contacts;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000121 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000116 /* LocationPermissionManager.swift */,
+				D10000000000000000000117 /* MapView.swift */,
+				D10000000000000000000118 /* MapViewModel.swift */,
+				D10000000000000000000119 /* MapComponents.swift */,
+			);
+			path = Map;
 			sourceTree = "<group>";
 		};
 		DFC3355375C7C36CCE54035B /* Frameworks */ = {
@@ -623,7 +627,7 @@
 				Base,
 			);
 			mainGroup = 1C1C5E7F2B0B598A00A6A7E5;
-			productRefGroup = 1C1C5E872B0B598A00A6A7E5 /*  */;
+			productRefGroup = 1C1C5E872B0B598A00A6A7E5;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -734,9 +738,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FD728651F5C71B50F190D101 /* AppConfigTests.swift in Sources */,
-				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */,
-				FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */,
+				FD728651F5C71B50F190D101 /* MobileMessengerIOSTests/AppConfigTests.swift in Sources */,
+				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift in Sources */,
+				FD728650F5C71B50F190D101 /* MobileMessengerIOSTests/ProfileViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -759,6 +763,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -785,8 +790,8 @@
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/MobileMessengerIOS.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
@@ -798,6 +803,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MobileMessengerIOS/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -829,6 +835,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -855,8 +862,8 @@
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/MobileMessengerIOS.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
@@ -867,6 +874,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MobileMessengerIOS/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -894,6 +902,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -956,6 +965,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -1011,7 +1021,6 @@
 		3C9C6B592BD93D1927CFCC1F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
@@ -1040,7 +1049,6 @@
 		8E4D33A0F252614409D41CB5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
