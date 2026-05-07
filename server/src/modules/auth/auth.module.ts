@@ -92,6 +92,7 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
     AuthService,
     AuthGuard,
     AuthRateLimitService,
+    TelegramBotService,
     JwtModule,
     TypeOrmModule,
     SMS_SERVICE,

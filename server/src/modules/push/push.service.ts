@@ -1,13 +1,17 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Repository } from "typeorm";
+import { In, IsNull, Repository } from "typeorm";
 import {
   PushEnvironment,
   PushPlatform,
   PushSubscriptionEntity,
 } from "../../entities/push-subscription.entity";
+import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
+import { UserEntity } from "../../entities/user.entity";
+import { TelegramBotService } from "../auth/telegram/telegram-bot.service";
 import { appLogger } from "../common/app-logger";
 import { AuthenticatedUser } from "../common/authenticated-user";
+import { getWebAppUrl } from "../common/runtime-config";
 import { DeleteWebPushSubscriptionDto } from "./dto/delete-web-push-subscription.dto";
 import { RegisterIosPushDeviceDto } from "./dto/register-ios-push-device.dto";
 import { RegisterWebPushSubscriptionDto } from "./dto/register-web-push-subscription.dto";
@@ -23,8 +27,13 @@ export class PushService {
   constructor(
     @InjectRepository(PushSubscriptionEntity)
     private readonly pushSubscriptionsRepository: Repository<PushSubscriptionEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepository: Repository<UserEntity>,
+    @InjectRepository(TelegramLinkEntity)
+    private readonly telegramLinksRepository: Repository<TelegramLinkEntity>,
     private readonly webPushProvider: WebPushProvider,
     private readonly apnsPushProvider: ApnsPushProvider,
+    private readonly telegramBotService: TelegramBotService,
   ) {}
 
   getVapidPublicKey() {
@@ -207,6 +216,16 @@ export class PushService {
     });
 
     await Promise.allSettled(deliveries);
+
+    const telegramRecipients = await this.resolveTelegramRecipients(
+      recipientUserIds,
+      subscriptions,
+    );
+    await Promise.allSettled(
+      telegramRecipients.map((recipient) =>
+        this.deliverTelegramNotification(recipient.chatId, input.payload),
+      ),
+    );
   }
 
   private async deliverWebPush(
@@ -291,6 +310,101 @@ export class PushService {
     });
   }
 
+  private async resolveTelegramRecipients(
+    recipientUserIds: string[],
+    subscriptions: PushSubscriptionEntity[],
+  ): Promise<Array<{ chatId: string }>> {
+    if (!this.telegramBotService.isConfigured()) {
+      return [];
+    }
+
+    const usersWithConfiguredPush = new Set(
+      subscriptions
+        .filter((subscription) => {
+          if (subscription.platform === PushPlatform.WEB) {
+            return this.webPushProvider.isConfigured();
+          }
+
+          if (subscription.platform === PushPlatform.IOS) {
+            return this.apnsPushProvider.isConfigured();
+          }
+
+          return false;
+        })
+        .map((subscription) => subscription.userId),
+    );
+
+    const candidateUsers = await this.usersRepository.find({
+      where: {
+        id: In(recipientUserIds as UserEntity["id"][]),
+      },
+    });
+
+    const candidatePhones = candidateUsers
+      .filter(
+        (user) => !usersWithConfiguredPush.has(user.id) && Boolean(user.phone),
+      )
+      .map((user) => user.phone)
+      .filter((phone): phone is string => Boolean(phone));
+
+    const links =
+      candidatePhones.length > 0
+        ? await this.telegramLinksRepository.find({
+            where: candidatePhones.map((phone) => ({
+              phone,
+              revokedAt: IsNull(),
+            })),
+          })
+        : [];
+
+    const chatIdByPhone = new Map(
+      links
+        .filter((link) => Boolean(link.chatId))
+        .map((link) => [link.phone, link.chatId] as const),
+    );
+
+    return candidateUsers
+      .filter((user) => !usersWithConfiguredPush.has(user.id))
+      .map((user) => {
+        const chatId = user.phone
+          ? (chatIdByPhone.get(user.phone) ?? null)
+          : user.telegramChatId;
+        return chatId ? { chatId } : null;
+      })
+      .filter((recipient): recipient is { chatId: string } =>
+        Boolean(recipient?.chatId),
+      );
+  }
+
+  private async deliverTelegramNotification(
+    chatId: string,
+    payload: MessageCreatedPushPayload,
+  ): Promise<void> {
+    const buttonUrl = buildTelegramNotificationUrl(payload.url);
+
+    try {
+      await this.telegramBotService.sendMessage(
+        chatId,
+        buildTelegramNotificationText(payload),
+        buttonUrl
+          ? {
+              inlineButtonText: "Открыть чат",
+              inlineButtonUrl: buttonUrl,
+            }
+          : undefined,
+      );
+    } catch (error) {
+      void appLogger.error(
+        "push.telegram",
+        "Telegram notification delivery failed",
+        error instanceof Error ? error.message : "Unknown Telegram error",
+        {
+          chatId,
+        },
+      );
+    }
+  }
+
   private async disableSubscription(
     subscription: PushSubscriptionEntity,
     reason: string,
@@ -307,4 +421,21 @@ export class PushService {
       },
     );
   }
+}
+
+function buildTelegramNotificationText(
+  payload: MessageCreatedPushPayload,
+): string {
+  return ["Новое сообщение в Mobile Messenger", payload.title, payload.body]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildTelegramNotificationUrl(relativeUrl: string): string | null {
+  const webAppUrl = getWebAppUrl();
+  if (!webAppUrl) {
+    return null;
+  }
+
+  return new URL(relativeUrl, `${webAppUrl}/`).toString();
 }

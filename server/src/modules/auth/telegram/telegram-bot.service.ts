@@ -208,6 +208,38 @@ export class TelegramBotService
     });
   }
 
+  isConfigured(): boolean {
+    return hasTelegramBotConfig();
+  }
+
+  async sendMessage(
+    chatId: string,
+    text: string,
+    options?: {
+      inlineButtonText?: string;
+      inlineButtonUrl?: string;
+    },
+  ): Promise<void> {
+    await this.callTelegram("sendMessage", {
+      chat_id: chatId,
+      text,
+      ...(options?.inlineButtonText && options.inlineButtonUrl
+        ? {
+            reply_markup: JSON.stringify({
+              inline_keyboard: [
+                [
+                  {
+                    text: options.inlineButtonText,
+                    url: options.inlineButtonUrl,
+                  },
+                ],
+              ],
+            }),
+          }
+        : {}),
+    });
+  }
+
   async handleUpdate(update: TelegramUpdate): Promise<void> {
     if (!update.message) {
       return;

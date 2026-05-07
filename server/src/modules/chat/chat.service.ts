@@ -349,18 +349,22 @@ export class ChatService implements OnModuleInit {
       },
     });
 
-    void this.pushService.notifyMessageCreated({
-      authorUserId: user.sub,
-      participantUserIds: participants.map((item) => item.userId),
-      payload: {
-        type: "message.created",
-        chatId: chatID,
-        messageId: payload.id,
-        title: participants.length <= 2 ? payload.authorName : chat.title,
-        body: buildPushPreview(payload),
-        url: `/messenger?chatId=${chatID}`,
-      },
-    });
+    void this.pushService
+      .notifyMessageCreated({
+        authorUserId: user.sub,
+        participantUserIds: participants.map((item) => item.userId),
+        payload: {
+          type: "message.created",
+          chatId: chatID,
+          messageId: payload.id,
+          title: participants.length <= 2 ? payload.authorName : chat.title,
+          body: buildPushPreview(payload),
+          url: `/messenger?chatId=${chatID}`,
+        },
+      })
+      .catch(() => {
+        void 0;
+      });
     return payload;
   }
 

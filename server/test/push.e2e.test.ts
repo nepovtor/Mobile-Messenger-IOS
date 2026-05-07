@@ -28,6 +28,7 @@ import { TelegramLinkEntity } from "../src/entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../src/entities/telegram-pairing-token.entity";
 import { UserEntity } from "../src/entities/user.entity";
 import { AuthModule } from "../src/modules/auth/auth.module";
+import { TelegramBotService } from "../src/modules/auth/telegram/telegram-bot.service";
 import { ChatModule } from "../src/modules/chat/chat.module";
 import { HealthModule } from "../src/modules/health/health.module";
 import { MediaModule } from "../src/modules/media/media.module";
@@ -166,6 +167,36 @@ class FakeApnsPushProvider {
   }
 }
 
+class FakeTelegramBotService {
+  deliveries: Array<{
+    chatId: string;
+    text: string;
+    inlineButtonText?: string;
+    inlineButtonUrl?: string;
+  }> = [];
+  configured = true;
+
+  isConfigured() {
+    return this.configured;
+  }
+
+  async sendMessage(
+    chatId: string,
+    text: string,
+    options?: {
+      inlineButtonText?: string;
+      inlineButtonUrl?: string;
+    },
+  ) {
+    this.deliveries.push({
+      chatId,
+      text,
+      inlineButtonText: options?.inlineButtonText,
+      inlineButtonUrl: options?.inlineButtonUrl,
+    });
+  }
+}
+
 async function createTestApp() {
   process.env.NODE_ENV = "test";
   process.env.JWT_SECRET = "test-jwt-secret";
@@ -185,9 +216,11 @@ async function createTestApp() {
   process.env.SMS_PROVIDER = "mock";
   process.env.TELEGRAM_BOT_TOKEN = "test-telegram-token";
   process.env.TELEGRAM_BOT_USERNAME = "mobile_messenger_test_bot";
+  process.env.WEB_APP_URL = "https://web.example.test";
 
   const fakeWebPushProvider = new FakeWebPushProvider();
   const fakeApnsPushProvider = new FakeApnsPushProvider();
+  const fakeTelegramBotService = new FakeTelegramBotService();
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -238,6 +271,8 @@ async function createTestApp() {
   })
     .overrideProvider(MediaService)
     .useValue(new FakeMediaService())
+    .overrideProvider(TelegramBotService)
+    .useValue(fakeTelegramBotService)
     .overrideProvider(WebPushProvider)
     .useValue(fakeWebPushProvider)
     .overrideProvider(ApnsPushProvider)
@@ -261,9 +296,16 @@ async function createTestApp() {
     app,
     fakeWebPushProvider,
     fakeApnsPushProvider,
+    fakeTelegramBotService,
     pushSubscriptionsRepository: moduleRef.get<
       Repository<PushSubscriptionEntity>
     >(getRepositoryToken(PushSubscriptionEntity)),
+    usersRepository: moduleRef.get<Repository<UserEntity>>(
+      getRepositoryToken(UserEntity),
+    ),
+    telegramLinksRepository: moduleRef.get<Repository<TelegramLinkEntity>>(
+      getRepositoryToken(TelegramLinkEntity),
+    ),
   };
 }
 
@@ -549,4 +591,131 @@ test("push: provider failures do not crash message sending", async (t) => {
   });
   assert.ok(subscription);
   assert.equal(subscription.disabledAt, null);
+});
+
+test("push: telegram fallback notifies linked recipients without active push channels", async (t) => {
+  const {
+    app,
+    fakeTelegramBotService,
+    telegramLinksRepository,
+    usersRepository,
+  } = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const author = await authenticateUser(app, "+15553670009", "Author");
+  const recipient = await authenticateUser(app, "+15553670010", "Recipient");
+  const authorApi = authedRequest(app, author.token);
+
+  const recipientUser = await usersRepository.findOneBy({
+    id: recipient.userID as UserEntity["id"],
+  });
+  assert.ok(recipientUser?.phone);
+
+  await telegramLinksRepository.save(
+    telegramLinksRepository.create({
+      phone: recipientUser.phone,
+      chatId: "telegram-chat-1",
+      telegramUserId: "telegram-user-1",
+      username: "recipient",
+      firstName: "Recipient",
+      lastVerifiedAt: new Date(),
+      revokedAt: null,
+    }),
+  );
+
+  const createChatResponse = await authorApi.post("/api/chats").send({
+    title: "Telegram Fallback",
+    participantIDs: [recipient.userID],
+  });
+  assert.equal(createChatResponse.status, 201);
+  const chatID = createChatResponse.body.id as string;
+
+  const sendResponse = await authorApi
+    .post(`/api/chats/${chatID}/messages`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Telegram should receive this notification",
+    });
+  assert.equal(sendResponse.status, 201);
+
+  await waitFor(() => fakeTelegramBotService.deliveries.length === 1);
+  assert.equal(fakeTelegramBotService.deliveries[0].chatId, "telegram-chat-1");
+  assert.match(
+    fakeTelegramBotService.deliveries[0].text,
+    /Telegram should receive this notification/,
+  );
+  assert.equal(
+    fakeTelegramBotService.deliveries[0].inlineButtonText,
+    "Открыть чат",
+  );
+  assert.match(
+    String(fakeTelegramBotService.deliveries[0].inlineButtonUrl),
+    /\/messenger\?chatId=/,
+  );
+});
+
+test("push: telegram fallback is skipped when recipient already has active web push", async (t) => {
+  const {
+    app,
+    fakeWebPushProvider,
+    fakeTelegramBotService,
+    telegramLinksRepository,
+    usersRepository,
+  } = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const author = await authenticateUser(app, "+15553670011", "Author");
+  const recipient = await authenticateUser(app, "+15553670012", "Recipient");
+  const authorApi = authedRequest(app, author.token);
+  const recipientApi = authedRequest(app, recipient.token);
+
+  const recipientUser = await usersRepository.findOneBy({
+    id: recipient.userID as UserEntity["id"],
+  });
+  assert.ok(recipientUser?.phone);
+
+  await telegramLinksRepository.save(
+    telegramLinksRepository.create({
+      phone: recipientUser.phone,
+      chatId: "telegram-chat-2",
+      telegramUserId: "telegram-user-2",
+      username: "recipient2",
+      firstName: "Recipient 2",
+      lastVerifiedAt: new Date(),
+      revokedAt: null,
+    }),
+  );
+
+  await recipientApi.post("/api/push/subscriptions").send({
+    endpoint: "https://push.example.test/subscriptions/telegram-skipped",
+    expirationTime: null,
+    keys: {
+      p256dh: "tg-skip-p256dh",
+      auth: "tg-skip-auth",
+    },
+  });
+
+  const createChatResponse = await authorApi.post("/api/chats").send({
+    title: "Push Preferred",
+    participantIDs: [recipient.userID],
+  });
+  assert.equal(createChatResponse.status, 201);
+  const chatID = createChatResponse.body.id as string;
+
+  const sendResponse = await authorApi
+    .post(`/api/chats/${chatID}/messages`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Web push should win over Telegram fallback",
+    });
+  assert.equal(sendResponse.status, 201);
+
+  await waitFor(() => fakeWebPushProvider.deliveries.length === 1);
+  assert.equal(fakeTelegramBotService.deliveries.length, 0);
 });
