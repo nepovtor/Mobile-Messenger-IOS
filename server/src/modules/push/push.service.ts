@@ -203,8 +203,22 @@ export class PushService {
         disabledAt: IsNull(),
       })),
     });
+    const telegramRecipients =
+      await this.resolvePreferredTelegramRecipients(recipientUserIds);
+    const telegramRecipientUserIds = new Set<string>(
+      telegramRecipients.map((recipient) => recipient.userId),
+    );
+    const nonTelegramSubscriptions = subscriptions.filter(
+      (subscription) => !telegramRecipientUserIds.has(subscription.userId),
+    );
 
-    const deliveries = subscriptions.map(async (subscription) => {
+    await Promise.allSettled(
+      telegramRecipients.map((recipient) =>
+        this.deliverTelegramNotification(recipient.chatId, input.payload),
+      ),
+    );
+
+    const deliveries = nonTelegramSubscriptions.map(async (subscription) => {
       if (subscription.platform === PushPlatform.WEB) {
         await this.deliverWebPush(subscription, input.payload);
         return;
@@ -216,16 +230,6 @@ export class PushService {
     });
 
     await Promise.allSettled(deliveries);
-
-    const telegramRecipients = await this.resolveTelegramRecipients(
-      recipientUserIds,
-      subscriptions,
-    );
-    await Promise.allSettled(
-      telegramRecipients.map((recipient) =>
-        this.deliverTelegramNotification(recipient.chatId, input.payload),
-      ),
-    );
   }
 
   private async deliverWebPush(
@@ -310,29 +314,12 @@ export class PushService {
     });
   }
 
-  private async resolveTelegramRecipients(
+  private async resolvePreferredTelegramRecipients(
     recipientUserIds: string[],
-    subscriptions: PushSubscriptionEntity[],
-  ): Promise<Array<{ chatId: string }>> {
+  ): Promise<Array<{ userId: UserEntity["id"]; chatId: string }>> {
     if (!this.telegramBotService.isConfigured()) {
       return [];
     }
-
-    const usersWithConfiguredPush = new Set(
-      subscriptions
-        .filter((subscription) => {
-          if (subscription.platform === PushPlatform.WEB) {
-            return this.webPushProvider.isConfigured();
-          }
-
-          if (subscription.platform === PushPlatform.IOS) {
-            return this.apnsPushProvider.isConfigured();
-          }
-
-          return false;
-        })
-        .map((subscription) => subscription.userId),
-    );
 
     const candidateUsers = await this.usersRepository.find({
       where: {
@@ -341,9 +328,7 @@ export class PushService {
     });
 
     const candidatePhones = candidateUsers
-      .filter(
-        (user) => !usersWithConfiguredPush.has(user.id) && Boolean(user.phone),
-      )
+      .filter((user) => Boolean(user.phone))
       .map((user) => user.phone)
       .filter((phone): phone is string => Boolean(phone));
 
@@ -364,15 +349,17 @@ export class PushService {
     );
 
     return candidateUsers
-      .filter((user) => !usersWithConfiguredPush.has(user.id))
       .map((user) => {
         const chatId = user.phone
           ? (chatIdByPhone.get(user.phone) ?? null)
           : user.telegramChatId;
-        return chatId ? { chatId } : null;
+        return chatId ? { userId: user.id, chatId } : null;
       })
-      .filter((recipient): recipient is { chatId: string } =>
-        Boolean(recipient?.chatId),
+      .filter(
+        (
+          recipient,
+        ): recipient is { userId: UserEntity["id"]; chatId: string } =>
+          Boolean(recipient?.chatId),
       );
   }
 

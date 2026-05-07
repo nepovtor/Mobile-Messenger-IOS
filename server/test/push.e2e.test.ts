@@ -593,9 +593,10 @@ test("push: provider failures do not crash message sending", async (t) => {
   assert.equal(subscription.disabledAt, null);
 });
 
-test("push: telegram fallback notifies linked recipients without active push channels", async (t) => {
+test("push: telegram notifications are preferred for linked recipients", async (t) => {
   const {
     app,
+    fakeWebPushProvider,
     fakeTelegramBotService,
     telegramLinksRepository,
     usersRepository,
@@ -607,6 +608,7 @@ test("push: telegram fallback notifies linked recipients without active push cha
   const author = await authenticateUser(app, "+15553670009", "Author");
   const recipient = await authenticateUser(app, "+15553670010", "Recipient");
   const authorApi = authedRequest(app, author.token);
+  const recipientApi = authedRequest(app, recipient.token);
 
   const recipientUser = await usersRepository.findOneBy({
     id: recipient.userID as UserEntity["id"],
@@ -625,8 +627,17 @@ test("push: telegram fallback notifies linked recipients without active push cha
     }),
   );
 
+  await recipientApi.post("/api/push/subscriptions").send({
+    endpoint: "https://push.example.test/subscriptions/telegram-preferred",
+    expirationTime: null,
+    keys: {
+      p256dh: "tg-preferred-p256dh",
+      auth: "tg-preferred-auth",
+    },
+  });
+
   const createChatResponse = await authorApi.post("/api/chats").send({
-    title: "Telegram Fallback",
+    title: "Telegram Preferred",
     participantIDs: [recipient.userID],
   });
   assert.equal(createChatResponse.status, 201);
@@ -642,6 +653,7 @@ test("push: telegram fallback notifies linked recipients without active push cha
   assert.equal(sendResponse.status, 201);
 
   await waitFor(() => fakeTelegramBotService.deliveries.length === 1);
+  assert.equal(fakeWebPushProvider.deliveries.length, 0);
   assert.equal(fakeTelegramBotService.deliveries[0].chatId, "telegram-chat-1");
   assert.match(
     fakeTelegramBotService.deliveries[0].text,
@@ -657,14 +669,9 @@ test("push: telegram fallback notifies linked recipients without active push cha
   );
 });
 
-test("push: telegram fallback is skipped when recipient already has active web push", async (t) => {
-  const {
-    app,
-    fakeWebPushProvider,
-    fakeTelegramBotService,
-    telegramLinksRepository,
-    usersRepository,
-  } = await createTestApp();
+test("push: web push is used when recipient has no Telegram link", async (t) => {
+  const { app, fakeWebPushProvider, fakeTelegramBotService } =
+    await createTestApp();
   t.after(async () => {
     await app.close();
   });
@@ -674,34 +681,17 @@ test("push: telegram fallback is skipped when recipient already has active web p
   const authorApi = authedRequest(app, author.token);
   const recipientApi = authedRequest(app, recipient.token);
 
-  const recipientUser = await usersRepository.findOneBy({
-    id: recipient.userID as UserEntity["id"],
-  });
-  assert.ok(recipientUser?.phone);
-
-  await telegramLinksRepository.save(
-    telegramLinksRepository.create({
-      phone: recipientUser.phone,
-      chatId: "telegram-chat-2",
-      telegramUserId: "telegram-user-2",
-      username: "recipient2",
-      firstName: "Recipient 2",
-      lastVerifiedAt: new Date(),
-      revokedAt: null,
-    }),
-  );
-
   await recipientApi.post("/api/push/subscriptions").send({
-    endpoint: "https://push.example.test/subscriptions/telegram-skipped",
+    endpoint: "https://push.example.test/subscriptions/web-push-only",
     expirationTime: null,
     keys: {
-      p256dh: "tg-skip-p256dh",
-      auth: "tg-skip-auth",
+      p256dh: "web-only-p256dh",
+      auth: "web-only-auth",
     },
   });
 
   const createChatResponse = await authorApi.post("/api/chats").send({
-    title: "Push Preferred",
+    title: "Web Push Preferred",
     participantIDs: [recipient.userID],
   });
   assert.equal(createChatResponse.status, 201);
@@ -712,10 +702,14 @@ test("push: telegram fallback is skipped when recipient already has active web p
     .send({
       messageID: randomUUID(),
       kind: "text",
-      text: "Web push should win over Telegram fallback",
+      text: "Web push should be used without Telegram",
     });
   assert.equal(sendResponse.status, 201);
 
   await waitFor(() => fakeWebPushProvider.deliveries.length === 1);
+  assert.equal(
+    fakeWebPushProvider.deliveries[0].endpoint,
+    "https://push.example.test/subscriptions/web-push-only",
+  );
   assert.equal(fakeTelegramBotService.deliveries.length, 0);
 });
