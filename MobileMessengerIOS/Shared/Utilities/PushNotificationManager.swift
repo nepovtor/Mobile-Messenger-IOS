@@ -185,9 +185,13 @@ final class PushNotificationManager: NSObject, ObservableObject {
                 await registerForRemoteNotifications()
                 await syncCurrentTokenIfPossible(force: true)
             }
+        } catch let authError as NSError {
+            syncState = .failed
+            lastErrorMessage = authError.localizedDescription
+            analytics.track(error: authError, context: "push_authorization_request")
         } catch {
             syncState = .failed
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = String(describing: error)
             analytics.track(error: error, context: "push_authorization_request")
         }
     }
@@ -237,9 +241,6 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func didRegister(deviceToken: Data) {
-#if DEBUG
-        print("[Push] Failed to register for remote notifications: \(error.localizedDescription)")
-#endif
         let normalizedToken = deviceToken
             .map { String(format: "%02x", $0) }
             .joined()
@@ -268,8 +269,13 @@ final class PushNotificationManager: NSObject, ObservableObject {
         print("[Push] Failed to register for remote notifications: \(error.localizedDescription)")
 #endif
         syncState = .failed
-        lastErrorMessage = error.localizedDescription
-        analytics.track(error: error, context: "push_register")
+        if let nsError = error as NSError? {
+            lastErrorMessage = nsError.localizedDescription
+            analytics.track(error: nsError, context: "push_register")
+        } else {
+            lastErrorMessage = String(describing: error)
+            analytics.track(error: error, context: "push_register")
+        }
     }
 
     func openApplicationSettings() {
@@ -383,4 +389,3 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         }
     }
 }
-
