@@ -673,10 +673,14 @@ export class ChatService implements OnModuleInit {
     const otherParticipants = participants.filter(
       (item) => item.userId !== userID,
     );
+    const displayTitle =
+      participants.length === 2
+        ? (otherParticipants[0]?.user.displayName ?? chat.title)
+        : chat.title;
     return {
       summary: {
         id: chat.id,
-        title: chat.title,
+        title: displayTitle,
         lastMessagePreview: chat.lastMessagePreview,
         lastActivity: chat.lastActivity,
         unreadCount,

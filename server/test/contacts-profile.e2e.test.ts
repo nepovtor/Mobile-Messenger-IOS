@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { WsAdapter } from "@nestjs/platform-ws";
@@ -311,6 +312,95 @@ test("contacts: direct chat is created or reused after adding contact", async (t
 
   assert.equal(response.status, 201);
   assert.equal(response.body.directChatID, createdChat.body.id);
+});
+
+test("chat: direct summaries show the other participant and groups keep their title", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const userA = await authenticateUser(app, "+15550100015", "User A");
+  const liana = await authenticateUser(app, "+15550100016", "Liana");
+  const groupFriend = await authenticateUser(app, "+15550100017", "Mila");
+  const userAApi = authedRequest(app, userA.token);
+  const lianaApi = authedRequest(app, liana.token);
+
+  const createDirectChatResponse = await userAApi.post("/api/chats").send({
+    title: "Wrong direct title",
+    participantIDs: [liana.userID],
+  });
+
+  assert.equal(createDirectChatResponse.status, 201);
+  assert.equal(createDirectChatResponse.body.title, "Liana");
+  assert.equal(createDirectChatResponse.body.lastMessagePreview, null);
+  assert.equal(createDirectChatResponse.body.unreadCount, 0);
+
+  const directChatID = createDirectChatResponse.body.id as string;
+  const directMessageText = "Привет, Лиана!";
+  const directMessageResponse = await userAApi
+    .post(`/api/chats/${directChatID}/messages`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: directMessageText,
+    });
+
+  assert.equal(directMessageResponse.status, 201);
+
+  const listUserAChatsResponse = await userAApi.get("/api/chats");
+  assert.equal(listUserAChatsResponse.status, 200);
+
+  const directChatForUserA = listUserAChatsResponse.body.find(
+    (chat: { id: string }) => chat.id === directChatID,
+  ) as {
+    title: string;
+    lastMessagePreview: string | null;
+    unreadCount: number;
+  };
+
+  assert.equal(directChatForUserA.title, "Liana");
+  assert.equal(directChatForUserA.lastMessagePreview, directMessageText);
+  assert.equal(directChatForUserA.unreadCount, 0);
+
+  const listLianaChatsResponse = await lianaApi.get("/api/chats");
+  assert.equal(listLianaChatsResponse.status, 200);
+
+  const directChatForLiana = listLianaChatsResponse.body.find(
+    (chat: { id: string }) => chat.id === directChatID,
+  ) as {
+    title: string;
+    lastMessagePreview: string | null;
+    unreadCount: number;
+  };
+
+  assert.equal(directChatForLiana.title, "User A");
+  assert.equal(directChatForLiana.lastMessagePreview, directMessageText);
+  assert.equal(directChatForLiana.unreadCount, 1);
+
+  const createGroupChatResponse = await userAApi.post("/api/chats").send({
+    title: "Weekend Plans",
+    participantIDs: [liana.userID, groupFriend.userID],
+  });
+
+  assert.equal(createGroupChatResponse.status, 201);
+  assert.equal(createGroupChatResponse.body.title, "Weekend Plans");
+
+  const groupChatID = createGroupChatResponse.body.id as string;
+  const listLianaChatsAfterGroupResponse = await lianaApi.get("/api/chats");
+  assert.equal(listLianaChatsAfterGroupResponse.status, 200);
+
+  const groupChatForLiana = listLianaChatsAfterGroupResponse.body.find(
+    (chat: { id: string }) => chat.id === groupChatID,
+  ) as {
+    title: string;
+    lastMessagePreview: string | null;
+    unreadCount: number;
+  };
+
+  assert.equal(groupChatForLiana.title, "Weekend Plans");
+  assert.equal(groupChatForLiana.lastMessagePreview, null);
+  assert.equal(groupChatForLiana.unreadCount, 0);
 });
 
 test("profile: user can update own displayName", async (t) => {

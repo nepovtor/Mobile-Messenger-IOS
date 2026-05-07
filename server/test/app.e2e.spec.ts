@@ -97,7 +97,7 @@ describe("Mobile Messenger backend", () => {
     );
 
     expect(createChatResponse.status).toBe(201);
-    expect(createChatResponse.body.title).toBe("README Test Chat");
+    expect(createChatResponse.body.title).toBe("README Reader");
     expect(createChatResponse.body.unreadCount).toBe(0);
     expect(createChatResponse.body.typingParticipants).toEqual([]);
 
