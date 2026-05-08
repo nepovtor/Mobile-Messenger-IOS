@@ -14,6 +14,9 @@ import {
   areDemoAccountsEnabled,
   isAdminConsoleEnabled,
   getJwtExpiresIn,
+  getS3Bucket,
+  getS3Endpoint,
+  getS3PublicEndpoint,
   getNodeEnv,
   getSmsProvider,
   getVerificationProvider,
@@ -205,11 +208,10 @@ export class SystemService {
         ],
       },
       storage: {
-        endpoint: process.env.S3_ENDPOINT || null,
-        bucket: process.env.S3_BUCKET || null,
-        configured: Boolean(
-          process.env.S3_ENDPOINT?.trim() && process.env.S3_BUCKET?.trim(),
-        ),
+        endpoint: getS3Endpoint(),
+        publicEndpoint: getS3PublicEndpoint(),
+        bucket: getS3Bucket(),
+        configured: Boolean(getS3Endpoint() && getS3Bucket().trim()),
       },
     };
   }

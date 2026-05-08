@@ -166,6 +166,20 @@ iOS app notes:
 
 If APNs env vars are missing, the backend does not pretend push works: it logs a warning and safely skips APNs delivery.
 
+## Media Uploads
+
+Image messages use S3-compatible presigned URLs.
+
+Backend env:
+
+- `S3_ENDPOINT`
+- `S3_BUCKET`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- optional `S3_PUBLIC_ENDPOINT`
+
+Set `S3_PUBLIC_ENDPOINT` when the backend reaches storage through a private/internal host but iOS and web clients must upload through a separate public HTTPS host. If it is omitted, presigned upload and download URLs are generated from `S3_ENDPOINT`.
+
 ## Local Run
 
 ### Backend

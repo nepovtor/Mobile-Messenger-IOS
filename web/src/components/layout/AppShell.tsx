@@ -53,6 +53,7 @@ export function AppShell({
     null,
   );
   const lastRealtimeToastKeyRef = useRef<string | null>(null);
+  const pendingUrlSyncChatIdRef = useRef<string | null>(null);
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) ?? null,
@@ -154,7 +155,22 @@ export function AppShell({
   }, [connectionState, realtimeError]);
 
   useEffect(() => {
-    if (!chatIdFromUrl || selectedChatId === chatIdFromUrl) {
+    if (!chatIdFromUrl) {
+      return;
+    }
+
+    if (
+      pendingUrlSyncChatIdRef.current === selectedChatId &&
+      selectedChatId !== null &&
+      chatIdFromUrl !== selectedChatId
+    ) {
+      return;
+    }
+
+    if (selectedChatId === chatIdFromUrl) {
+      if (pendingUrlSyncChatIdRef.current === selectedChatId) {
+        pendingUrlSyncChatIdRef.current = null;
+      }
       return;
     }
 
@@ -173,6 +189,15 @@ export function AppShell({
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("chatId", selectedChatId);
       setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
+    if (
+      selectedChatId &&
+      currentChatId === selectedChatId &&
+      pendingUrlSyncChatIdRef.current === selectedChatId
+    ) {
+      pendingUrlSyncChatIdRef.current = null;
     }
   }, [searchParams, selectedChatId, setSearchParams]);
 
@@ -274,6 +299,7 @@ export function AppShell({
         existingDirectChat ??
         (await chatApi.createChat(contact.displayName, [contact.phone]));
       await loadChats();
+      pendingUrlSyncChatIdRef.current = chat.id;
       selectChat(chat.id);
       setSidebarOpen(false);
       return true;
@@ -314,6 +340,7 @@ export function AppShell({
               openingContactId={openingContactId}
               removingContactId={removingContactId}
               onSelectChat={(chatId) => {
+                pendingUrlSyncChatIdRef.current = chatId;
                 selectChat(chatId);
                 setSidebarOpen(false);
               }}
@@ -337,11 +364,15 @@ export function AppShell({
                 messages={messagesByChatId[selectedChat.id] ?? []}
                 currentUser={currentUser}
                 connectionState={connectionState}
-                connectionIndicator={<ConnectionBadge state={connectionState} />}
+                connectionIndicator={
+                  <ConnectionBadge state={connectionState} />
+                }
                 isLoadingMessages={isLoadingMessages}
                 onBack={() => setSidebarOpen(true)}
                 onReconnect={() => realtimeStore.getState().reconnect()}
-                onSend={(text) => sendMessage(selectedChat.id, text, currentUser)}
+                onSend={(text) =>
+                  sendMessage(selectedChat.id, text, currentUser)
+                }
                 onRetry={(clientMessageId) =>
                   void retryMessage(
                     selectedChat.id,

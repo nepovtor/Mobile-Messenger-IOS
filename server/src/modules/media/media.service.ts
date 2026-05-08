@@ -18,20 +18,38 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Repository } from "typeorm";
 import { MediaEntity, MediaStatus } from "../../entities/media.entity";
+import {
+  getS3Bucket,
+  getS3Endpoint,
+  getS3PublicEndpoint,
+  getS3Region,
+  isS3ForcePathStyle,
+} from "../common/runtime-config";
 import { RequestUploadUrlDto } from "./dto/request-upload-url.dto";
 
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
-  private readonly bucket = process.env.S3_BUCKET || "messenger-media";
+  private readonly bucket = getS3Bucket();
+  private readonly region = getS3Region();
+  private readonly endpoint = getS3Endpoint() ?? undefined;
+  private readonly publicEndpoint = getS3PublicEndpoint() ?? undefined;
+  private readonly forcePathStyle = isS3ForcePathStyle();
+  private readonly credentials = {
+    accessKeyId: process.env.S3_ACCESS_KEY || "minioadmin",
+    secretAccessKey: process.env.S3_SECRET_KEY || "minioadmin",
+  };
   private readonly s3Client = new S3Client({
-    endpoint: process.env.S3_ENDPOINT,
-    region: process.env.S3_REGION || "us-east-1",
-    forcePathStyle: (process.env.S3_FORCE_PATH_STYLE || "true") === "true",
-    credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY || "minioadmin",
-      secretAccessKey: process.env.S3_SECRET_KEY || "minioadmin",
-    },
+    endpoint: this.endpoint,
+    region: this.region,
+    forcePathStyle: this.forcePathStyle,
+    credentials: this.credentials,
+  });
+  private readonly signingS3Client = new S3Client({
+    endpoint: this.publicEndpoint,
+    region: this.region,
+    forcePathStyle: this.forcePathStyle,
+    credentials: this.credentials,
   });
   private bucketEnsured = false;
 
@@ -66,7 +84,7 @@ export class MediaService {
 
     const saved = await this.mediaRepository.save(media);
     const uploadURL = await getSignedUrl(
-      this.s3Client,
+      this.signingS3Client,
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: saved.objectKey,
@@ -94,29 +112,7 @@ export class MediaService {
     }
 
     await this.ensureBucketExists();
-    try {
-      const uploadedObject = await this.s3Client.send(
-        new HeadObjectCommand({
-          Bucket: this.bucket,
-          Key: media.objectKey,
-        }),
-      );
-      if (
-        uploadedObject.ContentLength !== undefined &&
-        uploadedObject.ContentLength !== null &&
-        uploadedObject.ContentLength !== media.sizeBytes
-      ) {
-        throw new BadRequestException("Uploaded media size does not match");
-      }
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      this.logger.warn(
-        `Upload confirmation failed for ${media.objectKey}: object is not accessible yet`,
-      );
-      throw new BadRequestException("Uploaded media file was not found");
-    }
+    await this.waitUntilUploadIsAccessible(media);
 
     media.status = MediaStatus.UPLOADED;
     return this.mediaRepository.save(media);
@@ -145,13 +141,49 @@ export class MediaService {
 
     await this.ensureBucketExists();
     return getSignedUrl(
-      this.s3Client,
+      this.signingS3Client,
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: media.objectKey,
       }),
       { expiresIn: 3600 },
     );
+  }
+
+  private async waitUntilUploadIsAccessible(media: MediaEntity): Promise<void> {
+    const maxAttempts = 4;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const uploadedObject = await this.s3Client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucket,
+            Key: media.objectKey,
+          }),
+        );
+        if (
+          uploadedObject.ContentLength !== undefined &&
+          uploadedObject.ContentLength !== null &&
+          uploadedObject.ContentLength !== media.sizeBytes
+        ) {
+          throw new BadRequestException("Uploaded media size does not match");
+        }
+        return;
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+
+        if (attempt === maxAttempts) {
+          this.logger.warn(
+            `Upload confirmation failed for ${media.objectKey}: object is not accessible yet`,
+          );
+          throw new BadRequestException("Uploaded media file was not found");
+        }
+
+        await this.delay(attempt * 250);
+      }
+    }
   }
 
   private async ensureBucketExists(): Promise<void> {
@@ -177,5 +209,9 @@ export class MediaService {
         throw new InternalServerErrorException("Failed to access media bucket");
       }
     }
+  }
+
+  private async delay(milliseconds: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 }

@@ -68,6 +68,32 @@ function normalizeUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+export function getS3Endpoint(): string | null {
+  const value = process.env.S3_ENDPOINT?.trim();
+  return value ? normalizeUrl(value) : null;
+}
+
+export function getS3PublicEndpoint(): string | null {
+  const value = process.env.S3_PUBLIC_ENDPOINT?.trim();
+  if (value) {
+    return normalizeUrl(value);
+  }
+
+  return getS3Endpoint();
+}
+
+export function getS3Bucket(): string {
+  return process.env.S3_BUCKET?.trim() || "messenger-media";
+}
+
+export function getS3Region(): string {
+  return process.env.S3_REGION?.trim() || "us-east-1";
+}
+
+export function isS3ForcePathStyle(): boolean {
+  return readBooleanEnv("S3_FORCE_PATH_STYLE", true);
+}
+
 export function getWebAppUrl(): string | null {
   const value =
     process.env.WEB_APP_URL?.trim() || process.env.PUBLIC_WEB_URL?.trim();

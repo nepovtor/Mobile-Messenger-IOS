@@ -9,6 +9,9 @@ import {
   getAuthTestCode,
   getCorsOrigins,
   getJwtSecret,
+  getS3Bucket,
+  getS3Endpoint,
+  getS3PublicEndpoint,
   getTelegramLinkResendCooldownSeconds,
   getTelegramBotToken,
   getTelegramBotUsername,
@@ -115,6 +118,34 @@ test("getWebAppUrl falls back to the local web app in development", () => {
     },
     () => {
       assert.equal(getWebAppUrl(), "http://127.0.0.1:3000");
+    },
+  );
+});
+
+test("S3 endpoint config trims values and public endpoint falls back to internal", () => {
+  withEnv(
+    {
+      S3_ENDPOINT: "https://internal-storage.example.test/",
+      S3_PUBLIC_ENDPOINT: undefined,
+      S3_BUCKET: " messenger-media ",
+    },
+    () => {
+      assert.equal(getS3Endpoint(), "https://internal-storage.example.test");
+      assert.equal(
+        getS3PublicEndpoint(),
+        "https://internal-storage.example.test",
+      );
+      assert.equal(getS3Bucket(), "messenger-media");
+    },
+  );
+
+  withEnv(
+    {
+      S3_ENDPOINT: "https://internal-storage.example.test/",
+      S3_PUBLIC_ENDPOINT: "https://cdn.example.test/",
+    },
+    () => {
+      assert.equal(getS3PublicEndpoint(), "https://cdn.example.test");
     },
   );
 });
