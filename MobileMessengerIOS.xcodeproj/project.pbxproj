@@ -785,7 +785,7 @@
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = "MobileMessengerIOS/Shared/Utilities/MobileMessengerIOS.Free.entitlements";
+				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/Shared/Utilities/MobileMessengerIOS.Free.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
@@ -857,7 +857,7 @@
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = "MobileMessengerIOS/Shared/Utilities/MobileMessengerIOS.Free.entitlements";
+				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/Shared/Utilities/MobileMessengerIOS.Free.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;

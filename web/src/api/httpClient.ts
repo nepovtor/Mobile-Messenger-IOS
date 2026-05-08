@@ -49,7 +49,12 @@ function toApiError(status: number, payload: unknown): ApiError {
           ? "Backend is unavailable right now. Please try again."
           : "The request could not be completed.";
 
-  return new ApiError(message, status, code);
+  const normalizedMessage =
+    status >= 500 && /internal server error/i.test(message)
+      ? "Backend is unavailable right now. Please try again."
+      : message;
+
+  return new ApiError(normalizedMessage, status, code);
 }
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -102,6 +107,15 @@ export async function httpRequest<T>(
     const payload = await parseJson(response);
     if (!response.ok) {
       const error = toApiError(response.status, payload);
+      if (import.meta.env.DEV && response.status >= 500) {
+        console.warn("[HTTP] Request failed", {
+          path,
+          status: response.status,
+          code: error.code,
+          message: error.message,
+          payload,
+        });
+      }
       if (response.status === 401 && authMode !== "none") {
         unauthorizedHandlers[authMode]?.(error.message);
       }

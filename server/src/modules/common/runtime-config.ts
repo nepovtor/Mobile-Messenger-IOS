@@ -2,6 +2,14 @@ export function getNodeEnv(): string {
   return process.env.NODE_ENV?.trim() || "development";
 }
 
+const LOCAL_WEB_APP_URL = "http://127.0.0.1:3000";
+const LOCAL_WEB_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
 export function isProductionEnv(): boolean {
   return getNodeEnv() === "production";
 }
@@ -63,7 +71,11 @@ function normalizeUrl(value: string): string {
 export function getWebAppUrl(): string | null {
   const value =
     process.env.WEB_APP_URL?.trim() || process.env.PUBLIC_WEB_URL?.trim();
-  return value ? normalizeUrl(value) : null;
+  if (value) {
+    return normalizeUrl(value);
+  }
+
+  return isProductionEnv() ? null : LOCAL_WEB_APP_URL;
 }
 
 export function getTelegramSubscriptionAppUrl(
@@ -244,7 +256,7 @@ export function getCorsOrigins(): string[] {
     return [];
   }
 
-  return ["http://localhost:3000", "http://127.0.0.1:3000"];
+  return LOCAL_WEB_ORIGINS;
 }
 
 export function getAuthRateLimitWindowMs(): number {

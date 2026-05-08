@@ -187,6 +187,8 @@ npm install
 npm run dev
 ```
 
+By default the Vite dev server runs on `http://127.0.0.1:3000` and points to the local backend at `http://127.0.0.1:8080/api`.
+
 ### iOS
 
 Open `MobileMessengerIOS.xcodeproj` in Xcode and run the `MobileMessengerIOS` scheme.

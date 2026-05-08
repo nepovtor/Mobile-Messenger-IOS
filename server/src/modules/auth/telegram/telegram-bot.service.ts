@@ -32,6 +32,16 @@ import {
   TelegramNotLinkedError,
 } from "../sms/sms.types";
 
+class TelegramApiError extends SmsProviderUnavailableError {
+  constructor(
+    message: string,
+    readonly statusCode?: number,
+  ) {
+    super(message);
+    this.name = "TelegramApiError";
+  }
+}
+
 type TelegramUpdate = {
   update_id: number;
   message?: {
@@ -865,11 +875,22 @@ export class TelegramBotService
         await this.handleUpdate(update);
       }
     } catch (error) {
+      if (error instanceof TelegramApiError && error.statusCode === 409) {
+        this.polling = false;
+        this.pollingTimer = null;
+        this.logger.warn(
+          "Telegram polling stopped because another bot instance already uses getUpdates for this token.",
+        );
+        return;
+      }
+
       this.logger.error("Telegram polling failed", error as Error);
     } finally {
-      this.pollingTimer = setTimeout(() => {
-        void this.pollOnce();
-      }, 1000);
+      if (this.polling) {
+        this.pollingTimer = setTimeout(() => {
+          void this.pollOnce();
+        }, 1000);
+      }
     }
   }
 
@@ -895,10 +916,20 @@ export class TelegramBotService
 
     if (!response.ok) {
       const body = await response.text();
+      if (method === "getUpdates" && response.status === 409) {
+        throw new TelegramApiError(
+          "Telegram polling conflict",
+          response.status,
+        );
+      }
+
       this.logger.error(
         `Telegram API ${method} failed: status=${response.status} body=${body.slice(0, 200)}`,
       );
-      throw new SmsProviderUnavailableError("Telegram provider unavailable");
+      throw new TelegramApiError(
+        "Telegram provider unavailable",
+        response.status,
+      );
     }
 
     const json = (await response.json()) as {
@@ -907,7 +938,7 @@ export class TelegramBotService
     };
 
     if (!json.ok) {
-      throw new SmsProviderUnavailableError("Telegram provider unavailable");
+      throw new TelegramApiError("Telegram provider unavailable");
     }
 
     return json;

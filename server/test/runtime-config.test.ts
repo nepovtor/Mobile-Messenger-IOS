@@ -100,8 +100,23 @@ test("getCorsOrigins returns safe defaults by environment", () => {
     assert.deepEqual(getCorsOrigins(), [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
     ]);
   });
+});
+
+test("getWebAppUrl falls back to the local web app in development", () => {
+  withEnv(
+    {
+      NODE_ENV: "development",
+      WEB_APP_URL: undefined,
+      PUBLIC_WEB_URL: undefined,
+    },
+    () => {
+      assert.equal(getWebAppUrl(), "http://127.0.0.1:3000");
+    },
+  );
 });
 
 test("auth code config falls back to safe defaults", () => {
