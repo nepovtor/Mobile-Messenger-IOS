@@ -29,6 +29,20 @@ async function readRequestBody(
   return chunks.length > 0 ? Buffer.concat(chunks) : undefined;
 }
 
+function sendJsonError(
+  response: {
+    statusCode: number;
+    setHeader: (name: string, value: string) => void;
+    end: (chunk?: string | Buffer) => void;
+  },
+  statusCode: number,
+  payload: Record<string, string>,
+) {
+  response.statusCode = statusCode;
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.end(JSON.stringify(payload));
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const proxyTarget = env.VITE_DEV_PROXY_TARGET || "http://127.0.0.1:8080";
@@ -40,7 +54,7 @@ export default defineConfig(({ mode }) => {
         name: "local-api-forwarder",
         apply: "serve",
         configureServer(server) {
-          server.middlewares.use("/api", async (request, response, next) => {
+          server.middlewares.use("/api", async (request, response) => {
             try {
               const relativeUrl =
                 request.originalUrl ??
@@ -86,7 +100,17 @@ export default defineConfig(({ mode }) => {
 
               response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
             } catch (error) {
-              next(error);
+              const message =
+                error instanceof Error ? error.message : "Unknown proxy error";
+              server.config.logger.warn(
+                `[local-api-forwarder] ${request.method ?? "GET"} ${request.url ?? "/api"} -> ${proxyTarget} failed: ${message}`,
+              );
+
+              sendJsonError(response, 502, {
+                message:
+                  "Backend is unavailable right now. Start the local API server or update VITE_DEV_PROXY_TARGET.",
+                code: "DEV_PROXY_UNAVAILABLE",
+              });
             }
           });
         },

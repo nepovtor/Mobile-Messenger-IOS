@@ -79,7 +79,9 @@ export function LoginPage() {
                     resetFeedback();
                     setPendingAction("pairing");
                     try {
-                      const response = await requestTelegramPairing(phone.trim());
+                      const response = await requestTelegramPairing(
+                        phone.trim(),
+                      );
                       if (telegramWindow) {
                         telegramWindow.opener = null;
                         telegramWindow.location.replace(

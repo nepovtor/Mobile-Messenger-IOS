@@ -10,7 +10,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.ts\"",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",

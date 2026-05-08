@@ -1,18 +1,43 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Card } from "./components/ui/Card";
 import { Spinner } from "./components/ui/Spinner";
 import { ToastViewport } from "./components/ui/ToastViewport";
-import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { LoginPage } from "./pages/LoginPage";
-import { MapPage } from "./pages/MapPage";
 import { MessengerPage } from "./pages/MessengerPage";
-import { SystemPage } from "./pages/SystemPage";
-import { TelegramSubscriptionPage } from "./pages/TelegramSubscriptionPage";
 import { adminStore } from "./store/adminStore";
 import { authStore } from "./store/authStore";
 import { locationStore } from "./store/locationStore";
 import { pushStore } from "./store/pushStore";
+
+const AdminLoginPage = lazy(async () => ({
+  default: (await import("./pages/AdminLoginPage")).AdminLoginPage,
+}));
+
+const MapPage = lazy(async () => ({
+  default: (await import("./pages/MapPage")).MapPage,
+}));
+
+const SystemPage = lazy(async () => ({
+  default: (await import("./pages/SystemPage")).SystemPage,
+}));
+
+const TelegramSubscriptionPage = lazy(async () => ({
+  default: (await import("./pages/TelegramSubscriptionPage"))
+    .TelegramSubscriptionPage,
+}));
+
+function RouteFallback() {
+  return (
+    <div className="app-page app-page--workspace flex items-center justify-center px-4 text-slate-200">
+      <div className="app-grid-fade" />
+      <Card className="app-shell relative z-10 flex items-center gap-3 px-5 py-4">
+        <Spinner />
+        Загружаем экран…
+      </Card>
+    </div>
+  );
+}
 
 export default function App() {
   const navigate = useNavigate();
@@ -117,18 +142,32 @@ export default function App() {
         <Route
           path="/messenger"
           element={
-            isUserAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />
+            isUserAuthenticated ? (
+              <MessengerPage />
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
         <Route
           path="/map"
           element={
-            isUserAuthenticated ? <MapPage /> : <Navigate to="/" replace />
+            isUserAuthenticated ? (
+              <Suspense fallback={<RouteFallback />}>
+                <MapPage />
+              </Suspense>
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
         <Route
           path="/telegram/subscription"
-          element={<TelegramSubscriptionPage />}
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <TelegramSubscriptionPage />
+            </Suspense>
+          }
         />
         <Route
           path="/admin/login"
@@ -136,7 +175,9 @@ export default function App() {
             isAdminAuthenticated ? (
               <Navigate to="/admin" replace />
             ) : (
-              <AdminLoginPage />
+              <Suspense fallback={<RouteFallback />}>
+                <AdminLoginPage />
+              </Suspense>
             )
           }
         />
@@ -144,7 +185,9 @@ export default function App() {
           path="/admin"
           element={
             isAdminAuthenticated ? (
-              <SystemPage />
+              <Suspense fallback={<RouteFallback />}>
+                <SystemPage />
+              </Suspense>
             ) : (
               <Navigate to="/admin/login" replace />
             )

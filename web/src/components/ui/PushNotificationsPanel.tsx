@@ -40,11 +40,7 @@ function getStatusMeta(state: {
   };
 }
 
-export function PushNotificationsPanel({
-  className,
-}: {
-  className?: string;
-}) {
+export function PushNotificationsPanel({ className }: { className?: string }) {
   const capabilityState = pushStore((state) => state.capabilityState);
   const isSupported = pushStore((state) => state.isSupported);
   const isLoading = pushStore((state) => state.isLoading);
@@ -83,13 +79,9 @@ export function PushNotificationsPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-cyan-200" />
-            <p className="text-sm font-semibold text-white">
-              Push-уведомления
-            </p>
+            <p className="text-sm font-semibold text-white">Push-уведомления</p>
           </div>
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            {meta.detail}
-          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-400">{meta.detail}</p>
         </div>
         <Badge tone={meta.tone}>{meta.label}</Badge>
       </div>

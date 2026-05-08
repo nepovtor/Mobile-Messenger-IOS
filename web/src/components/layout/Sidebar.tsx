@@ -191,9 +191,8 @@ export function Sidebar({
                         onClick={() => {
                           void (async () => {
                             const trimmed = displayName.trim();
-                            const validationMessage = validateDisplayName(
-                              trimmed,
-                            );
+                            const validationMessage =
+                              validateDisplayName(trimmed);
 
                             if (validationMessage) {
                               toastStore.getState().showToast({

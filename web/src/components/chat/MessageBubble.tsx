@@ -77,7 +77,10 @@ export function MessageBubble({
   const statusMeta = getMessageStatusMeta(message.status);
   const StatusIcon = statusMeta.icon;
   const canManage = Boolean(
-    isOwn && !isEditing && !message.deletedAt && (onEditMessage || onDeleteMessage),
+    isOwn &&
+    !isEditing &&
+    !message.deletedAt &&
+    (onEditMessage || onDeleteMessage),
   );
 
   async function handleSave() {
@@ -94,7 +97,9 @@ export function MessageBubble({
         tone: "danger",
         title: "Сообщение",
         message:
-          error instanceof Error ? error.message : "Не удалось изменить сообщение.",
+          error instanceof Error
+            ? error.message
+            : "Не удалось изменить сообщение.",
       });
     } finally {
       setSaving(false);
@@ -115,7 +120,9 @@ export function MessageBubble({
         tone: "danger",
         title: "Сообщение",
         message:
-          error instanceof Error ? error.message : "Не удалось удалить сообщение.",
+          error instanceof Error
+            ? error.message
+            : "Не удалось удалить сообщение.",
       });
     } finally {
       setDeleting(false);
@@ -124,10 +131,7 @@ export function MessageBubble({
 
   return (
     <div
-      className={clsx(
-        "group flex",
-        isOwn ? "justify-end" : "justify-start",
-      )}
+      className={clsx("group flex", isOwn ? "justify-end" : "justify-start")}
     >
       <div className="relative max-w-[84%] sm:max-w-[78%]">
         {showAuthor && !isOwn ? (
@@ -204,7 +208,9 @@ export function MessageBubble({
               <div
                 className={clsx(
                   "mt-2 flex items-center gap-1.5 text-[11px]",
-                  isOwn ? "justify-end text-white/78" : "justify-end text-slate-400",
+                  isOwn
+                    ? "justify-end text-white/78"
+                    : "justify-end text-slate-400",
                   message.status === "failed" && "text-rose-100",
                 )}
               >
@@ -224,7 +230,12 @@ export function MessageBubble({
         </div>
 
         {message.status === "failed" && onRetry ? (
-          <div className={clsx("mt-1.5 flex", isOwn ? "justify-end" : "justify-start")}>
+          <div
+            className={clsx(
+              "mt-1.5 flex",
+              isOwn ? "justify-end" : "justify-start",
+            )}
+          >
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] text-rose-200 transition hover:bg-rose-500/10 hover:text-rose-100"

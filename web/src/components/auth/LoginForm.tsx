@@ -49,8 +49,7 @@ export function LoginForm({
   const [phone, setPhone] = useState(initialPhone);
   const [code, setCode] = useState(initialCode);
 
-  const submitLabel =
-    authMode === "login" ? "Войти" : "Создать аккаунт";
+  const submitLabel = authMode === "login" ? "Войти" : "Создать аккаунт";
 
   const resetFeedback = () => {
     if (error || status) {

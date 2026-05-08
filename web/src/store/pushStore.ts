@@ -252,16 +252,14 @@ export const pushStore = create<PushStore>((set, get) => ({
         set({
           isLoading: false,
           permission,
-          capabilityState:
-            permission === "denied" ? "denied" : "disabled",
+          capabilityState: permission === "denied" ? "denied" : "disabled",
         });
 
         if (permission === "denied") {
           toastStore.getState().showToast({
             tone: "warning",
             title: "Push-уведомления",
-            message:
-              "Разрешение на уведомления отклонено в браузере.",
+            message: "Разрешение на уведомления отклонено в браузере.",
             dedupeKey: "push-permission-denied",
           });
         }
