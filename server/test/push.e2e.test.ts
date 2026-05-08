@@ -171,6 +171,8 @@ class FakeTelegramBotService {
   deliveries: Array<{
     chatId: string;
     text: string;
+    parseMode?: "HTML";
+    disableWebPagePreview?: boolean;
     inlineButtonText?: string;
     inlineButtonUrl?: string;
   }> = [];
@@ -184,6 +186,8 @@ class FakeTelegramBotService {
     chatId: string,
     text: string,
     options?: {
+      parseMode?: "HTML";
+      disableWebPagePreview?: boolean;
       inlineButtonText?: string;
       inlineButtonUrl?: string;
     },
@@ -191,6 +195,8 @@ class FakeTelegramBotService {
     this.deliveries.push({
       chatId,
       text,
+      parseMode: options?.parseMode,
+      disableWebPagePreview: options?.disableWebPagePreview,
       inlineButtonText: options?.inlineButtonText,
       inlineButtonUrl: options?.inlineButtonUrl,
     });
@@ -657,7 +663,21 @@ test("push: telegram notifications are preferred for linked recipients", async (
   assert.equal(fakeTelegramBotService.deliveries[0].chatId, "telegram-chat-1");
   assert.match(
     fakeTelegramBotService.deliveries[0].text,
+    /Новое сообщение в Mobile Messenger/,
+  );
+  assert.match(fakeTelegramBotService.deliveries[0].text, /Author/);
+  assert.doesNotMatch(
+    fakeTelegramBotService.deliveries[0].text,
     /Telegram should receive this notification/,
+  );
+  assert.match(
+    fakeTelegramBotService.deliveries[0].text,
+    /href="https:\/\/web\.example\.test\/messenger\?chatId=/,
+  );
+  assert.equal(fakeTelegramBotService.deliveries[0].parseMode, "HTML");
+  assert.equal(
+    fakeTelegramBotService.deliveries[0].disableWebPagePreview,
+    true,
   );
   assert.equal(
     fakeTelegramBotService.deliveries[0].inlineButtonText,

@@ -372,9 +372,11 @@ export class PushService {
     try {
       await this.telegramBotService.sendMessage(
         chatId,
-        buildTelegramNotificationText(payload),
+        buildTelegramNotificationText(payload, buttonUrl),
         buttonUrl
           ? {
+              parseMode: "HTML",
+              disableWebPagePreview: true,
               inlineButtonText: "Открыть чат",
               inlineButtonUrl: buttonUrl,
             }
@@ -412,10 +414,17 @@ export class PushService {
 
 function buildTelegramNotificationText(
   payload: MessageCreatedPushPayload,
+  buttonUrl: string | null,
 ): string {
-  return ["Новое сообщение в Mobile Messenger", payload.title, payload.body]
+  const summary = ["Новое сообщение в Mobile Messenger", payload.title]
     .filter(Boolean)
     .join("\n");
+
+  if (!buttonUrl) {
+    return summary;
+  }
+
+  return `<a href="${escapeTelegramHtml(buttonUrl)}">${escapeTelegramHtml(summary)}</a>`;
 }
 
 function buildTelegramNotificationUrl(relativeUrl: string): string | null {
@@ -425,4 +434,12 @@ function buildTelegramNotificationUrl(relativeUrl: string): string | null {
   }
 
   return new URL(relativeUrl, `${webAppUrl}/`).toString();
+}
+
+function escapeTelegramHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }

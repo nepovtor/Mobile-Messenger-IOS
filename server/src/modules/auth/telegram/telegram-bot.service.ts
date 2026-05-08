@@ -216,6 +216,8 @@ export class TelegramBotService
     chatId: string,
     text: string,
     options?: {
+      parseMode?: "HTML";
+      disableWebPagePreview?: boolean;
       inlineButtonText?: string;
       inlineButtonUrl?: string;
     },
@@ -223,6 +225,16 @@ export class TelegramBotService
     await this.callTelegram("sendMessage", {
       chat_id: chatId,
       text,
+      ...(options?.parseMode
+        ? {
+            parse_mode: options.parseMode,
+          }
+        : {}),
+      ...(options?.disableWebPagePreview
+        ? {
+            disable_web_page_preview: options.disableWebPagePreview,
+          }
+        : {}),
       ...(options?.inlineButtonText && options.inlineButtonUrl
         ? {
             reply_markup: JSON.stringify({
