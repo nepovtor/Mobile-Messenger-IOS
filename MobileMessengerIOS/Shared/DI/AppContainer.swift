@@ -264,6 +264,7 @@ public final class AppContainer: ObservableObject {
             loadChats: LoadChatListUseCase(repository: chatRepository),
             observeChats: ObserveChatListUseCase(repository: chatRepository),
             createChat: CreateChatUseCase(repository: chatRepository),
+            deleteChat: DeleteChatUseCase(repository: chatRepository),
             contactsService: contactsService,
             analytics: analytics
         )

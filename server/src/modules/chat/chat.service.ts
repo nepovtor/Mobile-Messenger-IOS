@@ -109,7 +109,21 @@ export class ChatService implements OnModuleInit {
         normalizedParticipantIDs,
       );
       if (existingDirectChat) {
-        return this.getChatSummary(existingDirectChat.id, user.sub);
+        const wasRestored = await this.restoreChatForUser(
+          existingDirectChat.id,
+          user.sub,
+        );
+        const summary = await this.getChatSummary(existingDirectChat.id, user.sub);
+        if (wasRestored) {
+          this.realtimeService.publishToUsers([user.sub], {
+            type: "chat.created",
+            payload: {
+              chatID: existingDirectChat.id,
+              chat: summary,
+            },
+          });
+        }
+        return summary;
       }
     }
 
@@ -148,8 +162,12 @@ export class ChatService implements OnModuleInit {
       order: { chat: { lastActivity: "DESC" } },
     });
 
+    const visibleParticipants = participants.filter(
+      (participant) => participant.hiddenAt == null,
+    );
+
     const summaries = await Promise.all(
-      participants.map((participant) =>
+      visibleParticipants.map((participant) =>
         this.buildChatSummaryEnvelope(participant.chat, participant, userID),
       ),
     );
@@ -181,6 +199,30 @@ export class ChatService implements OnModuleInit {
     }
 
     return Array.from(deduped.values());
+  }
+
+  async deleteChat(
+    chatID: string,
+    user: AuthenticatedUser,
+  ): Promise<{ ok: true; chatID: string }> {
+    const participant = await this.getParticipantOrFail(chatID, user.sub);
+    const latestMessage = await this.messagesRepository.findOne({
+      where: { chatId: chatID },
+      order: { createdAt: "DESC" },
+    });
+
+    participant.hiddenAt = new Date();
+    participant.lastReadAt = latestMessage?.createdAt ?? participant.lastReadAt;
+    participant.lastReadMessageId = latestMessage?.id ?? participant.lastReadMessageId;
+    await this.participantsRepository.save(participant);
+
+    this.realtimeService.setTyping(chatID, user.sub, user.displayName, false);
+    this.realtimeService.publishToUsers([user.sub], {
+      type: "chat.deleted",
+      payload: { chatID },
+    });
+
+    return { ok: true, chatID };
   }
 
   async getMessages(
@@ -267,6 +309,9 @@ export class ChatService implements OnModuleInit {
     const participants = await this.participantsRepository.find({
       where: { chatId: chatID },
     });
+    const restoredParticipantIDs = participants
+      .filter((item) => item.hiddenAt != null)
+      .map((item) => item.userId);
 
     const trimmedText = dto.text?.trim();
     let media: MediaEntity | null = null;
@@ -317,9 +362,22 @@ export class ChatService implements OnModuleInit {
       }),
     );
 
-    participant.lastReadAt = message.createdAt;
-    participant.lastReadMessageId = message.id;
-    await this.participantsRepository.save(participant);
+    for (const chatParticipant of participants) {
+      chatParticipant.hiddenAt = null;
+      if (chatParticipant.userId === user.sub) {
+        chatParticipant.lastReadAt = message.createdAt;
+        chatParticipant.lastReadMessageId = message.id;
+      }
+    }
+
+    if (!participants.some((item) => item.userId === user.sub)) {
+      participant.hiddenAt = null;
+      participant.lastReadAt = message.createdAt;
+      participant.lastReadMessageId = message.id;
+      participants.push(participant);
+    }
+
+    await this.participantsRepository.save(participants);
 
     const chat = await this.chatsRepository.findOneBy({
       id: chatID as ChatEntity["id"],
@@ -338,6 +396,17 @@ export class ChatService implements OnModuleInit {
     });
     if (!hydratedMessage) {
       throw new NotFoundException("Message not found after save");
+    }
+
+    for (const restoredUserID of restoredParticipantIDs) {
+      const summary = await this.getChatSummary(chatID, restoredUserID);
+      this.realtimeService.publishToUsers([restoredUserID], {
+        type: "chat.created",
+        payload: {
+          chatID,
+          chat: summary,
+        },
+      });
     }
 
     const payload = await this.mapMessage(hydratedMessage);
@@ -549,6 +618,7 @@ export class ChatService implements OnModuleInit {
     const existingDirectChat =
       await this.findExistingDirectChat(participantIDs);
     if (existingDirectChat) {
+      await this.restoreChatForUser(existingDirectChat.id, firstUserID);
       return this.getChatSummary(existingDirectChat.id, firstUserID);
     }
 
@@ -637,6 +707,23 @@ export class ChatService implements OnModuleInit {
       throw new NotFoundException("Chat not found for current user");
     }
     return participant;
+  }
+
+  private async restoreChatForUser(
+    chatID: string,
+    userID: string,
+  ): Promise<boolean> {
+    const participant = await this.participantsRepository.findOneBy({
+      chatId: chatID,
+      userId: userID,
+    });
+    if (!participant || participant.hiddenAt == null) {
+      return false;
+    }
+
+    participant.hiddenAt = null;
+    await this.participantsRepository.save(participant);
+    return true;
   }
 
   private async getChatSummary(

@@ -82,23 +82,27 @@ public final class ChatListViewModel: ObservableObject {
     private let loadChats: LoadChatListUseCase
     private let observeChats: ObserveChatListUseCase
     private let createChatUseCase: CreateChatUseCase
+    private let deleteChatUseCase: DeleteChatUseCase
     private let contactsService: ContactsNetworking
     private let analytics: AnalyticsService
     private var searchTask: Task<Void, Never>?
     private var observeTask: Task<Void, Never>?
     private var hasLoadedCreateContacts = false
+    private var deletingChatIDs: Set<UUID> = []
     private var allChats: [Chat] = []
 
     public init(
         loadChats: LoadChatListUseCase,
         observeChats: ObserveChatListUseCase,
         createChat: CreateChatUseCase,
+        deleteChat: DeleteChatUseCase,
         contactsService: ContactsNetworking,
         analytics: AnalyticsService
     ) {
         self.loadChats = loadChats
         self.observeChats = observeChats
         self.createChatUseCase = createChat
+        self.deleteChatUseCase = deleteChat
         self.contactsService = contactsService
         self.analytics = analytics
     }
@@ -173,6 +177,26 @@ public final class ChatListViewModel: ObservableObject {
         } catch {
             createContactsError = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "group_contacts_load")
+        }
+    }
+
+    @discardableResult
+    public func deleteChat(_ chat: ChatListItem) async -> Bool {
+        guard !deletingChatIDs.contains(chat.id) else { return false }
+        deletingChatIDs.insert(chat.id)
+        defer { deletingChatIDs.remove(chat.id) }
+
+        do {
+            try await deleteChatUseCase(chatID: chat.id)
+            allChats.removeAll { $0.id == chat.id }
+            applyCurrentFilter()
+            isShowingError = false
+            return true
+        } catch {
+            errorMessage = AppError.presentableMessage(for: error)
+            isShowingError = true
+            analytics.track(error: error, context: "chat_delete")
+            return false
         }
     }
 

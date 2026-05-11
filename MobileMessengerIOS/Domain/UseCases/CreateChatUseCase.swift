@@ -11,3 +11,15 @@ public struct CreateChatUseCase {
         try await repository.createChat(title: title, participantContacts: participantContacts)
     }
 }
+
+public struct DeleteChatUseCase {
+    private let repository: ChatRepository
+
+    public init(repository: ChatRepository) {
+        self.repository = repository
+    }
+
+    public func callAsFunction(chatID: UUID) async throws {
+        try await repository.deleteChat(chatID: chatID)
+    }
+}

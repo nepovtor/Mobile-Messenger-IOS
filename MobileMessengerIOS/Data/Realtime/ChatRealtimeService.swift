@@ -9,6 +9,8 @@ public enum ChatRealtimeConnectionState: Equatable, Sendable {
 }
 
 public enum ChatRealtimeEvent: Sendable {
+    case chatCreated(Chat)
+    case chatDeleted
     case connected
     case disconnected(Error?)
     case message(Message)

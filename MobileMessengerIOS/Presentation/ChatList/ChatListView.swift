@@ -6,6 +6,7 @@ struct ChatListView: View {
     @State private var isShowingCreateSheet = false
     @State private var isShowingProfile = false
     @State private var createdChat: ChatListItem?
+    @State private var pendingDeleteChat: ChatListItem?
     private let container: AppContainer
 
     @MainActor
@@ -41,6 +42,11 @@ struct ChatListView: View {
                                     ChatRowView(chat: chat)
                                 }
                                 .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button("Удалить", role: .destructive) {
+                                        pendingDeleteChat = chat
+                                    }
+                                }
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
@@ -116,6 +122,30 @@ struct ChatListView: View {
                 }
                 .onChange(of: container.pendingPushChatID) { _, _ in
                     openPendingPushChatIfPossible()
+                }
+                .alert("Удалить чат?", isPresented: Binding(
+                    get: { pendingDeleteChat != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            pendingDeleteChat = nil
+                        }
+                    }
+                )) {
+                    Button("Отмена", role: .cancel) {
+                        pendingDeleteChat = nil
+                    }
+                    Button("Удалить", role: .destructive) {
+                        guard let pendingDeleteChat else { return }
+                        Task {
+                            let wasDeleted = await viewModel.deleteChat(pendingDeleteChat)
+                            if wasDeleted {
+                                container.consumePendingPushChatNavigation(for: pendingDeleteChat.id)
+                            }
+                        }
+                        self.pendingDeleteChat = nil
+                    }
+                } message: {
+                    Text("Чат исчезнет из вашего списка и вернётся, если в нём появятся новые сообщения.")
                 }
             }
         }

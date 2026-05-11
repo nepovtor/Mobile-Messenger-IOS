@@ -41,6 +41,9 @@ export class ChatParticipantEntity {
   @Column({ name: "last_read_at", type: "timestamptz", nullable: true })
   lastReadAt!: Date | null;
 
+  @Column({ name: "hidden_at", type: "timestamptz", nullable: true })
+  hiddenAt!: Date | null;
+
   @CreateDateColumn({ name: "joined_at", type: "timestamptz" })
   joinedAt!: Date;
 }

@@ -361,6 +361,12 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             }
             startHeartbeat()
             broadcast(event: .connected)
+        case "chat.created":
+            let payload = try decoder.decode(ChatCreatedEvent.self, from: eventData)
+            deliver(chatID: payload.chatID, event: .chatCreated(try payload.chat.asDomainChat()))
+        case "chat.deleted":
+            let payload = try decoder.decode(ChatDeletedEvent.self, from: eventData)
+            deliver(chatID: payload.chatID, event: .chatDeleted)
         case "message.created":
             let payload = try decoder.decode(MessageCreatedEvent.self, from: eventData)
             deliver(chatID: payload.chatID, event: .message(payload.message.asDomainMessage()))
@@ -590,6 +596,15 @@ private struct OutgoingChatTarget: Encodable {
 private struct OutgoingRead: Encodable {
     let chatID: UUID
     let messageID: UUID
+}
+
+private struct ChatCreatedEvent: Decodable {
+    let chatID: UUID
+    let chat: ServerChat
+}
+
+private struct ChatDeletedEvent: Decodable {
+    let chatID: UUID
 }
 
 private struct MessageCreatedEvent: Decodable {

@@ -609,6 +609,106 @@ test("chat unread counters drop after mark-read and paginated history stays orde
   assert.equal(updatedMessages.body[1].status, "read");
 });
 
+test("chat deletion hides it for the current user and restores it on new activity", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const anna = await authenticateByCode(app, "+15551230011");
+  const boris = await authenticateByCode(app, "+15551230012");
+
+  const createChatResponse = await request(app.getHttpServer())
+    .post("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      title: "Борис Demo",
+      participantContacts: ["+15551230012"],
+    })
+    .expect(201);
+
+  const chatID = createChatResponse.body.id as string;
+  const borisClient = await openRealtimeSocket(app, boris.token);
+  t.after(() => {
+    borisClient.socket.close();
+  });
+  await borisClient.nextEvent("connection.ready");
+
+  await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Первое непрочитанное сообщение",
+    })
+    .expect(201);
+
+  const borisBeforeDelete = await request(app.getHttpServer())
+    .get("/api/chats")
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(borisBeforeDelete.body.length, 1);
+  assert.equal(borisBeforeDelete.body[0].unreadCount, 1);
+
+  const deleteResponse = await request(app.getHttpServer())
+    .delete(`/api/chats/${chatID}`)
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(deleteResponse.body.ok, true);
+  assert.equal(deleteResponse.body.chatID, chatID);
+
+  const deletedEvent = await borisClient.nextEvent<{ chatID: string }>(
+    "chat.deleted",
+  );
+  assert.equal(deletedEvent.data.chatID, chatID);
+
+  const borisAfterDelete = await request(app.getHttpServer())
+    .get("/api/chats")
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(borisAfterDelete.body.length, 0);
+
+  const annaAfterDelete = await request(app.getHttpServer())
+    .get("/api/chats")
+    .set("Authorization", `Bearer ${anna.token}`)
+    .expect(200);
+
+  assert.equal(annaAfterDelete.body.length, 1);
+  assert.equal(annaAfterDelete.body[0].id, chatID);
+
+  await request(app.getHttpServer())
+    .post(`/api/chats/${chatID}/messages`)
+    .set("Authorization", `Bearer ${anna.token}`)
+    .send({
+      messageID: randomUUID(),
+      kind: "text",
+      text: "Новое сообщение после удаления чата",
+    })
+    .expect(201);
+
+  const restoredEvent = await borisClient.nextEvent<{
+    chatID: string;
+    chat: { id: string; title: string; unreadCount: number };
+  }>("chat.created");
+  assert.equal(restoredEvent.data.chatID, chatID);
+  assert.equal(restoredEvent.data.chat.id, chatID);
+  assert.equal(restoredEvent.data.chat.title, anna.displayName);
+  assert.equal(restoredEvent.data.chat.unreadCount, 1);
+
+  const borisRestoredChats = await request(app.getHttpServer())
+    .get("/api/chats")
+    .set("Authorization", `Bearer ${boris.token}`)
+    .expect(200);
+
+  assert.equal(borisRestoredChats.body.length, 1);
+  assert.equal(borisRestoredChats.body[0].id, chatID);
+  assert.equal(borisRestoredChats.body[0].unreadCount, 1);
+});
+
 test("valid token can connect to realtime websocket", async (t) => {
   const app = await createTestApp({ allowPasswordLogin: true });
   t.after(async () => {

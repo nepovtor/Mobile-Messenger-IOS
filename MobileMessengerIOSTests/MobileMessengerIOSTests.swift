@@ -103,6 +103,7 @@ final class ChatListViewModelTests: XCTestCase {
             loadChats: LoadChatListUseCase(repository: repository),
             observeChats: ObserveChatListUseCase(repository: repository),
             createChat: CreateChatUseCase(repository: repository),
+            deleteChat: DeleteChatUseCase(repository: repository),
             contactsService: contactsService,
             analytics: analytics
         )
@@ -133,6 +134,7 @@ final class ChatListViewModelTests: XCTestCase {
             loadChats: LoadChatListUseCase(repository: repository),
             observeChats: ObserveChatListUseCase(repository: repository),
             createChat: CreateChatUseCase(repository: repository),
+            deleteChat: DeleteChatUseCase(repository: repository),
             contactsService: contactsService,
             analytics: analytics
         )
@@ -173,6 +175,7 @@ final class ChatListViewModelTests: XCTestCase {
             loadChats: LoadChatListUseCase(repository: repository),
             observeChats: ObserveChatListUseCase(repository: repository),
             createChat: CreateChatUseCase(repository: repository),
+            deleteChat: DeleteChatUseCase(repository: repository),
             contactsService: contactsService,
             analytics: analytics
         )
@@ -182,6 +185,50 @@ final class ChatListViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.chats.count, 1)
         XCTAssertEqual(viewModel.chats.first?.title, "Борис Demo")
+    }
+
+    func testDeleteChatRemovesItFromVisibleList() async {
+        let repository = ChatRepositorySpy()
+        let analytics = AnalyticsServiceSpy()
+        let contactsService = ContactsServiceStub()
+        let now = Date()
+        let deletedChat = Chat(
+            id: UUID(),
+            title: "Удаляемый чат",
+            lastMessagePreview: "Пока",
+            lastActivity: now,
+            unreadCount: 0,
+            participantNames: ["Борис Demo"],
+            participantCount: 2
+        )
+        let remainingChat = Chat(
+            id: UUID(),
+            title: "Оставшийся чат",
+            lastMessagePreview: "Привет",
+            lastActivity: now.addingTimeInterval(-60),
+            unreadCount: 0,
+            participantNames: ["Анна Demo"],
+            participantCount: 2
+        )
+        repository.listChatsResult = [deletedChat, remainingChat]
+
+        let viewModel = ChatListViewModel(
+            loadChats: LoadChatListUseCase(repository: repository),
+            observeChats: ObserveChatListUseCase(repository: repository),
+            createChat: CreateChatUseCase(repository: repository),
+            deleteChat: DeleteChatUseCase(repository: repository),
+            contactsService: contactsService,
+            analytics: analytics
+        )
+
+        await viewModel.refresh()
+        XCTAssertEqual(viewModel.chats.map(\.id), [deletedChat.id, remainingChat.id])
+
+        let wasDeleted = await viewModel.deleteChat(viewModel.chats[0])
+
+        XCTAssertTrue(wasDeleted)
+        XCTAssertEqual(repository.deletedChatIDs, [deletedChat.id])
+        XCTAssertEqual(viewModel.chats.map(\.id), [remainingChat.id])
     }
 
     private func makeContact(displayName: String) -> ContactDTO {
@@ -1134,6 +1181,8 @@ final class RealtimeServiceTests: XCTestCase {
         var iterator = stream.makeAsyncIterator()
         while let value = await iterator.next() {
             switch value.event {
+            case .chatCreated, .chatDeleted:
+                continue
             case .connected, .disconnected:
                 continue
             case .message, .messageUpdated, .messageDeleted, .messageRead, .typing:
@@ -1430,9 +1479,14 @@ private final class ChatRepositorySpy: ChatRepository {
     }
 
     var onSendMessage: ((UUID, String, UUID?) -> Void)?
+    var deletedChatIDs: [UUID] = []
 
     func createChat(title _: String, participantContacts _: [String]) async throws -> Chat {
         createChatResult
+    }
+
+    func deleteChat(chatID: UUID) async throws {
+        deletedChatIDs.append(chatID)
     }
 
     func cachedChats(searchQuery _: String?) async -> [Chat] {
@@ -1739,6 +1793,10 @@ private struct ChatNetworkingStub: ChatNetworking {
         _ = title
         _ = participantContacts
         throw AppError.unknown
+    }
+
+    func deleteChat(chatID: UUID) async throws {
+        _ = chatID
     }
 
     func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage] {

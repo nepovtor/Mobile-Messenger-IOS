@@ -38,6 +38,19 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         }
     }
 
+    public func removeChat(id: UUID) async throws {
+        let removedRecord = chats.removeValue(forKey: id)
+        let messageContinuation = messageStreams.removeValue(forKey: id)
+
+        guard removedRecord != nil || messageContinuation != nil else {
+            return
+        }
+
+        try persistState()
+        broadcastChats()
+        messageContinuation?.finish()
+    }
+
     public func upsert(chats: [Chat]) async throws {
         for chat in chats {
             var record = self.chats[chat.id] ?? ChatRecord(

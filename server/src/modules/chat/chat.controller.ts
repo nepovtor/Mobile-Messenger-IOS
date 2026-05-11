@@ -41,6 +41,14 @@ export class ChatController {
     return this.chatService.listChats(user.sub, search);
   }
 
+  @Delete(":chatID")
+  deleteChat(
+    @Param("chatID", new ParseUUIDPipe()) chatID: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.chatService.deleteChat(chatID, user);
+  }
+
   @Get(":chatID/messages")
   getMessages(
     @Param("chatID", new ParseUUIDPipe()) chatID: string,

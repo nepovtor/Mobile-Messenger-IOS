@@ -2,6 +2,7 @@ import Foundation
 
 public protocol ChatRepository {
     func createChat(title: String, participantContacts: [String]) async throws -> Chat
+    func deleteChat(chatID: UUID) async throws
     func cachedChats(searchQuery: String?) async -> [Chat]
     func listChats(searchQuery: String?) async throws -> [Chat]
     func observeChats() -> AsyncStream<[Chat]>

@@ -48,6 +48,11 @@ public final class DefaultChatRepository: ChatRepository {
         return chat
     }
 
+    public func deleteChat(chatID: UUID) async throws {
+        try await remote.deleteChat(chatID: chatID)
+        try await store.removeChat(id: chatID)
+    }
+
     public func cachedChats(searchQuery: String?) async -> [Chat] {
         (try? await store.fetchChats(searchQuery: searchQuery)) ?? []
     }
@@ -267,6 +272,10 @@ public final class DefaultChatRepository: ChatRepository {
     private func observeRealtime() async {
         for await envelope in realtime.observeAllEvents() {
             switch envelope.event {
+            case .chatCreated(let chat):
+                try? await store.upsert(chats: [chat])
+            case .chatDeleted:
+                try? await store.removeChat(id: envelope.chatID)
             case .message(let message):
                 try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.append(message: message, for: envelope.chatID)
@@ -318,7 +327,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 }
 
-private extension ServerChat {
+extension ServerChat {
     func asDomainChat() throws -> Chat {
         Chat(
             id: id,
