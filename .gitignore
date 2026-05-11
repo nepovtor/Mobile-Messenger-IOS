@@ -1,18 +1,24 @@
-# macOS
+# OS / editors
 .DS_Store
 .vscode/
+.idea/
 Makefile.bak*
+
+# Local databases
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
 
-# Xcode
+# Swift / Xcode
+.build/
+.swiftpm/
 build/
 build-ios/
 build-ios-device/
 build-ios-sim/
 DerivedData/
 *.build/
+*.xcresult/
 *.xcuserstate
 *.xcuserdatad/
 xcuserdata/
@@ -27,16 +33,15 @@ xcuserdata/
 .tunnel_url
 MobileMessengerIOS/Configurations/Debug.public.xcconfig
 
-# Backend
+# Node / web / backend
 node_modules/
 dist/
+coverage/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
 .env
 .env.*
-server/node_modules/
-server/dist/
 server/logs/
-server/.env
-server/.env.*
 !server/.env.example
-web/tsconfig.tsbuildinfo
 *.tsbuildinfo

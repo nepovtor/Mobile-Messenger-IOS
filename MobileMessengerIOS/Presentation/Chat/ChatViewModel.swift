@@ -225,13 +225,14 @@ public final class ChatViewModel: ObservableObject {
         isLoadingHistory = true
         let cachedHistory = await loadHistory.cached(chatID: chatID, limit: 100, before: nil)
         if !cachedHistory.isEmpty {
-            messages = cachedHistory
+            merge(messages: cachedHistory)
             isLoadingHistory = false
         }
 
         do {
             let history = try await loadHistory(chatID: chatID, limit: 100, before: nil)
-            messages = history
+            merge(messages: history)
+            updateBannerState()
             isLoadingHistory = false
         } catch {
             isLoadingHistory = false
@@ -266,6 +267,21 @@ public final class ChatViewModel: ObservableObject {
         } else {
             messages.append(message)
         }
+        sortMessages()
+    }
+
+    private func merge(messages newMessages: [Message]) {
+        for message in newMessages {
+            if let index = messages.firstIndex(where: { $0.id == message.id || $0.localID == message.localID }) {
+                messages[index] = message
+            } else {
+                messages.append(message)
+            }
+        }
+        sortMessages()
+    }
+
+    private func sortMessages() {
         messages.sort { lhs, rhs in
             if lhs.createdAt == rhs.createdAt {
                 return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString

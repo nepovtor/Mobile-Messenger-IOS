@@ -2,13 +2,26 @@
 
 [![CI](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/workflows/swift.yml/badge.svg)](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/workflows/swift.yml)
 
-Portfolio-ready messenger project with three clients:
+Portfolio-ready messenger platform with three coordinated parts:
 
 - `MobileMessengerIOS/`: SwiftUI iOS app
 - `web/`: React + TypeScript web client
-- `server/`: NestJS backend with REST + WebSocket realtime
+- `server/`: NestJS backend with REST, WebSocket realtime, and push delivery
 
 The project keeps the existing backend contract, Telegram verification flow, Railway deployment setup, and native WebSocket realtime.
+
+## Repository Layout
+
+- `MobileMessengerIOS/`: presentation, domain, data, and shared iOS layers
+- `MobileMessengerIOS.xcodeproj/`: Xcode project, schemes, and workspace metadata
+- `MobileMessengerIOSTests/`: iOS unit tests
+- `web/`: browser client built with Vite + React
+- `server/`: NestJS API, realtime gateway, push, and media services
+- `docs/`: screenshots and portfolio-facing support material
+- `Design/`: source assets such as the app icon artwork
+- `Scripts/`: verification and local helper scripts
+- `Config/`: environment examples and local configuration templates
+- `.github/`: CI workflows
 
 ## Features
 
@@ -67,7 +80,7 @@ iOS SwiftUI / Web React
   -> PostgreSQL / Railway deployment
 ```
 
-## API Contract Used
+## Shared API Contract
 
 These endpoints are used by both clients:
 
@@ -91,7 +104,7 @@ Push-related endpoints:
 - `POST /api/push/devices`
 - `DELETE /api/push/devices/:token`
 
-## Privacy Notes
+## Privacy
 
 - location sharing is off by default
 - the app requests geolocation only when the user taps share/update
@@ -102,7 +115,7 @@ Push-related endpoints:
 
 ## Screenshots
 
-Place screenshots here:
+Store portfolio screenshots in `docs/screenshots/` using these filenames:
 
 - `docs/screenshots/login.png`
 - `docs/screenshots/chat-list.png`
@@ -111,7 +124,7 @@ Place screenshots here:
 - `docs/screenshots/profile.png`
 - `docs/screenshots/map.png`
 
-Sections expected in portfolio docs:
+Recommended sections in portfolio docs:
 
 - Login
 - Chat list
@@ -247,7 +260,7 @@ xcodebuild -project MobileMessengerIOS.xcodeproj -scheme MobileMessengerIOS CODE
 
 ## Notes
 
-- Do not commit `.env`, `node_modules`, `dist`, `database.sqlite`, `DerivedData`, `.DS_Store`, `xcuserdata`, `tsbuildinfo`, or secrets.
+- Do not commit `.env`, `node_modules`, `dist`, `coverage`, `.build`, `database.sqlite`, `DerivedData`, `.DS_Store`, `xcuserdata`, `tsbuildinfo`, or secrets.
 - Telegram bot tokens and Railway secrets must stay in environment variables.
 - Push delivery requires real VAPID/APNs secrets in the environment; without them, the app keeps realtime working and logs a warning instead of sending fake notifications.
 - The project does not claim calls, end-to-end encryption, avatar upload, or phonebook sync unless they are actually implemented.
