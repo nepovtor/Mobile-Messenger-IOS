@@ -13,7 +13,10 @@ function readEnv(name: string): string | undefined {
   return process.env[name];
 }
 
-function readDatabaseEnv(name: string, fallbackName?: string): string | undefined {
+function readDatabaseEnv(
+  name: string,
+  fallbackName?: string,
+): string | undefined {
   const primary = readEnv(name)?.trim();
   if (primary) {
     return primary;
