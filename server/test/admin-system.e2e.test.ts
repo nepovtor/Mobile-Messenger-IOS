@@ -7,6 +7,7 @@ import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { DataType, newDb } from "pg-mem";
 import request from "supertest";
+import { AdminEntity } from "../src/entities/admin.entity";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
 import { ContactEntity } from "../src/entities/contact.entity";
@@ -22,15 +23,15 @@ import { AdminModule } from "../src/modules/admin/admin.module";
 import { SystemModule } from "../src/modules/system/system.module";
 
 async function createTestApp(): Promise<INestApplication> {
-  process.env.NODE_ENV = "test";
-  process.env.JWT_SECRET = "test-jwt-secret";
-  process.env.JWT_EXPIRES_IN = "7d";
-  process.env.ADMIN_LOGIN = "control";
-  process.env.ADMIN_PASSWORD = "control123";
-  process.env.ADMIN_DISPLAY_NAME = "Control Room";
-  process.env.DB_SYNCHRONIZE = "true";
-  process.env.AUTH_ENABLE_DEMO_ACCOUNTS = "false";
-  process.env.CHAT_ENABLE_DEMO_SEEDING = "false";
+  process.env["NODE_ENV"] = "test";
+  process.env["JWT_SECRET"] = "test-jwt-secret";
+  process.env["JWT_EXPIRES_IN"] = "7d";
+  process.env["ADMIN_LOGIN"] = "control";
+  process.env["ADMIN_PASSWORD"] = "control123";
+  process.env["ADMIN_DISPLAY_NAME"] = "Control Room";
+  process.env["DB_SYNCHRONIZE"] = "true";
+  process.env["AUTH_ENABLE_DEMO_ACCOUNTS"] = "false";
+  process.env["CHAT_ENABLE_DEMO_SEEDING"] = "false";
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -38,6 +39,7 @@ async function createTestApp(): Promise<INestApplication> {
         useFactory: async () => ({
           type: "postgres",
           entities: [
+            AdminEntity,
             UserEntity,
             ContactEntity,
             LocationShareEntity,

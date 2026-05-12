@@ -15,6 +15,7 @@ import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AuthService } from "./auth.service";
+import { LoginController } from "./login.controller";
 import { ConsoleSmsProvider } from "./sms/console-sms.provider";
 import { MockSmsProvider } from "./sms/mock-sms.provider";
 import { SMS_SERVICE } from "./sms/sms.types";
@@ -36,7 +37,7 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, LoginController],
   providers: [
     AuthService,
     AuthGuard,

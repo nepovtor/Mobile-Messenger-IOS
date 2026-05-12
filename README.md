@@ -57,10 +57,13 @@ The project keeps the existing backend contract, Telegram verification flow, Rai
 ### Backend
 
 - NestJS REST API
+- strict TypeScript + ESLint configuration for lab compliance
+- TypeORM `DataSource` + migrations in `server/src/database`
 - native WebSocket realtime gateway
 - Web Push delivery via `web-push` and VAPID
 - APNs delivery for iOS device tokens
 - request and error file logging with process-level error handlers
+- PostgreSQL-backed user/admin authentication with JWT bearer tokens
 - contacts API
 - profile API
 - location API with latest-point storage only
@@ -139,7 +142,7 @@ If screenshots are not available yet, keep the placeholders above and add the re
 
 - Railway config lives in [railway.toml](./railway.toml)
 - backend Docker setup lives in [server/Dockerfile](./server/Dockerfile) and [Dockerfile](./Dockerfile)
-- backend keeps `process.env.PORT`, `JWT_SECRET`, `/api/health`, and Telegram provider safety checks intact
+- backend keeps `process.env.PORT`, `JWT_SECRET_KEY` with `JWT_SECRET` fallback, `/api/health`, and Telegram provider safety checks intact
 
 ## Push Setup
 
@@ -199,12 +202,16 @@ Set `S3_PUBLIC_ENDPOINT` when the backend reaches storage through a private/inte
 
 ```bash
 cd server
+cp .env.example .env
 npm install
 npm run lint
 npm run build
+npm run migration:run
 npm test
 npm run start:dev
 ```
+
+For quick local-only development you can set `DB_SYNCHRONIZE=true`, but the laboratory-compliant mode uses `DB_SYNCHRONIZE=false` and `npm run migration:run`.
 
 ### Web
 
@@ -229,12 +236,269 @@ Useful configs:
 - [MobileMessengerIOS/Configurations/Railway.xcconfig](./MobileMessengerIOS/Configurations/Railway.xcconfig)
 - [Config/Config.example.xcconfig](./Config/Config.example.xcconfig)
 
+## Logging & Error Handling
+
+The backend writes logs into `server/logs/` through a single logger module:
+
+- `server/logs/app.log`
+- `server/logs/requests.log`
+- `server/logs/errors.log`
+
+Request logs include:
+
+- `method`
+- `url`
+- `query`
+- `body`
+- `statusCode`
+- `durationMs`
+
+Sensitive fields such as passwords, secrets, tokens, and verification hashes are redacted before being written.
+
+Quick manual verification:
+
+```bash
+cd server
+npm run start:dev
+tail -f logs/requests.log
+```
+
+In another terminal:
+
+```bash
+curl http://127.0.0.1:8080/api/health
+```
+
+Then inspect `server/logs/requests.log` and confirm that the request entry contains `method`, `url`, `statusCode`, and `durationMs`. Runtime failures and uncaught process errors are written into `server/logs/errors.log`, while `process.on("uncaughtException")` and `process.on("unhandledRejection")` remain enabled in `server/src/main.ts`.
+
+## Docker
+
+Production-like lab compose:
+
+```bash
+docker compose -f server/docker-compose.yml up --build
+docker compose -f server/docker-compose.yml down
+```
+
+Development compose with live backend reload:
+
+```bash
+docker compose -f server/docker-compose.dev.yml up --build
+docker compose -f server/docker-compose.dev.yml down
+```
+
+After `docker compose -f server/docker-compose.yml up --build`:
+
+- backend: `http://127.0.0.1:8080/api`
+- health check: `http://127.0.0.1:8080/api/health`
+- pgAdmin: `http://127.0.0.1:5050`
+- PostgreSQL from host: `postgresql://postgres:postgres@127.0.0.1:5432/messenger`
+
+pgAdmin connection values:
+
+- host: `postgres`
+- port: `5432`
+- username: `postgres`
+- password: `postgres`
+- database: `messenger`
+
+Optional image scanning commands:
+
+```bash
+docker scout quickview mobile-messenger-backend:latest
+trivy image mobile-messenger-backend:latest
+```
+
+Private Docker Hub push placeholders:
+
+```bash
+docker tag mobile-messenger-backend:latest <dockerhub-user>/mobile-messenger-backend:latest
+docker push <dockerhub-user>/mobile-messenger-backend:latest
+```
+
+## Database Migrations
+
+- TypeORM `DataSource`: `server/src/database/data-source.ts`
+- migration directory: `server/src/database/migrations`
+- lab mode uses migrations with `DB_SYNCHRONIZE=false`
+- dev-only shortcut may use `DB_SYNCHRONIZE=true`, but this is not the recommended laboratory path
+
+Commands:
+
+```bash
+cd server
+npm run migration:show
+npm run migration:run
+npm run migration:revert
+npm run migration:generate
+```
+
+## Authentication & JWT
+
+Create a user with a bcrypt-hashed password:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "student",
+    "password": "secret123",
+    "displayName": "Student User",
+    "phone": "+15550001111"
+  }'
+```
+
+Login through the laboratory endpoint:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "student",
+    "password": "secret123"
+  }'
+```
+
+Use the returned JWT as Bearer:
+
+```bash
+TOKEN="<jwt_token>"
+curl http://127.0.0.1:8080/api/contacts \
+  -H "Authorization: Bearer ${TOKEN}"
+```
+
+Public routes:
+
+- `/`
+- `/api`
+- `/api/health`
+- `/api/version`
+- `/api/login`
+- `/api/users`
+- `/api/auth/request`
+- `/api/auth/verify`
+- `/api/auth/login`
+- `/api/admin/login`
+- `/api/push/vapid-public-key`
+
+Protected user routes:
+
+- `/api/auth/me`
+- `/api/contacts/*`
+- `/api/chats/*`
+- `/api/location/*`
+- `/api/media/*`
+- `/api/push/status`
+- `/api/push/subscriptions`
+- `/api/push/devices`
+
+Admin-only routes:
+
+- `/api/admin/me`
+- `/api/system/*`
+
+How to check `401`:
+
+```bash
+curl http://127.0.0.1:8080/api/contacts
+```
+
+How to check `403`:
+
+1. Create a user and login to get a valid JWT.
+2. Delete that user from PostgreSQL through `psql` or pgAdmin.
+3. Repeat a protected request with the old token and confirm the backend returns `403`.
+
+## Laboratory Compliance
+
+### Lab 7 — TypeScript
+
+- `server/tsconfig.json` now targets `ES2022` and enables strict compiler checks including `strict`, `noImplicitAny`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noUncheckedIndexedAccess`, and `noPropertyAccessFromIndexSignature`.
+- `server/.eslintrc.json` stays active for `src/` and `test/`, and the backend codebase was adjusted to avoid direct `any`/`unknown` usage.
+- Verification commands:
+
+```bash
+cd server
+npm run lint
+npm run build
+```
+
+### Lab 8 — Logging & Error Handling
+
+- request logging middleware writes all incoming requests into `server/logs/requests.log`
+- errors are written into `server/logs/errors.log`
+- runtime `500` responses are normalized through the global exception filter
+- `uncaughtException` and `unhandledRejection` handlers remain active
+- all logging is centralized in `server/src/modules/common/app-logger.ts`
+
+How to verify:
+
+```bash
+cd server
+npm run start:dev
+curl http://127.0.0.1:8080/api/health
+tail -n 5 logs/requests.log
+```
+
+### Lab 9 — Docker Basics
+
+- added `server/docker-compose.yml` for backend + PostgreSQL + pgAdmin
+- kept `server/docker-compose.dev.yml` for hot reload with `npm run start:dev`
+- added named volumes for PostgreSQL, pgAdmin, and backend logs
+- added a dedicated bridge network `messenger_network`
+- PostgreSQL now has a healthcheck and backend startup waits for database readiness
+
+Run commands:
+
+```bash
+docker compose -f server/docker-compose.yml up --build
+docker compose -f server/docker-compose.yml down
+```
+
+### Lab 10 — PostgreSQL & TypeORM
+
+- added `server/src/database/data-source.ts`
+- added `server/src/database/migrations`
+- added an initial migration that creates the messenger schema and seeds a DB admin
+- `synchronize` remains available only for local dev, while the lab path uses migrations
+
+Migration commands:
+
+```bash
+cd server
+npm run migration:show
+npm run migration:run
+npm run migration:revert
+```
+
+### Lab 11 — Authentication & JWT
+
+- `users` now support nullable `login` and `passwordHash`
+- `POST /api/users` stores bcrypt password hashes
+- `POST /api/login` returns `{ "token": "..." }`
+- JWT payload includes user `id` and `login`
+- user auth is enforced with a global guard plus explicit public-route exclusions
+- `admins` are stored in PostgreSQL, with `admin/admin` seeded by migration and env fallback preserved
+
+Example curls:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"login":"student","password":"secret123","displayName":"Student User"}'
+
+curl -X POST http://127.0.0.1:8080/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"login":"student","password":"secret123"}'
+```
+
 ## Testing Commands
 
 ### Backend
 
 ```bash
 cd server
+npm run migration:run
 npm run build
 npm test
 npm run lint

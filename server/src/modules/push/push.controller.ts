@@ -26,6 +26,7 @@ export class PushController {
   constructor(private readonly pushService: PushService) {}
 
   @Get("vapid-public-key")
+  @UseGuards(AuthGuard)
   getVapidPublicKey() {
     return this.pushService.getVapidPublicKey();
   }

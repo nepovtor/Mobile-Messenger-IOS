@@ -11,6 +11,7 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { createHmac, randomInt } from "node:crypto";
+import { compare, hash } from "bcryptjs";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Repository } from "typeorm";
@@ -39,6 +40,7 @@ import {
 } from "../common/runtime-config";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
+import { LabLoginDto } from "./dto/lab-login.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { VerifyAuthDto } from "./dto/verify-auth.dto";
 import {
@@ -51,6 +53,7 @@ import {
 type AuthResult = {
   token: string;
   userID: string;
+  login: string;
   displayName: string;
   phone: string;
 };
@@ -284,6 +287,11 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(dto: LoginAuthDto): Promise<AuthResult> {
+    if (dto.login?.trim()) {
+      const user = await this.authenticateUserByLogin(dto.login, dto.password);
+      return this.buildAuthResult(user);
+    }
+
     if (!areDemoAccountsEnabled() || !isPasswordLoginEnabled()) {
       throw new ForbiddenException("Password login is disabled");
     }
@@ -309,8 +317,17 @@ export class AuthService implements OnModuleInit {
     return this.buildAuthResult(user);
   }
 
+  async loginLabUser(dto: LabLoginDto): Promise<{ token: string }> {
+    const user = await this.authenticateUserByLogin(dto.login, dto.password);
+    const result = await this.buildAuthResult(user);
+    return {
+      token: result.token,
+    };
+  }
+
   async getMe(userID: string): Promise<{
     userID: string;
+    login: string;
     displayName: string;
     contact: string;
     method: string;
@@ -327,6 +344,7 @@ export class AuthService implements OnModuleInit {
 
     return {
       userID: user.id,
+      login: user.login ?? user.contact,
       displayName: user.displayName,
       contact: user.contact,
       method: user.method,
@@ -362,7 +380,9 @@ export class AuthService implements OnModuleInit {
         user = this.usersRepository.create({
           method,
           contact,
+          login: null,
           phone: method === AuthMethod.PHONE ? contact : null,
+          passwordHash: null,
           telegramChatId: telegramLink?.chatId ?? null,
           telegramUsername: telegramLink?.username ?? null,
           displayName,
@@ -443,6 +463,7 @@ export class AuthService implements OnModuleInit {
     const token = await this.jwtService.signAsync(
       {
         sub: user.id,
+        login: user.login ?? user.contact,
         displayName: user.displayName,
         contact: user.contact,
         method: user.method,
@@ -457,9 +478,49 @@ export class AuthService implements OnModuleInit {
     return {
       token,
       userID: user.id,
+      login: user.login ?? user.contact,
       displayName: user.displayName,
       phone: user.phone ?? user.contact,
     };
+  }
+
+  private async authenticateUserByLogin(
+    login: string,
+    password: string,
+  ): Promise<UserEntity> {
+    if (!isPasswordLoginEnabled()) {
+      throw new ForbiddenException("Password login is disabled");
+    }
+
+    const normalizedLogin = this.normalizeLogin(login);
+    const user = await this.usersRepository
+      .createQueryBuilder("user")
+      .addSelect("user.passwordHash")
+      .where("user.login = :login", { login: normalizedLogin })
+      .getOne();
+
+    if (!user?.passwordHash) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+
+    const passwordMatches = await compare(password, user.passwordHash);
+    if (!passwordMatches) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+
+    return user;
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    return hash(password, 12);
+  }
+
+  normalizeLogin(login: string): string {
+    const normalizedLogin = login.trim().toLowerCase();
+    if (normalizedLogin.length < 3) {
+      throw new BadRequestException("Login must contain at least 3 characters");
+    }
+    return normalizedLogin;
   }
 
   private generateVerificationCode(): string {

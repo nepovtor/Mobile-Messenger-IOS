@@ -1,10 +1,12 @@
 import { Controller, Get } from "@nestjs/common";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Public } from "../auth/decorators/public.decorator";
 
 @Controller("version")
 export class VersionController {
   @Get()
+  @Public()
   getVersion() {
     const pkgPath = path.join(__dirname, "..", "..", "..", "package.json");
     const pkgRaw = fs.readFileSync(pkgPath, "utf-8");

@@ -1,5 +1,12 @@
 node_modules
 dist
+logs
+.env
+coverage
 npm-debug.log
+yarn-error.log
+*.tmp
+*.temp
+.DS_Store
 .git
 .gitignore

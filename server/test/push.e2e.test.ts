@@ -204,25 +204,25 @@ class FakeTelegramBotService {
 }
 
 async function createTestApp() {
-  process.env.NODE_ENV = "test";
-  process.env.JWT_SECRET = "test-jwt-secret";
-  process.env.JWT_EXPIRES_IN = "7d";
-  process.env.DB_SYNCHRONIZE = "true";
-  process.env.AUTH_ENABLE_DEMO_ACCOUNTS = "true";
-  process.env.AUTH_ALLOW_PASSWORD_LOGIN = "false";
-  process.env.AUTH_ALLOW_TEST_CODE = "true";
-  process.env.AUTH_TEST_CODE = "123456";
-  process.env.AUTH_CODE_TTL_SECONDS = "300";
-  process.env.AUTH_CODE_MAX_ATTEMPTS = "5";
-  process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS = "0";
-  process.env.CHAT_ENABLE_DEMO_SEEDING = "false";
-  process.env.AUTH_RATE_LIMIT_WINDOW_MS = "60000";
-  process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = "50";
-  process.env.VERIFICATION_PROVIDER = "mock";
-  process.env.SMS_PROVIDER = "mock";
-  process.env.TELEGRAM_BOT_TOKEN = "test-telegram-token";
-  process.env.TELEGRAM_BOT_USERNAME = "mobile_messenger_test_bot";
-  process.env.WEB_APP_URL = "https://web.example.test";
+  process.env["NODE_ENV"] = "test";
+  process.env["JWT_SECRET"] = "test-jwt-secret";
+  process.env["JWT_EXPIRES_IN"] = "7d";
+  process.env["DB_SYNCHRONIZE"] = "true";
+  process.env["AUTH_ENABLE_DEMO_ACCOUNTS"] = "true";
+  process.env["AUTH_ALLOW_PASSWORD_LOGIN"] = "false";
+  process.env["AUTH_ALLOW_TEST_CODE"] = "true";
+  process.env["AUTH_TEST_CODE"] = "123456";
+  process.env["AUTH_CODE_TTL_SECONDS"] = "300";
+  process.env["AUTH_CODE_MAX_ATTEMPTS"] = "5";
+  process.env["AUTH_CODE_RESEND_COOLDOWN_SECONDS"] = "0";
+  process.env["CHAT_ENABLE_DEMO_SEEDING"] = "false";
+  process.env["AUTH_RATE_LIMIT_WINDOW_MS"] = "60000";
+  process.env["AUTH_RATE_LIMIT_MAX_REQUESTS"] = "50";
+  process.env["VERIFICATION_PROVIDER"] = "mock";
+  process.env["SMS_PROVIDER"] = "mock";
+  process.env["TELEGRAM_BOT_TOKEN"] = "test-telegram-token";
+  process.env["TELEGRAM_BOT_USERNAME"] = "mobile_messenger_test_bot";
+  process.env["WEB_APP_URL"] = "https://web.example.test";
 
   const fakeWebPushProvider = new FakeWebPushProvider();
   const fakeApnsPushProvider = new FakeApnsPushProvider();
@@ -491,11 +491,13 @@ test("push: message.created notifications do not notify the author", async (t) =
   assert.equal(sendResponse.status, 201);
 
   await waitFor(() => fakeWebPushProvider.deliveries.length === 1);
+  const firstWebPushDelivery = fakeWebPushProvider.deliveries[0];
+  assert.ok(firstWebPushDelivery);
   assert.equal(
-    fakeWebPushProvider.deliveries[0].endpoint,
+    firstWebPushDelivery.endpoint,
     "https://push.example.test/subscriptions/recipient",
   );
-  assert.equal(fakeWebPushProvider.deliveries[0].payload.chatId, chatID);
+  assert.equal(firstWebPushDelivery.payload.chatId, chatID);
 });
 
 test("push: invalid subscriptions are disabled after upstream rejection", async (t) => {
@@ -660,31 +662,27 @@ test("push: telegram notifications are preferred for linked recipients", async (
 
   await waitFor(() => fakeTelegramBotService.deliveries.length === 1);
   assert.equal(fakeWebPushProvider.deliveries.length, 0);
-  assert.equal(fakeTelegramBotService.deliveries[0].chatId, "telegram-chat-1");
+  const firstTelegramDelivery = fakeTelegramBotService.deliveries[0];
+  assert.ok(firstTelegramDelivery);
+  assert.equal(firstTelegramDelivery.chatId, "telegram-chat-1");
   assert.match(
-    fakeTelegramBotService.deliveries[0].text,
+    firstTelegramDelivery.text,
     /Новое сообщение в Mobile Messenger/,
   );
-  assert.match(fakeTelegramBotService.deliveries[0].text, /Author/);
+  assert.match(firstTelegramDelivery.text, /Author/);
   assert.doesNotMatch(
-    fakeTelegramBotService.deliveries[0].text,
+    firstTelegramDelivery.text,
     /Telegram should receive this notification/,
   );
   assert.match(
-    fakeTelegramBotService.deliveries[0].text,
+    firstTelegramDelivery.text,
     /href="https:\/\/web\.example\.test\/messenger\?chatId=/,
   );
-  assert.equal(fakeTelegramBotService.deliveries[0].parseMode, "HTML");
-  assert.equal(
-    fakeTelegramBotService.deliveries[0].disableWebPagePreview,
-    true,
-  );
-  assert.equal(
-    fakeTelegramBotService.deliveries[0].inlineButtonText,
-    "Открыть чат",
-  );
+  assert.equal(firstTelegramDelivery.parseMode, "HTML");
+  assert.equal(firstTelegramDelivery.disableWebPagePreview, true);
+  assert.equal(firstTelegramDelivery.inlineButtonText, "Открыть чат");
   assert.match(
-    String(fakeTelegramBotService.deliveries[0].inlineButtonUrl),
+    String(firstTelegramDelivery.inlineButtonUrl),
     /\/messenger\?chatId=/,
   );
 });
@@ -727,8 +725,10 @@ test("push: web push is used when recipient has no Telegram link", async (t) => 
   assert.equal(sendResponse.status, 201);
 
   await waitFor(() => fakeWebPushProvider.deliveries.length === 1);
+  const webPushOnlyDelivery = fakeWebPushProvider.deliveries[0];
+  assert.ok(webPushOnlyDelivery);
   assert.equal(
-    fakeWebPushProvider.deliveries[0].endpoint,
+    webPushOnlyDelivery.endpoint,
     "https://push.example.test/subscriptions/web-push-only",
   );
   assert.equal(fakeTelegramBotService.deliveries.length, 0);

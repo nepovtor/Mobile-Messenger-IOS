@@ -32,6 +32,7 @@ import { MediaModule } from "../src/modules/media/media.module";
 import { MediaService } from "../src/modules/media/media.service";
 import { RealtimeModule } from "../src/modules/realtime/realtime.module";
 import { HealthModule } from "../src/modules/health/health.module";
+import { UsersModule } from "../src/modules/users/users.module";
 import { SMS_SERVICE, SmsService } from "../src/modules/auth/sms/sms.types";
 import { TelegramBotService } from "../src/modules/auth/telegram/telegram-bot.service";
 
@@ -127,56 +128,61 @@ type TestAppOptions = {
 async function createTestApp(
   options: TestAppOptions = {},
 ): Promise<INestApplication> {
-  process.env.NODE_ENV = "test";
-  process.env.JWT_SECRET = "test-jwt-secret";
-  process.env.JWT_EXPIRES_IN = "7d";
-  process.env.DB_SYNCHRONIZE = "true";
-  process.env.AUTH_ENABLE_DEMO_ACCOUNTS =
+  process.env["NODE_ENV"] = "test";
+  process.env["JWT_SECRET"] = "test-jwt-secret";
+  process.env["JWT_EXPIRES_IN"] = "7d";
+  process.env["DB_SYNCHRONIZE"] = "true";
+  process.env["AUTH_ENABLE_DEMO_ACCOUNTS"] =
     options.enableDemoAccounts === false ? "false" : "true";
-  process.env.AUTH_ALLOW_PASSWORD_LOGIN = options.allowPasswordLogin
+  process.env["AUTH_ALLOW_PASSWORD_LOGIN"] = options.allowPasswordLogin
     ? "true"
     : "false";
-  process.env.AUTH_ALLOW_TEST_CODE =
+  process.env["AUTH_ALLOW_TEST_CODE"] =
     options.allowTestCode === false ? "false" : "true";
-  process.env.AUTH_TEST_CODE = "123456";
-  process.env.AUTH_CODE_TTL_SECONDS = String(options.authCodeTTLSeconds ?? 300);
-  process.env.AUTH_CODE_MAX_ATTEMPTS = String(options.authCodeMaxAttempts ?? 5);
-  process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS = String(
+  process.env["AUTH_TEST_CODE"] = "123456";
+  process.env["AUTH_CODE_TTL_SECONDS"] = String(
+    options.authCodeTTLSeconds ?? 300,
+  );
+  process.env["AUTH_CODE_MAX_ATTEMPTS"] = String(
+    options.authCodeMaxAttempts ?? 5,
+  );
+  process.env["AUTH_CODE_RESEND_COOLDOWN_SECONDS"] = String(
     options.authCodeResendCooldownSeconds ?? 60,
   );
-  process.env.CHAT_ENABLE_DEMO_SEEDING = options.enableDemoChatSeeding
+  process.env["CHAT_ENABLE_DEMO_SEEDING"] = options.enableDemoChatSeeding
     ? "true"
     : "false";
-  process.env.AUTH_RATE_LIMIT_WINDOW_MS = "60000";
-  process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = String(
+  process.env["AUTH_RATE_LIMIT_WINDOW_MS"] = "60000";
+  process.env["AUTH_RATE_LIMIT_MAX_REQUESTS"] = String(
     options.authRateLimitMaxRequests ?? 20,
   );
-  process.env.VERIFICATION_PROVIDER = options.verificationProvider ?? "mock";
-  process.env.SMS_PROVIDER = options.smsProvider ?? "mock";
+  process.env["VERIFICATION_PROVIDER"] = options.verificationProvider ?? "mock";
+  process.env["SMS_PROVIDER"] = options.smsProvider ?? "mock";
   if (options.telegramBotToken === null) {
-    delete process.env.TELEGRAM_BOT_TOKEN;
+    delete process.env["TELEGRAM_BOT_TOKEN"];
   } else {
-    process.env.TELEGRAM_BOT_TOKEN =
+    process.env["TELEGRAM_BOT_TOKEN"] =
       options.telegramBotToken ?? "test-telegram-token";
   }
-  process.env.TELEGRAM_BOT_USERNAME = "mobile_messenger_test_bot";
-  process.env.TELEGRAM_ALLOW_TEXT_PHONE_LINKING =
+  process.env["TELEGRAM_BOT_USERNAME"] = "mobile_messenger_test_bot";
+  process.env["TELEGRAM_ALLOW_TEXT_PHONE_LINKING"] =
     options.telegramAllowTextPhoneLinking ? "true" : "false";
-  process.env.TELEGRAM_REQUIRE_OWN_CONTACT =
+  process.env["TELEGRAM_REQUIRE_OWN_CONTACT"] =
     options.telegramRequireOwnContact === false ? "false" : "true";
-  process.env.TELEGRAM_PAIRING_TOKEN_TTL_SECONDS = String(
+  process.env["TELEGRAM_PAIRING_TOKEN_TTL_SECONDS"] = String(
     options.telegramPairingTokenTTLSeconds ?? 600,
   );
-  process.env.TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS = String(
+  process.env["TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS"] = String(
     options.telegramLinkResendCooldownSeconds ?? 60,
   );
-  process.env.TELEGRAM_ALLOW_RELINK = options.telegramAllowRelink
+  process.env["TELEGRAM_ALLOW_RELINK"] = options.telegramAllowRelink
     ? "true"
     : "false";
   if (options.webAppUrl === null) {
-    delete process.env.WEB_APP_URL;
+    delete process.env["WEB_APP_URL"];
   } else {
-    process.env.WEB_APP_URL = options.webAppUrl ?? "https://web.example.test";
+    process.env["WEB_APP_URL"] =
+      options.webAppUrl ?? "https://web.example.test";
   }
 
   const moduleRef = await Test.createTestingModule({
@@ -221,6 +227,7 @@ async function createTestApp(
       RealtimeModule,
       AuthModule,
       HealthModule,
+      UsersModule,
       MediaModule,
       ChatModule,
     ],
@@ -251,7 +258,11 @@ function realtimeURL(app: INestApplication): string {
   return `ws://127.0.0.1:${port}/realtime`;
 }
 
-type SocketEvent<TData = unknown> = {
+type TransportEnvelopeValue = object | string | number | boolean | null;
+
+type TransportEnvelope = Record<string, TransportEnvelopeValue | undefined>;
+
+type SocketEvent<TData = TransportEnvelopeValue> = {
   event: string;
   data: TData;
 };
@@ -265,7 +276,7 @@ async function openRealtimeSocket(
   token: string,
 ): Promise<{
   socket: WebSocket;
-  nextEvent: <TData = unknown>(
+  nextEvent: <TData = TransportEnvelopeValue>(
     eventName: string,
   ) => Promise<SocketEvent<TData>>;
 }> {
@@ -303,7 +314,9 @@ async function openRealtimeSocket(
       cleanup();
       resolve({
         socket,
-        nextEvent: async <TData = unknown>(eventName: string) => {
+        nextEvent: async <TData = TransportEnvelopeValue>(
+          eventName: string,
+        ) => {
           const queuedIndex = queue.findIndex(
             (item) => item.event === eventName,
           );
@@ -345,7 +358,7 @@ async function openRealtimeSocket(
 function sendRealtimeEvent(
   socket: WebSocket,
   event: string,
-  data: Record<string, unknown>,
+  data: TransportEnvelope,
 ): void {
   socket.send(JSON.stringify({ event, data }));
 }
@@ -484,6 +497,98 @@ test("password login is disabled when the feature flag is off", async (t) => {
       contact: "+15551230011",
       password: "demo1111",
     })
+    .expect(403);
+});
+
+test("lab user can be created with a hashed password and log in via /api/login", async (t) => {
+  const app = await createTestApp({
+    allowPasswordLogin: true,
+    enableDemoAccounts: false,
+  });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const createResponse = await request(app.getHttpServer())
+    .post("/api/users")
+    .send({
+      login: "lab-user",
+      password: "Secret1234",
+      displayName: "Lab User",
+      phone: "+15550123456",
+    })
+    .expect(201);
+
+  assert.equal(createResponse.body.login, "lab-user");
+  assert.equal(createResponse.body.displayName, "Lab User");
+  assert.equal("passwordHash" in createResponse.body, false);
+
+  const usersRepository = app.get<Repository<UserEntity>>(
+    getRepositoryToken(UserEntity),
+  );
+  const savedUser = await usersRepository
+    .createQueryBuilder("user")
+    .addSelect("user.passwordHash")
+    .where("user.id = :id", { id: createResponse.body.userID as string })
+    .getOne();
+
+  assert.equal(savedUser?.login, "lab-user");
+  assert.equal(typeof savedUser?.passwordHash, "string");
+  assert.notEqual(savedUser?.passwordHash, "Secret1234");
+
+  const loginResponse = await request(app.getHttpServer())
+    .post("/api/login")
+    .send({
+      login: "lab-user",
+      password: "Secret1234",
+    })
+    .expect(201);
+
+  assert.equal(typeof loginResponse.body.token, "string");
+
+  const meResponse = await request(app.getHttpServer())
+    .get("/api/auth/me")
+    .set("Authorization", `Bearer ${loginResponse.body.token}`)
+    .expect(200);
+
+  assert.equal(meResponse.body.login, "lab-user");
+  assert.equal(meResponse.body.userID, createResponse.body.userID);
+});
+
+test("valid JWT returns 403 when the user no longer exists in the database", async (t) => {
+  const app = await createTestApp({
+    allowPasswordLogin: true,
+    enableDemoAccounts: false,
+  });
+  t.after(async () => {
+    await app.close();
+  });
+
+  const createResponse = await request(app.getHttpServer())
+    .post("/api/users")
+    .send({
+      login: "deleted-user",
+      password: "Secret1234",
+      displayName: "Deleted User",
+    })
+    .expect(201);
+
+  const loginResponse = await request(app.getHttpServer())
+    .post("/api/login")
+    .send({
+      login: "deleted-user",
+      password: "Secret1234",
+    })
+    .expect(201);
+
+  const usersRepository = app.get<Repository<UserEntity>>(
+    getRepositoryToken(UserEntity),
+  );
+  await usersRepository.delete(createResponse.body.userID as string);
+
+  await request(app.getHttpServer())
+    .get("/api/auth/me")
+    .set("Authorization", `Bearer ${loginResponse.body.token}`)
     .expect(403);
 });
 
@@ -841,7 +946,7 @@ test("expired token is rejected by REST and realtime websocket", async (t) => {
       displayName: anna.displayName,
     },
     {
-      secret: process.env.JWT_SECRET,
+      secret: process.env["JWT_SECRET"] ?? "test-jwt-secret",
       expiresIn: -1,
     },
   );
@@ -1329,7 +1434,7 @@ test("Telegram contact update creates TelegramLink with telegramUserId", async (
   });
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1377,7 +1482,7 @@ test("Telegram text phone linking is rejected when TELEGRAM_ALLOW_TEXT_PHONE_LIN
   });
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1408,7 +1513,10 @@ test("Telegram text phone linking is rejected when TELEGRAM_ALLOW_TEXT_PHONE_LIN
   const link = await repository.findOneBy({ phone: "+79991234567" });
 
   assert.equal(link, null);
-  assert.match(String(sentMessages[0]?.text), /Откройте приложение и нажмите/i);
+  assert.match(
+    String(sentMessages[0]?.["text"]),
+    /Откройте приложение и нажмите/i,
+  );
 });
 
 test("Telegram text phone linking is allowed only when TELEGRAM_ALLOW_TEXT_PHONE_LINKING=true", async (t) => {
@@ -1461,7 +1569,7 @@ test("Telegram subscription command sends a mini app offer with plan links", asy
   });
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1487,14 +1595,14 @@ test("Telegram subscription command sends a mini app offer with plan links", asy
   });
 
   assert.equal(sentMessages.length, 1);
-  assert.match(String(sentMessages[0]?.text), /mini app подписки/i);
+  assert.match(String(sentMessages[0]?.["text"]), /mini app подписки/i);
 
-  const replyMarkup = JSON.parse(String(sentMessages[0]?.reply_markup)) as {
-    inline_keyboard: Array<Array<Record<string, unknown>>>;
+  const replyMarkup = JSON.parse(String(sentMessages[0]?.["reply_markup"])) as {
+    inline_keyboard: Array<Array<TransportEnvelope>>;
   };
   const firstButton = replyMarkup.inline_keyboard[0]?.[0];
   assert.equal(
-    (firstButton?.web_app as { url?: string } | undefined)?.url,
+    (firstButton?.["web_app"] as { url?: string } | undefined)?.url,
     "https://web.example.test/telegram/subscription?source=telegram-bot&plan=team",
   );
 });
@@ -1544,7 +1652,7 @@ test("/start <token> accepts a valid pairing token", async (t) => {
   assert.ok(startToken);
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1575,7 +1683,7 @@ test("/start <token> accepts a valid pairing token", async (t) => {
 
   assert.equal(token.chatId, "900");
   assert.equal(token.telegramUserId, "900");
-  assert.match(String(sentMessages[0]?.text), /Привязка начата/i);
+  assert.match(String(sentMessages[0]?.["text"]), /Привязка начата/i);
 });
 
 test("expired pairing token is rejected", async (t) => {
@@ -1601,7 +1709,7 @@ test("expired pairing token is rejected", async (t) => {
   await repository.save(token);
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1629,7 +1737,10 @@ test("expired pairing token is rejected", async (t) => {
     phone: "+375291234567",
   });
   assert.equal(unchangedToken.chatId, null);
-  assert.match(String(sentMessages[0]?.text), /Срок действия ссылки истёк/i);
+  assert.match(
+    String(sentMessages[0]?.["text"]),
+    /Срок действия ссылки истёк/i,
+  );
 });
 
 test("consumed pairing token cannot be reused", async (t) => {
@@ -1655,7 +1766,7 @@ test("consumed pairing token cannot be reused", async (t) => {
   await repository.save(token);
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1679,7 +1790,7 @@ test("consumed pairing token cannot be reused", async (t) => {
     },
   });
 
-  assert.match(String(sentMessages[0]?.text), /уже использована/i);
+  assert.match(String(sentMessages[0]?.["text"]), /уже использована/i);
 });
 
 test("contact from a different user_id is rejected when TELEGRAM_REQUIRE_OWN_CONTACT=true", async (t) => {
@@ -1698,7 +1809,7 @@ test("contact from a different user_id is rejected when TELEGRAM_REQUIRE_OWN_CON
   assert.ok(startToken);
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1742,7 +1853,7 @@ test("contact from a different user_id is rejected when TELEGRAM_REQUIRE_OWN_CON
 
   assert.equal(link, null);
   assert.match(
-    String(sentMessages[sentMessages.length - 1]?.text),
+    String(sentMessages[sentMessages.length - 1]?.["text"]),
     /Контакт другого пользователя не подходит/i,
   );
 });
@@ -1763,7 +1874,7 @@ test("contact without user_id is rejected when TELEGRAM_REQUIRE_OWN_CONTACT=true
   assert.ok(startToken);
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -1806,7 +1917,7 @@ test("contact without user_id is rejected when TELEGRAM_REQUIRE_OWN_CONTACT=true
 
   assert.equal(link, null);
   assert.match(
-    String(sentMessages[sentMessages.length - 1]?.text),
+    String(sentMessages[sentMessages.length - 1]?.["text"]),
     /Telegram не подтвердил владельца контакта/i,
   );
 });
@@ -1975,7 +2086,7 @@ test("relink does not overwrite silently", async (t) => {
   assert.ok(startToken);
 
   const originalFetch = globalThis.fetch;
-  const sentMessages: Array<Record<string, unknown>> = [];
+  const sentMessages: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentMessages.push(body);
@@ -2018,7 +2129,7 @@ test("relink does not overwrite silently", async (t) => {
   assert.equal(unchangedLink.chatId, "old-chat");
   assert.equal(unchangedLink.telegramUserId, "700");
   assert.match(
-    String(sentMessages[sentMessages.length - 1]?.text),
+    String(sentMessages[sentMessages.length - 1]?.["text"]),
     /Автоперепривязка отключена/i,
   );
 });
@@ -2030,7 +2141,7 @@ test("/auth/request sends code when TelegramLink exists", async (t) => {
   });
 
   const originalFetch = globalThis.fetch;
-  const sentBodies: Array<Record<string, unknown>> = [];
+  const sentBodies: TransportEnvelope[] = [];
   globalThis.fetch = async (_input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     sentBodies.push(body);
@@ -2065,10 +2176,12 @@ test("/auth/request sends code when TelegramLink exists", async (t) => {
     .expect(201);
 
   assert.equal(response.body.delivery, "telegram");
-  const sendMessagePayload = sentBodies.find((item) => item.chat_id === "999");
+  const sendMessagePayload = sentBodies.find(
+    (item) => item["chat_id"] === "999",
+  );
   assert.ok(sendMessagePayload);
-  assert.match(String(sendMessagePayload?.text), /Mobile Messenger/);
-  assert.match(String(sendMessagePayload?.text), /123456/);
+  assert.match(String(sendMessagePayload?.["text"]), /Mobile Messenger/);
+  assert.match(String(sendMessagePayload?.["text"]), /123456/);
 });
 
 test("console verification works without Telegram bot token", async (t) => {

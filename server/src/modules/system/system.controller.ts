@@ -6,10 +6,12 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from "@nestjs/common";
+import { SkipUserAuth } from "../auth/decorators/skip-user-auth.decorator";
 import { AdminGuard } from "../admin/admin.guard";
 import { SystemService } from "./system.service";
 
 @Controller("system")
+@SkipUserAuth()
 @UseGuards(AdminGuard)
 export class SystemController {
   constructor(private readonly systemService: SystemService) {}

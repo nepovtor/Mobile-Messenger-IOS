@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { TelegramBotService } from "../src/modules/auth/telegram/telegram-bot.service";
 
+type TelegramServiceProbe = {
+  logger: {
+    warn: (message: string) => void;
+    error: (
+      ...args: Array<object | string | number | boolean | null | undefined>
+    ) => void;
+  };
+  polling: boolean;
+  pollingTimer: NodeJS.Timeout | null;
+  pollOnce: () => Promise<void>;
+};
+
 function withEnv(
   updates: Record<string, string | undefined>,
   run: () => Promise<void>,
@@ -31,7 +43,9 @@ function withEnv(
 test("Telegram polling stops cleanly after a getUpdates 409 conflict", async () => {
   const originalFetch = global.fetch;
   const warnings: string[] = [];
-  const errors: unknown[] = [];
+  const errors: Array<
+    Array<object | string | number | boolean | null | undefined>
+  > = [];
 
   try {
     global.fetch = async () =>
@@ -52,21 +66,17 @@ test("Telegram polling stops cleanly after a getUpdates 409 conflict", async () 
           {} as never,
           {} as never,
         );
-        const serviceState = service as unknown as {
-          logger: {
-            warn: (message: string) => void;
-            error: (...args: unknown[]) => void;
-          };
-          polling: boolean;
-          pollingTimer: NodeJS.Timeout | null;
-          pollOnce: () => Promise<void>;
-        };
+        const serviceState = service as object as TelegramServiceProbe;
 
         serviceState.logger = {
           warn: (message: string) => {
             warnings.push(message);
           },
-          error: (...args: unknown[]) => {
+          error: (
+            ...args: Array<
+              object | string | number | boolean | null | undefined
+            >
+          ) => {
             errors.push(args);
           },
         };

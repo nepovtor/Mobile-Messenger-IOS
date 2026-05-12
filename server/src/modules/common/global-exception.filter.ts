@@ -7,21 +7,23 @@ import {
 } from "@nestjs/common";
 import { Response } from "express";
 import { appLogger } from "./app-logger";
+import { JsonObject, Throwable } from "./json.types";
+
+type RequestLogContext = {
+  method?: string;
+  originalUrl?: string;
+  url?: string;
+  params?: Record<string, string>;
+  query?: Record<string, string | string[]>;
+  body?: JsonObject;
+};
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: Throwable, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request =
-      ctx.getRequest<{
-        method?: string;
-        originalUrl?: string;
-        url?: string;
-        params?: Record<string, string>;
-        query?: Record<string, string | string[]>;
-        body?: Record<string, unknown>;
-      }>() ?? {};
+    const request = ctx.getRequest<RequestLogContext>() ?? {};
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -39,7 +41,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
 
       // Ensure response is always JSON object
-      if (typeof exceptionResponse === "object") {
+      if (typeof exceptionResponse === "object" && exceptionResponse !== null) {
         response.status(status).json(exceptionResponse);
       } else {
         response.status(status).json({

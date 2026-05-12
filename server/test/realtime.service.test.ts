@@ -14,6 +14,16 @@ type FakeSocket = {
   terminate: () => void;
 };
 
+type ConnectionMetaProbe = {
+  userID: string;
+  lastPongAt: number;
+};
+
+type RealtimeServiceProbe = {
+  connectionMeta: Map<WebSocket, ConnectionMetaProbe | object>;
+  flushHeartbeat: () => void;
+};
+
 function createFakeSocket(): FakeSocket {
   return {
     readyState: WebSocket.OPEN,
@@ -40,41 +50,37 @@ function createFakeSocket(): FakeSocket {
 }
 
 test("heartbeat closes dead connections", () => {
-  process.env.REALTIME_HEARTBEAT_INTERVAL_MS = "10";
-  process.env.REALTIME_HEARTBEAT_TIMEOUT_MS = "20";
+  process.env["REALTIME_HEARTBEAT_INTERVAL_MS"] = "10";
+  process.env["REALTIME_HEARTBEAT_TIMEOUT_MS"] = "20";
 
   const service = new RealtimeService();
-  const socket = createFakeSocket() as unknown as WebSocket;
+  const socket = createFakeSocket() as WebSocket & FakeSocket;
   service.registerConnection("user-1", socket);
 
-  const meta = (
-    service as unknown as {
-      connectionMeta: Map<WebSocket, { lastPongAt: number; userID: string }>;
-    }
-  ).connectionMeta.get(socket);
+  const serviceProbe = service as object as RealtimeServiceProbe;
+  const meta = serviceProbe.connectionMeta.get(socket) as
+    | ConnectionMetaProbe
+    | undefined;
   assert.ok(meta);
   meta.lastPongAt = Date.now() - 100;
 
-  (service as unknown as { flushHeartbeat: () => void }).flushHeartbeat();
+  serviceProbe.flushHeartbeat();
 
-  assert.equal(
-    (service as unknown as { connectionMeta: Map<WebSocket, unknown> })
-      .connectionMeta.size,
-    0,
-  );
-  assert.equal((socket as unknown as FakeSocket).terminated, true);
+  assert.equal(serviceProbe.connectionMeta.size, 0);
+  assert.equal(socket.terminated, true);
 });
 
 test("heartbeat pings healthy connections", () => {
-  process.env.REALTIME_HEARTBEAT_INTERVAL_MS = "10";
-  process.env.REALTIME_HEARTBEAT_TIMEOUT_MS = "200";
+  process.env["REALTIME_HEARTBEAT_INTERVAL_MS"] = "10";
+  process.env["REALTIME_HEARTBEAT_TIMEOUT_MS"] = "200";
 
   const service = new RealtimeService();
-  const socket = createFakeSocket() as unknown as WebSocket;
+  const socket = createFakeSocket() as WebSocket & FakeSocket;
   service.registerConnection("user-1", socket);
 
-  (service as unknown as { flushHeartbeat: () => void }).flushHeartbeat();
+  const serviceProbe = service as object as RealtimeServiceProbe;
+  serviceProbe.flushHeartbeat();
 
-  assert.equal((socket as unknown as FakeSocket).pingCount, 1);
-  assert.equal((socket as unknown as FakeSocket).terminated, false);
+  assert.equal(socket.pingCount, 1);
+  assert.equal(socket.terminated, false);
 });

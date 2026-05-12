@@ -5,6 +5,7 @@ import { CurrentUser } from "./decorators/current-user.decorator";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { AuthGuard } from "./auth.guard";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
+import { Public } from "./decorators/public.decorator";
 import { AuthService } from "./auth.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
@@ -21,6 +22,7 @@ export class AuthController {
   ) {}
 
   @Post("request")
+  @Public()
   requestCode(@Req() request: Request, @Body() dto: RequestAuthDto) {
     this.authRateLimitService.consume(`${this.getRequestIP(request)}:request`, {
       message: "Too many auth requests",
@@ -32,6 +34,7 @@ export class AuthController {
   }
 
   @Post("verify")
+  @Public()
   verifyCode(@Req() request: Request, @Body() dto: VerifyAuthDto) {
     const phoneOrContact = dto.phone ?? dto.contact;
     if (phoneOrContact) {
@@ -54,12 +57,14 @@ export class AuthController {
   }
 
   @Post("login")
+  @Public()
   login(@Req() request: Request, @Body() dto: LoginAuthDto) {
     this.authRateLimitService.consume(`${this.getRequestIP(request)}:login`);
     return this.authService.login(dto);
   }
 
   @Post("telegram/pairing")
+  @Public()
   createTelegramPairing(
     @Req() request: Request,
     @Body() dto: RequestTelegramPairingDto,
@@ -79,7 +84,8 @@ export class AuthController {
   private getRequestIP(request: Request): string {
     const forwardedFor = request.headers["x-forwarded-for"];
     if (typeof forwardedFor === "string") {
-      return forwardedFor.split(",")[0].trim();
+      const firstForwardedFor = forwardedFor.split(",")[0];
+      return firstForwardedFor ? firstForwardedFor.trim() : "unknown";
     }
 
     return request.ip || "unknown";

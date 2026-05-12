@@ -30,7 +30,18 @@ export class UserEntity {
   contact!: string;
 
   @Column({ type: "varchar", unique: true, nullable: true })
+  login!: string | null;
+
+  @Column({ type: "varchar", unique: true, nullable: true })
   phone!: string | null;
+
+  @Column({
+    name: "password_hash",
+    type: "varchar",
+    nullable: true,
+    select: false,
+  })
+  passwordHash!: string | null;
 
   @Column({ name: "telegram_chat_id", type: "varchar", nullable: true })
   telegramChatId!: string | null;

@@ -18,34 +18,40 @@ import {
   getS3Endpoint,
   getS3PublicEndpoint,
   getNodeEnv,
+  isJwtConfigured,
   getSmsProvider,
   getVerificationProvider,
   isPasswordLoginEnabled,
   isDatabaseSynchronizationEnabled,
 } from "../common/runtime-config";
+import { isJsonObject, JsonObject } from "../common/json.types";
 
 function getServerRootDir() {
   return path.join(__dirname, "..", "..", "..");
 }
 
-function readJsonFile(filePath: string): Record<string, unknown> | null {
+function readJsonFile(filePath: string): JsonObject | null {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(raw) as Record<string, unknown>;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && isJsonObject(parsed)) {
+      return parsed;
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
 function readCompilerOption(
-  config: Record<string, unknown> | null,
+  config: JsonObject | null,
   key: string,
 ): string | boolean | null {
   const compilerOptions =
     config &&
-    typeof config.compilerOptions === "object" &&
-    config.compilerOptions !== null
-      ? (config.compilerOptions as Record<string, unknown>)
+    typeof config["compilerOptions"] === "object" &&
+    config["compilerOptions"] !== null
+      ? (config["compilerOptions"] as JsonObject)
       : null;
 
   if (!compilerOptions || !(key in compilerOptions)) {
@@ -113,10 +119,11 @@ export class SystemService {
       generatedAt: new Date().toISOString(),
       api: {
         name:
-          (typeof packageJson?.name === "string" && packageJson.name) ||
+          (typeof packageJson?.["name"] === "string" && packageJson["name"]) ||
           "mobile-messenger-backend",
         version:
-          (typeof packageJson?.version === "string" && packageJson.version) ||
+          (typeof packageJson?.["version"] === "string" &&
+            packageJson["version"]) ||
           "0.0.0",
         environment: getNodeEnv(),
         nodeVersion: process.version,
@@ -140,6 +147,9 @@ export class SystemService {
           path.join(serverRootDir, "Dockerfile"),
         ),
         composeFilePresent: fs.existsSync(
+          path.join(serverRootDir, "docker-compose.yml"),
+        ),
+        devComposeFilePresent: fs.existsSync(
           path.join(serverRootDir, "docker-compose.dev.yml"),
         ),
       },
@@ -147,9 +157,9 @@ export class SystemService {
         driver: "postgres",
         orm: "typeorm",
         connected: true,
-        host: process.env.DB_HOST || "localhost",
-        port: Number(process.env.DB_PORT || "5432"),
-        name: process.env.DB_NAME || "messenger",
+        host: process.env["DB_HOST"] || "localhost",
+        port: Number(process.env["DB_PORT"] || "5432"),
+        name: process.env["DB_NAME"] || "messenger",
         synchronize: isDatabaseSynchronizationEnabled(),
         counts: {
           users,
@@ -189,7 +199,7 @@ export class SystemService {
         })),
       },
       authentication: {
-        jwtConfigured: Boolean(process.env.JWT_SECRET?.trim()),
+        jwtConfigured: isJwtConfigured(),
         jwtExpiresIn: getJwtExpiresIn(),
         bearerScheme: "Bearer",
         adminConsoleEnabled: isAdminConsoleEnabled(),
@@ -198,12 +208,25 @@ export class SystemService {
         smsProvider: getSmsProvider(),
         demoAccountsEnabled: areDemoAccountsEnabled(),
         passwordLoginEnabled: isPasswordLoginEnabled(),
+        publicRoutes: [
+          "/api",
+          "/api/health",
+          "/api/version",
+          "/api/login",
+          "/api/users",
+          "/api/auth/request",
+          "/api/auth/verify",
+          "/api/auth/login",
+          "/api/admin/login",
+        ],
         protectedRoutes: [
           "/api/admin/me",
           "/api/auth/me",
           "/api/contacts",
           "/api/chats",
           "/api/location/me",
+          "/api/media/upload-url",
+          "/api/push/status",
           "/api/system/overview",
         ],
       },

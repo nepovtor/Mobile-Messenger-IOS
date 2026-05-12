@@ -74,8 +74,6 @@ export class ChatService implements OnModuleInit {
     private readonly messagesRepository: Repository<MessageEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
-    @InjectRepository(MediaEntity)
-    private readonly mediaRepository: Repository<MediaEntity>,
     private readonly realtimeService: RealtimeService,
     private readonly mediaService: MediaService,
     private readonly pushService: PushService,
@@ -113,7 +111,10 @@ export class ChatService implements OnModuleInit {
           existingDirectChat.id,
           user.sub,
         );
-        const summary = await this.getChatSummary(existingDirectChat.id, user.sub);
+        const summary = await this.getChatSummary(
+          existingDirectChat.id,
+          user.sub,
+        );
         if (wasRestored) {
           this.realtimeService.publishToUsers([user.sub], {
             type: "chat.created",
@@ -213,7 +214,8 @@ export class ChatService implements OnModuleInit {
 
     participant.hiddenAt = new Date();
     participant.lastReadAt = latestMessage?.createdAt ?? participant.lastReadAt;
-    participant.lastReadMessageId = latestMessage?.id ?? participant.lastReadMessageId;
+    participant.lastReadMessageId =
+      latestMessage?.id ?? participant.lastReadMessageId;
     await this.participantsRepository.save(participant);
 
     this.realtimeService.setTyping(chatID, user.sub, user.displayName, false);
@@ -639,6 +641,7 @@ export class ChatService implements OnModuleInit {
       },
       {
         sub: currentUser.id,
+        login: currentUser.login ?? currentUser.contact,
         displayName: currentUser.displayName,
         contact: currentUser.contact,
         method: currentUser.method,

@@ -49,7 +49,7 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  const port = process.env.PORT ? Number(process.env.PORT) : 8080;
+  const port = process.env["PORT"] ? Number(process.env["PORT"]) : 8080;
   await app.listen(port, "0.0.0.0");
   await appLogger.info("bootstrap", "API server started", {
     port,

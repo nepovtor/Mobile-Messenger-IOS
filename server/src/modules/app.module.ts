@@ -1,14 +1,10 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { ContactEntity } from "../entities/contact.entity";
-import { LocationShareEntity } from "../entities/location-share.entity";
-import { PhoneVerificationCodeEntity } from "../entities/phone-verification-code.entity";
-import { PushSubscriptionEntity } from "../entities/push-subscription.entity";
-import { TelegramLinkEntity } from "../entities/telegram-link.entity";
-import { TelegramPairingTokenEntity } from "../entities/telegram-pairing-token.entity";
+import { buildNestDatabaseOptions } from "../database/database.config";
 import { AdminModule } from "./admin/admin.module";
-import { isDatabaseSynchronizationEnabled } from "./common/runtime-config";
 import { AuthModule } from "./auth/auth.module";
+import { AuthGuard } from "./auth/auth.guard";
 import { ChatModule } from "./chat/chat.module";
 import { ContactsModule } from "./contacts/contacts.module";
 import { DocsModule } from "./docs/docs.module";
@@ -23,26 +19,7 @@ import { VersionModule } from "./version/version.module";
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: "postgres",
-      host: process.env.DB_HOST || "localhost",
-      port: Number(process.env.DB_PORT || "5432"),
-      username: process.env.DB_USER || "postgres",
-      password: process.env.DB_PASSWORD || "postgres",
-      database: process.env.DB_NAME || "messenger",
-      autoLoadEntities: true,
-      synchronize: isDatabaseSynchronizationEnabled(),
-      retryAttempts: 5,
-      retryDelay: 2000,
-      entities: [
-        ContactEntity,
-        LocationShareEntity,
-        PhoneVerificationCodeEntity,
-        PushSubscriptionEntity,
-        TelegramLinkEntity,
-        TelegramPairingTokenEntity,
-      ],
-    }),
+    TypeOrmModule.forRoot(buildNestDatabaseOptions()),
     DocsModule,
     HealthModule,
     VersionModule,
@@ -56,6 +33,12 @@ import { VersionModule } from "./version/version.module";
     MediaModule,
     ChatModule,
     SystemModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
   ],
 })
 export class AppModule {}

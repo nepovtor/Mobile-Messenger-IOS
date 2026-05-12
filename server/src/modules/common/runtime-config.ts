@@ -1,5 +1,9 @@
+function readEnv(name: string): string | undefined {
+  return process.env[name];
+}
+
 export function getNodeEnv(): string {
-  return process.env.NODE_ENV?.trim() || "development";
+  return readEnv("NODE_ENV")?.trim() || "development";
 }
 
 const LOCAL_WEB_APP_URL = "http://127.0.0.1:3000";
@@ -24,27 +28,36 @@ export function readBooleanEnv(name: string, defaultValue: boolean): boolean {
 }
 
 export function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET?.trim();
+  const secret =
+    readEnv("JWT_SECRET_KEY")?.trim() || readEnv("JWT_SECRET")?.trim();
   if (!secret) {
-    throw new Error("JWT_SECRET environment variable is required");
+    throw new Error(
+      "JWT_SECRET_KEY or JWT_SECRET environment variable is required",
+    );
   }
   return secret;
 }
 
+export function isJwtConfigured(): boolean {
+  return Boolean(
+    readEnv("JWT_SECRET_KEY")?.trim() || readEnv("JWT_SECRET")?.trim(),
+  );
+}
+
 export function getJwtExpiresIn(): string {
-  return process.env.JWT_EXPIRES_IN?.trim() || "7d";
+  return readEnv("JWT_EXPIRES_IN")?.trim() || "7d";
 }
 
 export function getAdminLogin(): string {
-  return process.env.ADMIN_LOGIN?.trim() || "admin";
+  return readEnv("ADMIN_LOGIN")?.trim() || "admin";
 }
 
 export function getAdminDisplayName(): string {
-  return process.env.ADMIN_DISPLAY_NAME?.trim() || "Administrator";
+  return readEnv("ADMIN_DISPLAY_NAME")?.trim() || "Administrator";
 }
 
 export function getAdminPassword(): string | null {
-  const password = process.env.ADMIN_PASSWORD?.trim();
+  const password = readEnv("ADMIN_PASSWORD")?.trim();
   if (password) {
     return password;
   }
@@ -61,7 +74,7 @@ export function isAdminConsoleEnabled(): boolean {
 }
 
 export function getAdminJwtExpiresIn(): string {
-  return process.env.ADMIN_JWT_EXPIRES_IN?.trim() || getJwtExpiresIn();
+  return readEnv("ADMIN_JWT_EXPIRES_IN")?.trim() || getJwtExpiresIn();
 }
 
 function normalizeUrl(value: string): string {
@@ -69,12 +82,12 @@ function normalizeUrl(value: string): string {
 }
 
 export function getS3Endpoint(): string | null {
-  const value = process.env.S3_ENDPOINT?.trim();
+  const value = readEnv("S3_ENDPOINT")?.trim();
   return value ? normalizeUrl(value) : null;
 }
 
 export function getS3PublicEndpoint(): string | null {
-  const value = process.env.S3_PUBLIC_ENDPOINT?.trim();
+  const value = readEnv("S3_PUBLIC_ENDPOINT")?.trim();
   if (value) {
     return normalizeUrl(value);
   }
@@ -83,11 +96,11 @@ export function getS3PublicEndpoint(): string | null {
 }
 
 export function getS3Bucket(): string {
-  return process.env.S3_BUCKET?.trim() || "messenger-media";
+  return readEnv("S3_BUCKET")?.trim() || "messenger-media";
 }
 
 export function getS3Region(): string {
-  return process.env.S3_REGION?.trim() || "us-east-1";
+  return readEnv("S3_REGION")?.trim() || "us-east-1";
 }
 
 export function isS3ForcePathStyle(): boolean {
@@ -96,7 +109,7 @@ export function isS3ForcePathStyle(): boolean {
 
 export function getWebAppUrl(): string | null {
   const value =
-    process.env.WEB_APP_URL?.trim() || process.env.PUBLIC_WEB_URL?.trim();
+    readEnv("WEB_APP_URL")?.trim() || readEnv("PUBLIC_WEB_URL")?.trim();
   if (value) {
     return normalizeUrl(value);
   }
@@ -133,22 +146,22 @@ export function isTestCodeAllowed(): boolean {
 }
 
 export function getAuthTestCode(): string {
-  const code = process.env.AUTH_TEST_CODE?.trim() || "123456";
+  const code = readEnv("AUTH_TEST_CODE")?.trim() || "123456";
   return /^\d{6}$/.test(code) ? code : "123456";
 }
 
 export function getAuthCodeTTLSeconds(): number {
-  const value = Number(process.env.AUTH_CODE_TTL_SECONDS || "300");
+  const value = Number(readEnv("AUTH_CODE_TTL_SECONDS") || "300");
   return Number.isFinite(value) && value > 0 ? value : 300;
 }
 
 export function getAuthCodeMaxAttempts(): number {
-  const value = Number(process.env.AUTH_CODE_MAX_ATTEMPTS || "5");
+  const value = Number(readEnv("AUTH_CODE_MAX_ATTEMPTS") || "5");
   return Number.isFinite(value) && value > 0 ? value : 5;
 }
 
 export function getAuthCodeResendCooldownSeconds(): number {
-  const value = Number(process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS || "60");
+  const value = Number(readEnv("AUTH_CODE_RESEND_COOLDOWN_SECONDS") || "60");
   return Number.isFinite(value) && value > 0 ? value : 60;
 }
 
@@ -170,7 +183,7 @@ export type SmsProviderName =
 export type VerificationProviderName = "telegram" | "console" | "mock" | "sms";
 
 export function getVerificationProvider(): VerificationProviderName {
-  const value = process.env.VERIFICATION_PROVIDER?.trim().toLowerCase();
+  const value = readEnv("VERIFICATION_PROVIDER")?.trim().toLowerCase();
   switch (value) {
     case "telegram":
     case "console":
@@ -193,7 +206,7 @@ export function getVerificationProvider(): VerificationProviderName {
 }
 
 export function getSmsProvider(): SmsProviderName {
-  const value = process.env.SMS_PROVIDER?.trim().toLowerCase();
+  const value = readEnv("SMS_PROVIDER")?.trim().toLowerCase();
   switch (value) {
     case "twilio":
     case "vonage":
@@ -207,12 +220,12 @@ export function getSmsProvider(): SmsProviderName {
 }
 
 export function getTelegramBotToken(): string | null {
-  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  const token = readEnv("TELEGRAM_BOT_TOKEN")?.trim();
   return token || null;
 }
 
 export function getTelegramBotUsername(): string | null {
-  const username = process.env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@+/, "");
+  const username = readEnv("TELEGRAM_BOT_USERNAME")?.trim().replace(/^@+/, "");
   return username || null;
 }
 
@@ -229,13 +242,13 @@ export function isTelegramOwnContactRequired(): boolean {
 }
 
 export function getTelegramPairingTokenTTLSeconds(): number {
-  const value = Number(process.env.TELEGRAM_PAIRING_TOKEN_TTL_SECONDS || "600");
+  const value = Number(readEnv("TELEGRAM_PAIRING_TOKEN_TTL_SECONDS") || "600");
   return Number.isFinite(value) && value > 0 ? value : 600;
 }
 
 export function getTelegramLinkResendCooldownSeconds(): number {
   const value = Number(
-    process.env.TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS || "60",
+    readEnv("TELEGRAM_LINK_RESEND_COOLDOWN_SECONDS") || "60",
   );
   return Number.isFinite(value) && value > 0 ? value : 60;
 }
@@ -245,7 +258,7 @@ export function isTelegramRelinkAllowed(): boolean {
 }
 
 export function getSmsFrom(): string {
-  return process.env.SMS_FROM?.trim() || "MobileMsg";
+  return readEnv("SMS_FROM")?.trim() || "MobileMsg";
 }
 
 export function canUseConsoleSmsInCurrentEnv(): boolean {
@@ -257,10 +270,10 @@ export function getTwilioConfig(): {
   authToken: string;
   from: string;
 } | null {
-  const accountSID = process.env.SMS_TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.SMS_TWILIO_AUTH_TOKEN?.trim();
+  const accountSID = readEnv("SMS_TWILIO_ACCOUNT_SID")?.trim();
+  const authToken = readEnv("SMS_TWILIO_AUTH_TOKEN")?.trim();
   const from =
-    process.env.SMS_TWILIO_FROM?.trim() || process.env.SMS_FROM?.trim();
+    readEnv("SMS_TWILIO_FROM")?.trim() || readEnv("SMS_FROM")?.trim();
 
   if (!accountSID || !authToken || !from) {
     return null;
@@ -270,7 +283,8 @@ export function getTwilioConfig(): {
 }
 
 export function getCorsOrigins(): string[] {
-  const configured = process.env.CORS_ORIGINS?.split(",")
+  const configured = readEnv("CORS_ORIGINS")
+    ?.split(",")
     .map((value) => value.trim())
     .filter(Boolean);
 
@@ -286,12 +300,12 @@ export function getCorsOrigins(): string[] {
 }
 
 export function getAuthRateLimitWindowMs(): number {
-  const value = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || "60000");
+  const value = Number(readEnv("AUTH_RATE_LIMIT_WINDOW_MS") || "60000");
   return Number.isFinite(value) && value > 0 ? value : 60000;
 }
 
 export function getAuthRateLimitMaxRequests(): number {
-  const value = Number(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || "20");
+  const value = Number(readEnv("AUTH_RATE_LIMIT_MAX_REQUESTS") || "20");
   return Number.isFinite(value) && value > 0 ? value : 20;
 }
 
@@ -304,12 +318,12 @@ export function isDemoChatSeedingEnabled(): boolean {
 }
 
 export function getRealtimeHeartbeatIntervalMs(): number {
-  const value = Number(process.env.REALTIME_HEARTBEAT_INTERVAL_MS || "15000");
+  const value = Number(readEnv("REALTIME_HEARTBEAT_INTERVAL_MS") || "15000");
   return Number.isFinite(value) && value > 0 ? value : 15000;
 }
 
 export function getRealtimeHeartbeatTimeoutMs(): number {
-  const value = Number(process.env.REALTIME_HEARTBEAT_TIMEOUT_MS || "45000");
+  const value = Number(readEnv("REALTIME_HEARTBEAT_TIMEOUT_MS") || "45000");
   return Number.isFinite(value) && value > 0 ? value : 45000;
 }
 
@@ -318,7 +332,7 @@ function normalizeMultilineSecret(value: string): string {
 }
 
 export function getWebPushVapidPublicKey(): string {
-  const value = process.env.WEB_PUSH_VAPID_PUBLIC_KEY?.trim();
+  const value = readEnv("WEB_PUSH_VAPID_PUBLIC_KEY")?.trim();
   if (!value) {
     throw new Error(
       "WEB_PUSH_VAPID_PUBLIC_KEY environment variable is required",
@@ -328,7 +342,7 @@ export function getWebPushVapidPublicKey(): string {
 }
 
 export function getWebPushVapidPrivateKey(): string {
-  const value = process.env.WEB_PUSH_VAPID_PRIVATE_KEY?.trim();
+  const value = readEnv("WEB_PUSH_VAPID_PRIVATE_KEY")?.trim();
   if (!value) {
     throw new Error(
       "WEB_PUSH_VAPID_PRIVATE_KEY environment variable is required",
@@ -338,7 +352,7 @@ export function getWebPushVapidPrivateKey(): string {
 }
 
 export function getWebPushVapidSubject(): string {
-  const value = process.env.WEB_PUSH_VAPID_SUBJECT?.trim();
+  const value = readEnv("WEB_PUSH_VAPID_SUBJECT")?.trim();
   if (!value) {
     throw new Error("WEB_PUSH_VAPID_SUBJECT environment variable is required");
   }
@@ -347,9 +361,9 @@ export function getWebPushVapidSubject(): string {
 
 export function hasWebPushConfig(): boolean {
   return Boolean(
-    process.env.WEB_PUSH_VAPID_PUBLIC_KEY?.trim() &&
-    process.env.WEB_PUSH_VAPID_PRIVATE_KEY?.trim() &&
-    process.env.WEB_PUSH_VAPID_SUBJECT?.trim(),
+    readEnv("WEB_PUSH_VAPID_PUBLIC_KEY")?.trim() &&
+    readEnv("WEB_PUSH_VAPID_PRIVATE_KEY")?.trim() &&
+    readEnv("WEB_PUSH_VAPID_SUBJECT")?.trim(),
   );
 }
 
@@ -360,12 +374,12 @@ export function getApnsConfig(): {
   privateKey: string;
   environment: "sandbox" | "production";
 } | null {
-  const teamId = process.env.APNS_TEAM_ID?.trim();
-  const keyId = process.env.APNS_KEY_ID?.trim();
-  const bundleId = process.env.APNS_BUNDLE_ID?.trim();
-  const privateKey = process.env.APNS_PRIVATE_KEY?.trim();
+  const teamId = readEnv("APNS_TEAM_ID")?.trim();
+  const keyId = readEnv("APNS_KEY_ID")?.trim();
+  const bundleId = readEnv("APNS_BUNDLE_ID")?.trim();
+  const privateKey = readEnv("APNS_PRIVATE_KEY")?.trim();
   const environment =
-    process.env.APNS_ENVIRONMENT?.trim().toLowerCase() === "production"
+    readEnv("APNS_ENVIRONMENT")?.trim().toLowerCase() === "production"
       ? "production"
       : "sandbox";
 

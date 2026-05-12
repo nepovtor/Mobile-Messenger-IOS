@@ -2,6 +2,7 @@ import { Controller, Get, Header, Req } from "@nestjs/common";
 import type { Request } from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Public } from "../auth/decorators/public.decorator";
 
 type Endpoint = {
   method: string;
@@ -14,11 +15,12 @@ type Endpoint = {
 export class DocsController {
   @Get()
   @Header("Content-Type", "text/html; charset=utf-8")
+  @Public()
   renderLanding(@Req() request: Request): string {
     const pkg = this.readPackageInfo();
     const protocol = request.protocol || "http";
     const host =
-      request.get("host") || `localhost:${process.env.PORT || "8080"}`;
+      request.get("host") || `localhost:${process.env["PORT"] || "8080"}`;
     const baseUrl = `${protocol}://${host}/api`;
 
     return buildLandingPage({
@@ -65,6 +67,21 @@ function buildLandingPage(input: {
       method: "POST",
       path: "/auth/login",
       description: "Вход по demo-паролю для локальной разработки.",
+    },
+    {
+      method: "POST",
+      path: "/users",
+      description: "Создание лабораторного пользователя с bcrypt-хешем пароля.",
+    },
+    {
+      method: "POST",
+      path: "/login",
+      description: "Лабораторный login/password вход с JWT в ответе.",
+    },
+    {
+      method: "POST",
+      path: "/admin/login",
+      description: "Отдельный вход администратора для dashboard и логов.",
     },
   ];
 
@@ -196,7 +213,7 @@ function buildLandingPage(input: {
   const quickChecks = [
     `curl ${escapeHtml(`${input.baseUrl}/health`)}`,
     `curl ${escapeHtml(`${input.baseUrl}/version`)}`,
-    `curl -X POST ${escapeHtml(`${input.baseUrl}/auth/login`)}`,
+    `curl -X POST ${escapeHtml(`${input.baseUrl}/login`)}`,
   ];
 
   return `<!doctype html>

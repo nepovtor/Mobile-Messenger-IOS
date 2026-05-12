@@ -1,6 +1,7 @@
 import { mkdir, readFile, appendFile } from "node:fs/promises";
 import * as path from "node:path";
 import type { NextFunction, Request, Response } from "express";
+import { isJsonObject, JsonObject, JsonValue, Throwable } from "./json.types";
 
 export type LogFileKind = "app" | "request" | "error";
 export type LogLevel = "info" | "warn" | "error";
@@ -11,7 +12,11 @@ export type LogEntry = {
   kind: LogFileKind;
   context: string;
   message: string;
-  meta: Record<string, unknown> | null;
+  meta: JsonObject | null;
+};
+
+type LogMeta = {
+  [key: string]: Throwable;
 };
 
 const SENSITIVE_KEYS = new Set([
@@ -54,7 +59,11 @@ function truncateString(value: string) {
   return `${value.slice(0, 997)}...`;
 }
 
-function sanitizeLogValue(value: unknown): unknown {
+function sanitizeLogValue(value: Throwable): JsonValue {
+  if (value === undefined) {
+    return null;
+  }
+
   if (
     value === null ||
     typeof value === "number" ||
@@ -80,12 +89,18 @@ function sanitizeLogValue(value: unknown): unknown {
   }
 
   if (typeof value === "object") {
+    if (!isJsonObject(value)) {
+      return {};
+    }
+
     return Object.fromEntries(
       Object.entries(value).map(([key, nestedValue]) => [
         key,
-        SENSITIVE_KEYS.has(key) ? "[redacted]" : sanitizeLogValue(nestedValue),
+        SENSITIVE_KEYS.has(key)
+          ? "[redacted]"
+          : sanitizeLogValue(nestedValue as Throwable),
       ]),
-    );
+    ) as JsonObject;
   }
 
   return String(value);
@@ -101,37 +116,33 @@ async function appendLogEntry(entry: LogEntry) {
 }
 
 export const appLogger = {
-  async info(
-    context: string,
-    message: string,
-    meta: Record<string, unknown> | null = null,
-  ) {
+  async info(context: string, message: string, meta: LogMeta | null = null) {
     await appendLogEntry({
       timestamp: new Date().toISOString(),
       level: "info",
       kind: "app",
       context,
       message,
-      meta: meta ? (sanitizeLogValue(meta) as Record<string, unknown>) : null,
+      meta: meta ? (sanitizeLogValue(meta) as JsonObject) : null,
     });
   },
 
-  async request(meta: Record<string, unknown>) {
+  async request(meta: LogMeta) {
     await appendLogEntry({
       timestamp: new Date().toISOString(),
       level: "info",
       kind: "request",
       context: "http",
-      message: `${String(meta.method ?? "UNKNOWN")} ${String(meta.url ?? "/")}`,
-      meta: sanitizeLogValue(meta) as Record<string, unknown>,
+      message: `${String(meta["method"] ?? "UNKNOWN")} ${String(meta["url"] ?? "/")}`,
+      meta: sanitizeLogValue(meta) as JsonObject,
     });
   },
 
   async error(
     context: string,
     message: string,
-    error: unknown,
-    meta: Record<string, unknown> | null = null,
+    error: Throwable,
+    meta: LogMeta | null = null,
   ) {
     await appendLogEntry({
       timestamp: new Date().toISOString(),
@@ -142,7 +153,7 @@ export const appLogger = {
       meta: sanitizeLogValue({
         ...(meta ?? {}),
         error,
-      }) as Record<string, unknown>,
+      }) as JsonObject,
     });
   },
 
@@ -214,7 +225,7 @@ export function registerProcessErrorHandlers() {
     void appLogger.error("process", "uncaughtException", error);
   });
 
-  process.on("unhandledRejection", (reason) => {
+  process.on("unhandledRejection", (reason: Throwable) => {
     void appLogger.error("process", "unhandledRejection", reason);
   });
 }

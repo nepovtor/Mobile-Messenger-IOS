@@ -3,6 +3,10 @@ import { AuthMethod } from "../../../entities/user.entity";
 
 export class LoginAuthDto {
   @IsOptional()
+  @IsString()
+  login?: string;
+
+  @IsOptional()
   @IsEnum(AuthMethod)
   method?: AuthMethod;
 

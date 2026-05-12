@@ -11,6 +11,7 @@ import { IsNull, MoreThan, Repository } from "typeorm";
 import { TelegramLinkEntity } from "../../../entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../../../entities/telegram-pairing-token.entity";
 import { normalizePhone } from "../../common/contact.utils";
+import { JsonValue } from "../../common/json.types";
 import {
   getAuthCodeTTLSeconds,
   getTelegramBotToken,
@@ -95,7 +96,7 @@ export class TelegramBotService
   ) {}
 
   async onModuleInit(): Promise<void> {
-    if (process.env.NODE_ENV === "test") {
+    if (process.env["NODE_ENV"] === "test") {
       return;
     }
 
@@ -897,7 +898,7 @@ export class TelegramBotService
   private async callTelegram(
     method: string,
     payload: Record<string, string | number | boolean>,
-  ): Promise<{ ok: boolean; result?: unknown }> {
+  ): Promise<{ ok: boolean; result?: JsonValue }> {
     const token = getTelegramBotToken();
     if (!token) {
       throw new SmsProviderUnavailableError("Telegram bot is not configured");
@@ -934,7 +935,7 @@ export class TelegramBotService
 
     const json = (await response.json()) as {
       ok: boolean;
-      result?: unknown;
+      result?: JsonValue;
     };
 
     if (!json.ok) {

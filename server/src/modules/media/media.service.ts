@@ -36,8 +36,8 @@ export class MediaService {
   private readonly publicEndpoint = getS3PublicEndpoint() ?? undefined;
   private readonly forcePathStyle = isS3ForcePathStyle();
   private readonly credentials = {
-    accessKeyId: process.env.S3_ACCESS_KEY || "minioadmin",
-    secretAccessKey: process.env.S3_SECRET_KEY || "minioadmin",
+    accessKeyId: process.env["S3_ACCESS_KEY"] || "minioadmin",
+    secretAccessKey: process.env["S3_SECRET_KEY"] || "minioadmin",
   };
   private readonly s3Client = new S3Client({
     endpoint: this.endpoint,

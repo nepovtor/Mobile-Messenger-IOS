@@ -11,14 +11,16 @@ import {
   getRealtimeHeartbeatTimeoutMs,
 } from "../common/runtime-config";
 
-export interface RealtimeEventEnvelope<T = unknown> {
+type RealtimePayloadValue = object | string | number | boolean | null;
+
+export interface RealtimeEventEnvelope<T = RealtimePayloadValue> {
   event: string;
   data: T;
 }
 
 interface RealtimePayload {
   type: string;
-  payload: unknown;
+  payload: RealtimePayloadValue;
 }
 
 type ConnectionMeta = {

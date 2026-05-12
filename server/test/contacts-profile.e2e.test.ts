@@ -27,24 +27,24 @@ import { RealtimeModule } from "../src/modules/realtime/realtime.module";
 import { UsersModule } from "../src/modules/users/users.module";
 
 async function createTestApp(): Promise<INestApplication> {
-  process.env.NODE_ENV = "test";
-  process.env.JWT_SECRET = "test-jwt-secret";
-  process.env.JWT_EXPIRES_IN = "7d";
-  process.env.DB_SYNCHRONIZE = "true";
-  process.env.AUTH_ENABLE_DEMO_ACCOUNTS = "true";
-  process.env.AUTH_ALLOW_PASSWORD_LOGIN = "true";
-  process.env.AUTH_ALLOW_TEST_CODE = "true";
-  process.env.AUTH_TEST_CODE = "123456";
-  process.env.AUTH_CODE_TTL_SECONDS = "300";
-  process.env.AUTH_CODE_MAX_ATTEMPTS = "5";
-  process.env.AUTH_CODE_RESEND_COOLDOWN_SECONDS = "0";
-  process.env.CHAT_ENABLE_DEMO_SEEDING = "false";
-  process.env.AUTH_RATE_LIMIT_WINDOW_MS = "60000";
-  process.env.AUTH_RATE_LIMIT_MAX_REQUESTS = "50";
-  process.env.VERIFICATION_PROVIDER = "mock";
-  process.env.SMS_PROVIDER = "mock";
-  process.env.TELEGRAM_BOT_TOKEN = "test-telegram-token";
-  process.env.TELEGRAM_BOT_USERNAME = "mobile_messenger_test_bot";
+  process.env["NODE_ENV"] = "test";
+  process.env["JWT_SECRET"] = "test-jwt-secret";
+  process.env["JWT_EXPIRES_IN"] = "7d";
+  process.env["DB_SYNCHRONIZE"] = "true";
+  process.env["AUTH_ENABLE_DEMO_ACCOUNTS"] = "true";
+  process.env["AUTH_ALLOW_PASSWORD_LOGIN"] = "true";
+  process.env["AUTH_ALLOW_TEST_CODE"] = "true";
+  process.env["AUTH_TEST_CODE"] = "123456";
+  process.env["AUTH_CODE_TTL_SECONDS"] = "300";
+  process.env["AUTH_CODE_MAX_ATTEMPTS"] = "5";
+  process.env["AUTH_CODE_RESEND_COOLDOWN_SECONDS"] = "0";
+  process.env["CHAT_ENABLE_DEMO_SEEDING"] = "false";
+  process.env["AUTH_RATE_LIMIT_WINDOW_MS"] = "60000";
+  process.env["AUTH_RATE_LIMIT_MAX_REQUESTS"] = "50";
+  process.env["VERIFICATION_PROVIDER"] = "mock";
+  process.env["SMS_PROVIDER"] = "mock";
+  process.env["TELEGRAM_BOT_TOKEN"] = "test-telegram-token";
+  process.env["TELEGRAM_BOT_USERNAME"] = "mobile_messenger_test_bot";
 
   const moduleRef = await Test.createTestingModule({
     imports: [

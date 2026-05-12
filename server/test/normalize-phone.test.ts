@@ -15,7 +15,7 @@ test("normalizePhone rejects invalid phone numbers", () => {
   for (const phone of invalidPhones) {
     assert.throws(
       () => normalizePhone(phone),
-      (error: unknown) =>
+      (error: Error | object | string | null) =>
         error instanceof BadRequestException &&
         typeof error.message === "string",
     );
