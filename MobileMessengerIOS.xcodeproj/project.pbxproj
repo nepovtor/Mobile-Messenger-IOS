@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D20000000000000000000002 /* LiquidGlassButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* LiquidGlassButtonStyle.swift */; };
 		11D6DCCADCCD144C3C1F1237 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25ACC1AABD3AC5F12D308989 /* XCTest.framework */; };
 		579479C98A319213F0A5A273 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C60C7925F3F560E1F97B5D83 /* Foundation.framework */; };
 		CA58DA612F815CAE000D87A4 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA542F815CAE000D87A4 /* AnalyticsService.swift */; };
@@ -134,6 +135,7 @@
 		CA58DA442F815CAE000D87A4 /* ChatListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListViewModel.swift; sourceTree = "<group>"; };
 		CA58DA462F815CAE000D87A4 /* MessageStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStatusView.swift; sourceTree = "<group>"; };
 		CA58DA472F815CAE000D87A4 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
+		D20000000000000000000001 /* LiquidGlassButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassButtonStyle.swift; sourceTree = "<group>"; };
 		CA58DA4A2F815CAE000D87A4 /* Contents.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Contents.json; sourceTree = "<group>"; };
 		CA58DA4B2F815CAE000D87A4 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		CA58DA4D2F815CAE000D87A4 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
@@ -399,6 +401,7 @@
 			children = (
 				CA58DA462F815CAE000D87A4 /* MessageStatusView.swift */,
 				CA58DA472F815CAE000D87A4 /* SkeletonView.swift */,
+				D20000000000000000000001 /* LiquidGlassButtonStyle.swift */,
 			);
 			path = Common;
 			sourceTree = "<group>";
@@ -713,6 +716,7 @@
 				CA58DA7B2F815CAE000D87A4 /* RetryPendingMessagesUseCase.swift in Sources */,
 				CA58DA7C2F815CAE000D87A4 /* ChatViewModel.swift in Sources */,
 				CA58DA7D2F815CAE000D87A4 /* SkeletonView.swift in Sources */,
+				D20000000000000000000002 /* LiquidGlassButtonStyle.swift in Sources */,
 				CA58DA7E2F815CAE000D87A4 /* MobileMessengerIOSApp.swift in Sources */,
 				CA58DA7F2F815CAE000D87A4 /* MessageStatus.swift in Sources */,
 				CA58DA802F815CAE000D87A4 /* AppConfig.swift in Sources */,

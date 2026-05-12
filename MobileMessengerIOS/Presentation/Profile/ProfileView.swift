@@ -172,7 +172,7 @@ struct ProfileView: View {
                             Button("Cancel") {
                                 viewModel.cancelEditingDisplayName()
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(LiquidGlassSecondaryButtonStyle())
 
                             Button {
                                 Task {
@@ -186,7 +186,7 @@ struct ProfileView: View {
                                     Text("Save")
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(LiquidGlassPrimaryButtonStyle())
                             .disabled(viewModel.isSavingDisplayName || !viewModel.canSaveDisplayName)
                         }
                     }
@@ -197,7 +197,7 @@ struct ProfileView: View {
                         Button("Изменить имя") {
                             viewModel.startEditingDisplayName()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(LiquidGlassPrimaryButtonStyle())
                         Spacer()
                     }
                     .padding(.horizontal, 18)
@@ -356,7 +356,7 @@ struct ProfileView: View {
                     } label: {
                         Text("Включить push")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(LiquidGlassPrimaryButtonStyle())
                 }
 
                 if notificationManager.canRefreshRegistration {
@@ -367,14 +367,14 @@ struct ProfileView: View {
                     } label: {
                         Text("Обновить регистрацию")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(LiquidGlassSecondaryButtonStyle())
                 }
 
                 if notificationManager.canOpenSettings {
                     Button("Открыть Settings") {
                         notificationManager.openApplicationSettings()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(LiquidGlassSecondaryButtonStyle())
                 }
 
                 Spacer()
@@ -599,7 +599,34 @@ struct ProfileView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
-        .contentShape(Rectangle())
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(isDestructive ? 0.08 : 0.16),
+                            Color.black.opacity(isDestructive ? 0.22 : 0.16)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay {
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.34), tint.opacity(isDestructive ? 0.32 : 0.44)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+        .shadow(color: tint.opacity(isDestructive ? 0.10 : 0.18), radius: 14, y: 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .contentShape(Capsule())
     }
 
     private func settingsToggleRow(

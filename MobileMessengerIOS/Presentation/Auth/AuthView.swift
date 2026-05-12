@@ -226,12 +226,8 @@ struct AuthView: View {
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color(red: 0.12, green: 0.54, blue: 0.99).opacity(0.88))
-                )
             }
+            .buttonStyle(LiquidGlassSecondaryButtonStyle())
             .disabled(!viewModel.isContactValid || viewModel.isLinkingTelegram)
 
             if !viewModel.isContactValid {
@@ -399,13 +395,8 @@ struct AuthView: View {
             }
             .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.55))
             .frame(maxWidth: .infinity)
-            .frame(height: 70)
-            .background(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(Color.white.opacity(isEnabled ? 0.18 : 0.08))
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassPrimaryButtonStyle())
         .disabled(!isEnabled)
     }
 
@@ -425,13 +416,8 @@ struct AuthView: View {
             }
             .foregroundStyle(.white.opacity(prominent ? 1 : 0.82))
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(prominent ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(prominent ? AnyLiquidGlassButtonStyle.primary : AnyLiquidGlassButtonStyle.secondary)
     }
 
     private func segment<Value: Hashable>(
@@ -449,13 +435,8 @@ struct AuthView: View {
                         .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundStyle(.white.opacity(item == selected ? 1 : 0.82))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(item == selected ? Color.white.opacity(0.22) : Color.white.opacity(0.06))
-                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(item == selected ? AnyLiquidGlassButtonStyle.primary : AnyLiquidGlassButtonStyle.secondary)
             }
         }
         .padding(6)
@@ -539,11 +520,9 @@ private struct DemoAccountCard: View {
             Button(action: onQuickSignIn) {
                 Image(systemName: "arrow.up.left")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color(red: 0.13, green: 0.54, blue: 0.99)))
+                    .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassIconButtonStyle())
         }
         .frame(maxHeight: .infinity)
         .padding(16)

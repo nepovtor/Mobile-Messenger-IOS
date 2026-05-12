@@ -108,7 +108,7 @@ struct MapLocationDetailCard: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(LiquidGlassPrimaryButtonStyle())
                 .disabled(isOpeningChat)
             }
         }

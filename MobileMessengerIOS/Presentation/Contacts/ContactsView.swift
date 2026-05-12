@@ -104,6 +104,8 @@ struct ContactsView: View {
                     Text("Добавить контакт")
                 }
             }
+            .frame(maxWidth: .infinity)
+            .buttonStyle(LiquidGlassPrimaryButtonStyle())
             .disabled(viewModel.isAdding)
 
             Text("Введите номер в международном формате, например `+375291234567`.")
