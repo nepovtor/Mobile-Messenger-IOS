@@ -88,7 +88,7 @@ struct MapView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(LiquidGlassPrimaryButtonStyle())
                 .disabled(viewModel.isSharing)
 
                 Button("Stop sharing") {
@@ -96,7 +96,7 @@ struct MapView: View {
                         await viewModel.stopSharing(using: permissionManager)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(LiquidGlassSecondaryButtonStyle())
                 .disabled(!viewModel.myLocationShare.sharingEnabled || viewModel.isStoppingShare)
             }
             .padding(.horizontal, 16)

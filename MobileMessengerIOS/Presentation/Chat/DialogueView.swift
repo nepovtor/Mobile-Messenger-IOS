@@ -173,26 +173,19 @@ struct DialogueView: View {
     private var messageInput: some View {
         let isSendingMedia = viewModel.isSendingMedia
         let isSendDisabled = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingMedia
-        let mediaBackgroundColor = mediaButtonBackgroundColor
-
         return HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                ZStack {
-                    Circle()
-                        .fill(mediaBackgroundColor)
-
-                    if isSendingMedia {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                    } else {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(Color.blue.opacity(0.9))
-                    }
+                if isSendingMedia {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
-                .frame(width: 42, height: 42)
-                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
             }
+            .buttonStyle(LiquidGlassIconButtonStyle())
             .disabled(isSendingMedia)
 
             HStack(alignment: .bottom, spacing: 10) {
@@ -222,20 +215,9 @@ struct DialogueView: View {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.blue, Color.cyan],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        )
                 }
+                .buttonStyle(LiquidGlassIconButtonStyle())
                 .disabled(isSendDisabled)
-                .opacity(isSendDisabled ? 0.55 : 1)
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)
@@ -279,7 +261,7 @@ struct DialogueView: View {
                     viewModel.retryFailedMessages()
                     self.viewModel.banner = nil
                 }
-                .foregroundColor(.white)
+                .buttonStyle(LiquidGlassSecondaryButtonStyle())
             }
             .padding()
             .background(Color.red.opacity(0.94))

@@ -69,26 +69,21 @@ struct ChatListView: View {
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button(action: { isShowingProfile = true }) {
-                            HStack(spacing: 10) {
-                                Circle()
-                                    .fill(Color.blue.opacity(0.16))
-                                    .frame(width: 32, height: 32)
-                                    .overlay {
-                                        Text(profileInitials)
-                                            .font(.caption.weight(.bold))
-                                            .foregroundStyle(.blue)
-                                    }
-
+                            HStack(spacing: 8) {
+                                Text(profileInitials)
+                                    .font(.caption.weight(.bold))
                                 Text("Profile")
                                     .font(.subheadline.weight(.semibold))
                             }
                         }
+                        .buttonStyle(LiquidGlassSecondaryButtonStyle())
                     }
 
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { isShowingCreateSheet = true }) {
                             Image(systemName: "person.3.sequence.fill")
                         }
+                        .buttonStyle(LiquidGlassIconButtonStyle())
                     }
                 }
                 .sheet(isPresented: $isShowingProfile) {
@@ -455,6 +450,7 @@ private struct CreateGroupChatSheet: View {
                                 Button("Повторить загрузку") {
                                     Task { await viewModel.loadCreateContactsIfNeeded(force: true) }
                                 }
+                                .buttonStyle(LiquidGlassSecondaryButtonStyle())
                             }
                             .padding(.vertical, 6)
                         } else if filteredContacts.isEmpty {
@@ -496,6 +492,7 @@ private struct CreateGroupChatSheet: View {
                         let contacts = selectedContacts.map(\.contact)
                         Task { await onCreate(title, contacts) }
                     }
+                    .buttonStyle(LiquidGlassSecondaryButtonStyle())
                     .disabled(!canCreate)
                 }
             }
