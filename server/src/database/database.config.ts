@@ -13,14 +13,31 @@ function readEnv(name: string): string | undefined {
   return process.env[name];
 }
 
+function readDatabaseEnv(name: string, fallbackName?: string): string | undefined {
+  const primary = readEnv(name)?.trim();
+  if (primary) {
+    return primary;
+  }
+
+  if (!fallbackName) {
+    return undefined;
+  }
+
+  const fallback = readEnv(fallbackName)?.trim();
+  return fallback || undefined;
+}
+
 export function buildDatabaseOptions(): DataSourceOptions {
+  const databaseUrl = readDatabaseEnv("DATABASE_URL");
+
   return {
     type: "postgres",
-    host: readEnv("DB_HOST")?.trim() || "localhost",
-    port: readPort(readEnv("DB_PORT"), 5432),
-    username: readEnv("DB_USER")?.trim() || "postgres",
-    password: readEnv("DB_PASSWORD")?.trim() || "postgres",
-    database: readEnv("DB_NAME")?.trim() || "messenger",
+    url: databaseUrl,
+    host: readDatabaseEnv("DB_HOST", "PGHOST") || "localhost",
+    port: readPort(readDatabaseEnv("DB_PORT", "PGPORT"), 5432),
+    username: readDatabaseEnv("DB_USER", "PGUSER") || "postgres",
+    password: readDatabaseEnv("DB_PASSWORD", "PGPASSWORD") || "postgres",
+    database: readDatabaseEnv("DB_NAME", "PGDATABASE") || "messenger",
     entities: [...DATABASE_ENTITIES],
     migrations: [path.join(__dirname, "migrations", "*{.ts,.js}")],
     synchronize: isDatabaseSynchronizationEnabled(),
