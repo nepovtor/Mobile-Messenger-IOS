@@ -1,4 +1,4 @@
-// Copy this file to Config/Config.xcconfig and adjust the values if needed.
+// Copy this file to Config/Config.xcconfig only when you intentionally want a local override.
 // For the iOS simulator, 127.0.0.1 points to the host Mac.
 // For a physical device, replace 127.0.0.1 with your Mac's LAN IP.
 // For Railway-backed runs, see MobileMessengerIOS/Configurations/Railway.xcconfig.

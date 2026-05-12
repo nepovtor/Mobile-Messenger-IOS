@@ -22,7 +22,12 @@ npm install
 npm run dev
 ```
 
-The local dev server runs on `http://127.0.0.1:3000` by default and targets the local backend at `http://127.0.0.1:8080/api` unless `VITE_API_BASE_URL` or `VITE_WEBSOCKET_URL` override it.
+The local dev server runs on `http://127.0.0.1:3000` by default and proxies requests to the Railway backend at `https://mobile-messenger-ios-production.up.railway.app`.
+
+To work against a local backend instead, set either:
+
+- `VITE_DEV_PROXY_TARGET=http://127.0.0.1:8080`
+- `VITE_DEV_DIRECT_BACKEND=true`
 
 ## Checks
 

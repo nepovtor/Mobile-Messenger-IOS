@@ -3,6 +3,9 @@ import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
+const DEFAULT_DEV_PROXY_TARGET =
+  "https://mobile-messenger-ios-production.up.railway.app";
+
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -45,7 +48,7 @@ function sendJsonError(
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const proxyTarget = env.VITE_DEV_PROXY_TARGET || "http://127.0.0.1:8080";
+  const proxyTarget = env.VITE_DEV_PROXY_TARGET || DEFAULT_DEV_PROXY_TARGET;
 
   return {
     plugins: [
@@ -108,7 +111,7 @@ export default defineConfig(({ mode }) => {
 
               sendJsonError(response, 502, {
                 message:
-                  "Backend is unavailable right now. Start the local API server or update VITE_DEV_PROXY_TARGET.",
+                  "Backend is unavailable right now. Check VITE_DEV_PROXY_TARGET or start the backend you want to use.",
                 code: "DEV_PROXY_UNAVAILABLE",
               });
             }

@@ -214,11 +214,14 @@ npm install
 npm run dev
 ```
 
-By default the Vite dev server runs on `http://127.0.0.1:3000` and points to the local backend at `http://127.0.0.1:8080/api`.
+By default the Vite dev server runs on `http://127.0.0.1:3000` and proxies to the Railway backend at `https://mobile-messenger-ios-production.up.railway.app`.
+To use a local backend instead, set `VITE_DEV_PROXY_TARGET=http://127.0.0.1:8080` or `VITE_DEV_DIRECT_BACKEND=true` before `npm run dev`.
 
 ### iOS
 
 Open `MobileMessengerIOS.xcodeproj` in Xcode and run the `MobileMessengerIOS` scheme.
+Debug and Release builds point to the Railway backend by default.
+Use `MobileMessengerIOS/Configurations/Debug.public.xcconfig` or a local `Config/Config.xcconfig` only when you intentionally want to override that with a tunnel or local backend.
 
 Useful configs:
 

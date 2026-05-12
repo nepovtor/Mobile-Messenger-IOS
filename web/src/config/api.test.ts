@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveAppConfig } from "./api";
 
 describe("resolveAppConfig", () => {
-  it("defaults to the local backend in development", () => {
+  it("defaults to the dev proxy in development", () => {
     expect(resolveAppConfig({ DEV: true }, "127.0.0.1")).toEqual({
       apiBaseUrl: "/api",
       websocketUrl: "ws://127.0.0.1:3000/realtime",
