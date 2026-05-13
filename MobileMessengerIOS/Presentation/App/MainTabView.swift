@@ -67,16 +67,12 @@ private struct ConnectionStatusBadge: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.black.opacity(0.78))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        }
         .foregroundStyle(.white)
-        .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
+        .liquidGlassCapsule(
+            tint: accentColor,
+            secondaryTint: .white,
+            innerDarkness: 0.62
+        )
     }
 
     private var accentColor: Color {

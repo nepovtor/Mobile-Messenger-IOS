@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		11D6DCCADCCD144C3C1F1237 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25ACC1AABD3AC5F12D308989 /* XCTest.framework */; };
 		579479C98A319213F0A5A273 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C60C7925F3F560E1F97B5D83 /* Foundation.framework */; };
+		E10000000000000000000001 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000101 /* LiquidGlass.swift */; };
 		CA58DA612F815CAE000D87A4 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA542F815CAE000D87A4 /* AnalyticsService.swift */; };
 		CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5B2F815CAE000D87A4 /* ReachabilityService.swift */; };
 		CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA4F2F815CAE000D87A4 /* AppContainer.swift */; };
@@ -104,6 +105,7 @@
 		A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
 		A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AppConfigTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		E10000000000000000000101 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		CA58DA1E2F815CAE000D87A4 /* ChatLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalStore.swift; sourceTree = "<group>"; };
@@ -397,6 +399,7 @@
 		CA58DA482F815CAE000D87A4 /* Common */ = {
 			isa = PBXGroup;
 			children = (
+				E10000000000000000000101 /* LiquidGlass.swift */,
 				CA58DA462F815CAE000D87A4 /* MessageStatusView.swift */,
 				CA58DA472F815CAE000D87A4 /* SkeletonView.swift */,
 			);
@@ -712,6 +715,7 @@
 				CA58DA7A2F815CAE000D87A4 /* ObserveChatMessagesUseCase.swift in Sources */,
 				CA58DA7B2F815CAE000D87A4 /* RetryPendingMessagesUseCase.swift in Sources */,
 				CA58DA7C2F815CAE000D87A4 /* ChatViewModel.swift in Sources */,
+				E10000000000000000000001 /* LiquidGlass.swift in Sources */,
 				CA58DA7D2F815CAE000D87A4 /* SkeletonView.swift in Sources */,
 				CA58DA7E2F815CAE000D87A4 /* MobileMessengerIOSApp.swift in Sources */,
 				CA58DA7F2F815CAE000D87A4 /* MessageStatus.swift in Sources */,

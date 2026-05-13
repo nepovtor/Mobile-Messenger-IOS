@@ -91,6 +91,16 @@ struct ContactsView: View {
                 .textContentType(.telephoneNumber)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .padding(.horizontal, 16)
+                .frame(height: 58)
+                .background(
+                    LiquidGlassRoundedSurface(
+                        cornerRadius: 20,
+                        tint: .white,
+                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                        innerDarkness: 0.24
+                    )
+                )
 
             Button {
                 Task {
@@ -100,26 +110,38 @@ struct ContactsView: View {
                 HStack {
                     if viewModel.isAdding {
                         ProgressView()
+                            .tint(.white)
                     }
                     Text("Добавить контакт")
                 }
             }
+            .buttonStyle(
+                LiquidGlassProminentButtonStyle(
+                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                )
+            )
             .disabled(viewModel.isAdding)
 
             Text("Введите номер в международном формате, например `+375291234567`.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 6)
+        .padding(16)
+        .liquidGlassCard(
+            cornerRadius: 24,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.10
+        )
     }
 
     private var backgroundView: some View {
-        LinearGradient(
-            colors: [Color.blue.opacity(0.12), Color.cyan.opacity(0.06), Color(uiColor: .systemBackground)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+        LiquidGlassBackground(
+            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tertiaryAccent: Color(red: 0.49, green: 0.92, blue: 0.61)
         )
-        .ignoresSafeArea()
     }
 
     private func contactButton(for contact: Contact) -> some View {

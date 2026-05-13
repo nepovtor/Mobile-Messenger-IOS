@@ -178,9 +178,6 @@ struct DialogueView: View {
         return HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ZStack {
-                    Circle()
-                        .fill(mediaBackgroundColor)
-
                     if isSendingMedia {
                         ProgressView()
                             .progressViewStyle(.circular)
@@ -191,7 +188,11 @@ struct DialogueView: View {
                     }
                 }
                 .frame(width: 42, height: 42)
-                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+                .liquidGlassCircle(
+                    tint: Color.white,
+                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    innerDarkness: isHighContrastDarkActive ? 0.12 : 0.04
+                )
             }
             .disabled(isSendingMedia)
 
@@ -223,15 +224,10 @@ struct DialogueView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .background(
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.blue, Color.cyan],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                        .liquidGlassCircle(
+                            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                            innerDarkness: 0.54
                         )
                 }
                 .disabled(isSendDisabled)
@@ -240,15 +236,12 @@ struct DialogueView: View {
             .padding(.leading, 14)
             .padding(.trailing, 8)
             .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(inputBackgroundStyle)
+            .liquidGlassCard(
+                cornerRadius: 26,
+                tint: .white,
+                secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                innerDarkness: isHighContrastDarkActive ? 0.12 : 0.08
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(inputBorderColor, lineWidth: 1)
-            }
-            .shadow(color: Color.black.opacity(isHighContrastDarkActive ? 0.18 : 0.08), radius: 16, x: 0, y: 10)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
@@ -282,8 +275,12 @@ struct DialogueView: View {
                 .foregroundColor(.white)
             }
             .padding()
-            .background(Color.red.opacity(0.94))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .liquidGlassCard(
+                cornerRadius: 18,
+                tint: .red,
+                secondaryTint: .white,
+                innerDarkness: 0.42
+            )
         case .offline:
             EmptyView()
         }
@@ -626,89 +623,11 @@ private struct ChatWallpaper: View {
     let isHighContrastDarkActive: Bool
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    topColor,
-                    middleColor,
-                    bottomColor
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            ForEach(0..<14, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(index.isMultiple(of: 2) ? tilePrimaryColor : tileSecondaryColor)
-                    .frame(width: CGFloat(60 + (index % 4) * 18), height: CGFloat(60 + (index % 4) * 18))
-                    .rotationEffect(.degrees(Double(index * 17)))
-                    .offset(
-                        x: CGFloat((index % 4) * 96) - 140,
-                        y: CGFloat(index * 72) - 420
-                    )
-            }
-
-            Circle()
-                .fill(highlightColor)
-                .frame(width: 260, height: 260)
-                .blur(radius: 16)
-                .offset(x: 150, y: -320)
-
-            Circle()
-                .fill(accentColor)
-                .frame(width: 280, height: 280)
-                .offset(x: -160, y: 280)
-        }
-        .ignoresSafeArea()
-    }
-
-    private var topColor: Color {
-        if isHighContrastDarkActive {
-            return Color(red: 0.05, green: 0.09, blue: 0.14)
-        }
-        return Color(red: 0.89, green: 0.95, blue: 1.00)
-    }
-
-    private var middleColor: Color {
-        if isHighContrastDarkActive {
-            return Color(red: 0.07, green: 0.12, blue: 0.18)
-        }
-        return Color(red: 0.94, green: 0.98, blue: 0.98)
-    }
-
-    private var bottomColor: Color {
-        if isHighContrastDarkActive {
-            return Color(red: 0.04, green: 0.07, blue: 0.12)
-        }
-        return Color(red: 0.92, green: 0.96, blue: 1.00)
-    }
-
-    private var tilePrimaryColor: Color {
-        if isHighContrastDarkActive {
-            return Color.white.opacity(0.05)
-        }
-        return Color.white.opacity(0.15)
-    }
-
-    private var tileSecondaryColor: Color {
-        if isHighContrastDarkActive {
-            return Color.cyan.opacity(0.08)
-        }
-        return Color.cyan.opacity(0.08)
-    }
-
-    private var highlightColor: Color {
-        if isHighContrastDarkActive {
-            return Color.blue.opacity(0.10)
-        }
-        return Color.white.opacity(0.32)
-    }
-
-    private var accentColor: Color {
-        if isHighContrastDarkActive {
-            return Color.blue.opacity(0.12)
-        }
-        return Color.blue.opacity(0.08)
+        LiquidGlassBackground(
+            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+        )
     }
 }
 

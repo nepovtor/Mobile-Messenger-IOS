@@ -5,7 +5,7 @@ struct MapPrivacyCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Privacy", systemImage: "lock.shield.fill")
                 .font(.headline)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color(red: 0.30, green: 0.47, blue: 1.00))
 
             Text("Your location is shared only with your contacts while sharing is enabled.")
                 .font(.subheadline)
@@ -16,12 +16,12 @@ struct MapPrivacyCard: View {
                 .foregroundStyle(.secondary)
         }
         .padding(16)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.35), lineWidth: 1)
-        }
+        .liquidGlassCard(
+            cornerRadius: 22,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.18
+        )
     }
 }
 
@@ -108,17 +108,21 @@ struct MapLocationDetailCard: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(
+                    LiquidGlassProminentButtonStyle(
+                        tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                    )
+                )
                 .disabled(isOpeningChat)
             }
         }
         .padding(18)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.25), lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(0.12), radius: 14, y: 8)
+        .liquidGlassCard(
+            cornerRadius: 24,
+            tint: Color(red: 0.93, green: 0.35, blue: 0.76),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.18
+        )
     }
 }

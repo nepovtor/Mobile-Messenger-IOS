@@ -88,7 +88,12 @@ struct MapView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(
+                    LiquidGlassProminentButtonStyle(
+                        tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                    )
+                )
                 .disabled(viewModel.isSharing)
 
                 Button("Stop sharing") {
@@ -96,7 +101,12 @@ struct MapView: View {
                         await viewModel.stopSharing(using: permissionManager)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(
+                    LiquidGlassSecondaryButtonStyle(
+                        tint: .white,
+                        secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76)
+                    )
+                )
                 .disabled(!viewModel.myLocationShare.sharingEnabled || viewModel.isStoppingShare)
             }
             .padding(.horizontal, 16)
@@ -152,12 +162,11 @@ struct MapView: View {
             .frame(maxHeight: .infinity)
         }
         .background(
-            LinearGradient(
-                colors: [Color.blue.opacity(0.14), Color.cyan.opacity(0.08), Color(uiColor: .systemBackground)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+            LiquidGlassBackground(
+                accent: Color(red: 0.30, green: 0.47, blue: 1.00),
+                secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
+                tertiaryAccent: Color(red: 0.49, green: 0.92, blue: 0.61)
             )
-            .ignoresSafeArea()
         )
     }
 

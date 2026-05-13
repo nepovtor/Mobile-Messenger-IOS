@@ -19,8 +19,34 @@ struct MobileMessengerIOSApp: App {
     }
 
     private func configureAppearance() {
-        UINavigationBar.appearance().largeTitleTextAttributes = [.foregroundColor: UIColor.label]
-        UINavigationBar.appearance().titleTextAttributes = [.foregroundColor: UIColor.label]
+        let navigationAppearance = UINavigationBarAppearance()
+        navigationAppearance.configureWithTransparentBackground()
+        navigationAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+        navigationAppearance.backgroundColor = UIColor.white.withAlphaComponent(0.06)
+        navigationAppearance.shadowColor = .clear
+        navigationAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
+        navigationAppearance.titleTextAttributes = [.foregroundColor: UIColor.label]
+
+        UINavigationBar.appearance().standardAppearance = navigationAppearance
+        UINavigationBar.appearance().compactAppearance = navigationAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navigationAppearance
+
+        let tabBarAppearance = UITabBarAppearance()
+        tabBarAppearance.configureWithTransparentBackground()
+        tabBarAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+        tabBarAppearance.backgroundColor = UIColor.white.withAlphaComponent(0.05)
+        tabBarAppearance.shadowColor = .clear
+
+        let selectedAppearance = tabBarAppearance.stackedLayoutAppearance.selected
+        selectedAppearance.iconColor = UIColor.systemBlue
+        selectedAppearance.titleTextAttributes = [.foregroundColor: UIColor.systemBlue]
+
+        let normalAppearance = tabBarAppearance.stackedLayoutAppearance.normal
+        normalAppearance.iconColor = UIColor.secondaryLabel
+        normalAppearance.titleTextAttributes = [.foregroundColor: UIColor.secondaryLabel]
+
+        UITabBar.appearance().standardAppearance = tabBarAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
     }
 }
 

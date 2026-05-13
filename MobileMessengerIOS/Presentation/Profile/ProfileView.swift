@@ -116,15 +116,12 @@ struct ProfileView: View {
             }
         }
         .padding(22)
-        .background(
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(headerCardBackgroundStyle)
+        .liquidGlassCard(
+            cornerRadius: 30,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: isHighContrastDarkActive ? 0.10 : 0.06
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(headerCardBorderColor, lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(isHighContrastDarkActive ? 0.22 : 0.08), radius: 20, y: 12)
     }
 
     private var accountSection: some View {
@@ -158,8 +155,12 @@ struct ProfileView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
                             .background(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(displayNameFieldBackgroundColor)
+                                LiquidGlassRoundedSurface(
+                                    cornerRadius: 16,
+                                    tint: .white,
+                                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                                    innerDarkness: isHighContrastDarkActive ? 0.18 : 0.10
+                                )
                             )
 
                         if let message = viewModel.inlineMessage {
@@ -172,7 +173,12 @@ struct ProfileView: View {
                             Button("Cancel") {
                                 viewModel.cancelEditingDisplayName()
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(
+                                LiquidGlassSecondaryButtonStyle(
+                                    tint: .white,
+                                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                                )
+                            )
 
                             Button {
                                 Task {
@@ -186,7 +192,12 @@ struct ProfileView: View {
                                     Text("Save")
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(
+                                LiquidGlassProminentButtonStyle(
+                                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                                )
+                            )
                             .disabled(viewModel.isSavingDisplayName || !viewModel.canSaveDisplayName)
                         }
                     }
@@ -197,7 +208,12 @@ struct ProfileView: View {
                         Button("Изменить имя") {
                             viewModel.startEditingDisplayName()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(
+                            LiquidGlassProminentButtonStyle(
+                                tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                                secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                            )
+                        )
                         Spacer()
                     }
                     .padding(.horizontal, 18)
@@ -356,7 +372,12 @@ struct ProfileView: View {
                     } label: {
                         Text("Включить push")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(
+                        LiquidGlassProminentButtonStyle(
+                            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                        )
+                    )
                 }
 
                 if notificationManager.canRefreshRegistration {
@@ -367,14 +388,24 @@ struct ProfileView: View {
                     } label: {
                         Text("Обновить регистрацию")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(
+                        LiquidGlassSecondaryButtonStyle(
+                            tint: .white,
+                            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                        )
+                    )
                 }
 
                 if notificationManager.canOpenSettings {
                     Button("Открыть Settings") {
                         notificationManager.openApplicationSettings()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(
+                        LiquidGlassSecondaryButtonStyle(
+                            tint: .white,
+                            secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76)
+                        )
+                    )
                 }
 
                 Spacer()
@@ -534,34 +565,11 @@ struct ProfileView: View {
     }
 
     private var backgroundView: some View {
-        ZStack(alignment: .top) {
-            Color(uiColor: .systemGroupedBackground)
-                .ignoresSafeArea()
-
-            LinearGradient(
-                colors: [
-                    Color.blue.opacity(0.16),
-                    Color.cyan.opacity(0.09),
-                    Color(uiColor: .systemGroupedBackground),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(height: 340)
-            .ignoresSafeArea(edges: .top)
-
-            Circle()
-                .fill(isHighContrastDarkActive ? Color.blue.opacity(0.12) : Color.white.opacity(0.34))
-                .frame(width: 240, height: 240)
-                .blur(radius: 20)
-                .offset(x: -110, y: -80)
-
-            Circle()
-                .fill(isHighContrastDarkActive ? Color.cyan.opacity(0.16) : Color.cyan.opacity(0.14))
-                .frame(width: 260, height: 260)
-                .blur(radius: 28)
-                .offset(x: 130, y: -90)
-        }
+        LiquidGlassBackground(
+            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+        )
     }
 
     private func actionRow(

@@ -7,19 +7,17 @@ struct ContactRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.85), Color.cyan.opacity(0.7)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
                 .frame(width: 50, height: 50)
                 .overlay {
                     Text(initials)
                         .font(.headline.weight(.bold))
                         .foregroundStyle(.white)
                 }
+                .liquidGlassCircle(
+                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    innerDarkness: 0.42
+                )
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -31,7 +29,14 @@ struct ContactRow: View {
                         Label("Direct", systemImage: "bolt.horizontal.circle.fill")
                             .font(.caption2.weight(.semibold))
                             .labelStyle(.titleAndIcon)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .liquidGlassCapsule(
+                                tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                                secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                                innerDarkness: 0.40
+                            )
                     }
                 }
 
@@ -54,14 +59,12 @@ struct ContactRow: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.ultraThinMaterial)
+        .liquidGlassCard(
+            cornerRadius: 22,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.16
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.35), lineWidth: 1)
-        }
     }
 
     private var initials: String {
@@ -101,7 +104,11 @@ struct BannerMessageView: View {
         }
         .padding()
         .foregroundStyle(tint)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .liquidGlassCard(
+            cornerRadius: 16,
+            tint: tint,
+            secondaryTint: .white,
+            innerDarkness: 0.12
+        )
     }
 }

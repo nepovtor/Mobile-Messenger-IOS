@@ -17,29 +17,13 @@ struct ProfileSectionCard<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(cardBackgroundColor)
+            .liquidGlassCard(
+                cornerRadius: 26,
+                tint: isHighContrastDarkActive ? .blue : Color(red: 0.30, green: 0.47, blue: 1.00),
+                secondaryTint: isHighContrastDarkActive ? .cyan : Color(red: 0.07, green: 0.82, blue: 0.97),
+                innerDarkness: isHighContrastDarkActive ? 0.12 : 0.02
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(cardBorderColor, lineWidth: 1)
-            }
         }
-    }
-
-    private var cardBackgroundColor: Color {
-        if isHighContrastDarkActive {
-            return Color(uiColor: .tertiarySystemBackground)
-        }
-        return Color(uiColor: .secondarySystemGroupedBackground)
-    }
-
-    private var cardBorderColor: Color {
-        if isHighContrastDarkActive {
-            return Color.white.opacity(0.16)
-        }
-        return Color.primary.opacity(0.06)
     }
 
     private var isHighContrastDarkActive: Bool {
@@ -136,6 +120,10 @@ struct ProfileStatusBadge: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(tone.tint.opacity(0.12), in: Capsule())
+        .liquidGlassCapsule(
+            tint: tone.tint,
+            secondaryTint: .white,
+            innerDarkness: 0.12
+        )
     }
 }

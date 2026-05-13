@@ -235,15 +235,12 @@ private struct ChatRowView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(cardBackgroundStyle)
+        .liquidGlassCard(
+            cornerRadius: 24,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: isHighContrastDarkActive ? 0.10 : 0.04
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(cardBorderColor, lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(isHighContrastDarkActive ? 0.18 : 0.06), radius: 16, x: 0, y: 10)
     }
 
     private var avatar: some View {
@@ -339,17 +336,12 @@ private struct ChatRowSkeleton: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(backgroundColor)
+        .liquidGlassCard(
+            cornerRadius: 24,
+            tint: Color.white,
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: isHighContrastDarkActive ? 0.08 : 0
         )
-    }
-
-    private var backgroundColor: Color {
-        if isHighContrastDarkActive {
-            return Color(uiColor: .secondarySystemBackground)
-        }
-        return Color.white.opacity(0.45)
     }
 
     private var isHighContrastDarkActive: Bool {
@@ -368,8 +360,12 @@ private struct BannerView: View {
             Spacer()
         }
         .padding()
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .liquidGlassCard(
+            cornerRadius: 18,
+            tint: .orange,
+            secondaryTint: .white,
+            innerDarkness: 0.08
+        )
     }
 }
 
@@ -574,7 +570,11 @@ private struct SelectedContactChip: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.thinMaterial, in: Capsule())
+        .liquidGlassCapsule(
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.08
+        )
     }
 }
 
@@ -583,80 +583,10 @@ private struct ChatListBackdrop: View {
     @EnvironmentObject private var container: AppContainer
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    topColor,
-                    middleColor,
-                    bottomColor
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Circle()
-                .fill(highlightColor)
-                .frame(width: 240, height: 240)
-                .blur(radius: 10)
-                .offset(x: 130, y: -250)
-
-            Circle()
-                .fill(accentColor)
-                .frame(width: 280, height: 280)
-                .offset(x: -150, y: 260)
-
-            RoundedRectangle(cornerRadius: 48, style: .continuous)
-                .fill(panelAccentColor)
-                .frame(width: 220, height: 220)
-                .rotationEffect(.degrees(18))
-                .offset(x: 160, y: 240)
-        }
-        .ignoresSafeArea()
-    }
-
-    private var topColor: Color {
-        if isHighContrastDarkActive {
-            return Color(red: 0.08, green: 0.12, blue: 0.18)
-        }
-        return Color(red: 0.94, green: 0.97, blue: 1.00)
-    }
-
-    private var middleColor: Color {
-        if isHighContrastDarkActive {
-            return Color(red: 0.09, green: 0.15, blue: 0.20)
-        }
-        return Color(red: 0.89, green: 0.95, blue: 0.98)
-    }
-
-    private var bottomColor: Color {
-        if isHighContrastDarkActive {
-            return Color(red: 0.05, green: 0.08, blue: 0.13)
-        }
-        return Color(red: 0.96, green: 0.98, blue: 1.00)
-    }
-
-    private var highlightColor: Color {
-        if isHighContrastDarkActive {
-            return Color.blue.opacity(0.14)
-        }
-        return Color.white.opacity(0.55)
-    }
-
-    private var accentColor: Color {
-        if isHighContrastDarkActive {
-            return Color.cyan.opacity(0.16)
-        }
-        return Color.cyan.opacity(0.12)
-    }
-
-    private var panelAccentColor: Color {
-        if isHighContrastDarkActive {
-            return Color.blue.opacity(0.10)
-        }
-        return Color.blue.opacity(0.06)
-    }
-
-    private var isHighContrastDarkActive: Bool {
-        colorScheme == .dark && container.highContrastDarkMode
+        LiquidGlassBackground(
+            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+        )
     }
 }

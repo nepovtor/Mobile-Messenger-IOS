@@ -21,15 +21,11 @@ struct AuthView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.33, blue: 0.95),
-                    Color(red: 0.45, green: 0.66, blue: 0.98)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+            LiquidGlassBackground(
+                accent: Color(red: 0.30, green: 0.47, blue: 1.00),
+                secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
+                tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
             )
-            .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 28) {
@@ -55,13 +51,18 @@ struct AuthView: View {
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 20) {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(Color.white.opacity(0.12))
                 .frame(width: 126, height: 126)
                 .overlay {
                     Image(systemName: "message.fill")
                         .font(.system(size: 50, weight: .semibold))
                         .foregroundStyle(.white)
                 }
+                .liquidGlassCard(
+                    cornerRadius: 30,
+                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                    secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+                    innerDarkness: 0.38
+                )
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Mobile Messenger")
@@ -97,15 +98,12 @@ struct AuthView: View {
             demoAccountsSection
         }
         .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(Color(red: 0.01, green: 0.03, blue: 0.08).opacity(0.96))
+        .liquidGlassCard(
+            cornerRadius: 34,
+            tint: Color(red: 0.34, green: 0.48, blue: 1.00),
+            secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+            innerDarkness: 0.70
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.28), radius: 28, x: 0, y: 18)
     }
 
     private var contactField: some View {
@@ -224,14 +222,15 @@ struct AuthView: View {
                     Text("Привязать Telegram")
                 }
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color(red: 0.12, green: 0.54, blue: 0.99).opacity(0.88))
-                )
             }
+            .buttonStyle(
+                LiquidGlassProminentButtonStyle(
+                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    height: 52
+                )
+            )
             .disabled(!viewModel.isContactValid || viewModel.isLinkingTelegram)
 
             if !viewModel.isContactValid {
@@ -241,9 +240,11 @@ struct AuthView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white.opacity(0.08))
+        .liquidGlassCard(
+            cornerRadius: 22,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.38
         )
     }
 
@@ -323,9 +324,11 @@ struct AuthView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white.opacity(0.08))
+        .liquidGlassCard(
+            cornerRadius: 22,
+            tint: Color(red: 0.93, green: 0.35, blue: 0.76),
+            secondaryTint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            innerDarkness: 0.34
         )
     }
 
@@ -352,19 +355,21 @@ struct AuthView: View {
             )
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white.opacity(0.08))
+        .liquidGlassCard(
+            cornerRadius: 22,
+            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.34
         )
     }
 
     private var fieldBackground: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(Color.white.opacity(0.10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            )
+        LiquidGlassRoundedSurface(
+            cornerRadius: 24,
+            tint: Color.white,
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.54
+        )
     }
 
     private func fieldLabel(_ title: String, systemImage: String) -> some View {
@@ -397,15 +402,15 @@ struct AuthView: View {
                 Text(title)
                     .font(.system(size: 18, weight: .bold, design: .rounded))
             }
-            .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.55))
-            .frame(maxWidth: .infinity)
             .frame(height: 70)
-            .background(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(Color.white.opacity(isEnabled ? 0.18 : 0.08))
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(
+            LiquidGlassProminentButtonStyle(
+                tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+                height: 70
+            )
+        )
         .disabled(!isEnabled)
     }
 
@@ -423,15 +428,11 @@ struct AuthView: View {
                 Text(title)
                     .font(.system(size: 16, weight: .bold, design: .rounded))
             }
-            .foregroundStyle(.white.opacity(prominent ? 1 : 0.82))
-            .frame(maxWidth: .infinity)
             .frame(height: 54)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(prominent ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
-            )
         }
-        .buttonStyle(.plain)
+        .modifier(
+            CompactActionButtonStyleModifier(prominent: prominent)
+        )
     }
 
     private func segment<Value: Hashable>(
@@ -500,6 +501,30 @@ struct AuthView: View {
 
 }
 
+private struct CompactActionButtonStyleModifier: ViewModifier {
+    let prominent: Bool
+
+    func body(content: Content) -> some View {
+        if prominent {
+            content.buttonStyle(
+                LiquidGlassProminentButtonStyle(
+                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                    secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+                    height: 54
+                )
+            )
+        } else {
+            content.buttonStyle(
+                LiquidGlassSecondaryButtonStyle(
+                    tint: .white,
+                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    height: 54
+                )
+            )
+        }
+    }
+}
+
 private struct DemoAccountCard: View {
     let account: AuthDemoAccount
     let isSelected: Bool
@@ -539,21 +564,23 @@ private struct DemoAccountCard: View {
             Button(action: onQuickSignIn) {
                 Image(systemName: "arrow.up.left")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(Color(red: 0.13, green: 0.54, blue: 0.99)))
+                    .liquidGlassCircle(
+                        tint: Color(red: 0.30, green: 0.47, blue: 1.00),
+                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                        innerDarkness: 0.46
+                    )
             }
             .buttonStyle(.plain)
         }
         .frame(maxHeight: .infinity)
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(isSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.04), lineWidth: 1)
+        .liquidGlassCard(
+            cornerRadius: 24,
+            tint: isSelected ? Color(red: 0.93, green: 0.35, blue: 0.76) : Color(red: 0.30, green: 0.47, blue: 1.00),
+            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            innerDarkness: 0.36
         )
     }
 }
