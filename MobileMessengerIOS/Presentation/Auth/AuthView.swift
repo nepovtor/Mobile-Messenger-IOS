@@ -22,9 +22,9 @@ struct AuthView: View {
     var body: some View {
         ZStack {
             LiquidGlassBackground(
-                accent: Color(red: 0.30, green: 0.47, blue: 1.00),
-                secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
-                tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+                accent: AppTheme.primary,
+                secondaryAccent: AppTheme.aqua,
+                tertiaryAccent: AppTheme.coral
             )
 
             ScrollView(showsIndicators: false) {
@@ -59,8 +59,8 @@ struct AuthView: View {
                 }
                 .liquidGlassCard(
                     cornerRadius: 30,
-                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                    secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+                    tint: AppTheme.primary,
+                    secondaryTint: AppTheme.coral,
                     innerDarkness: 0.38
                 )
 
@@ -100,8 +100,8 @@ struct AuthView: View {
         .padding(20)
         .liquidGlassCard(
             cornerRadius: 34,
-            tint: Color(red: 0.34, green: 0.48, blue: 1.00),
-            secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.coral,
             innerDarkness: 0.70
         )
     }
@@ -226,8 +226,8 @@ struct AuthView: View {
             }
             .buttonStyle(
                 LiquidGlassProminentButtonStyle(
-                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    tint: AppTheme.primary,
+                    secondaryTint: AppTheme.aqua,
                     height: 52
                 )
             )
@@ -242,8 +242,8 @@ struct AuthView: View {
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 22,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.38
         )
     }
@@ -326,8 +326,8 @@ struct AuthView: View {
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 22,
-            tint: Color(red: 0.93, green: 0.35, blue: 0.76),
-            secondaryTint: Color(red: 0.30, green: 0.47, blue: 1.00),
+            tint: AppTheme.coral,
+            secondaryTint: AppTheme.primary,
             innerDarkness: 0.34
         )
     }
@@ -357,8 +357,8 @@ struct AuthView: View {
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 22,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.34
         )
     }
@@ -367,7 +367,7 @@ struct AuthView: View {
         LiquidGlassRoundedSurface(
             cornerRadius: 24,
             tint: Color.white,
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.54
         )
     }
@@ -406,8 +406,8 @@ struct AuthView: View {
         }
         .buttonStyle(
             LiquidGlassProminentButtonStyle(
-                tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+                tint: AppTheme.primary,
+                secondaryTint: AppTheme.coral,
                 height: 70
             )
         )
@@ -508,8 +508,8 @@ private struct CompactActionButtonStyleModifier: ViewModifier {
         if prominent {
             content.buttonStyle(
                 LiquidGlassProminentButtonStyle(
-                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                    secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76),
+                    tint: AppTheme.primary,
+                    secondaryTint: AppTheme.coral,
                     height: 54
                 )
             )
@@ -517,7 +517,7 @@ private struct CompactActionButtonStyleModifier: ViewModifier {
             content.buttonStyle(
                 LiquidGlassSecondaryButtonStyle(
                     tint: .white,
-                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    secondaryTint: AppTheme.aqua,
                     height: 54
                 )
             )
@@ -567,8 +567,8 @@ private struct DemoAccountCard: View {
                     .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .liquidGlassCircle(
-                        tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                        tint: AppTheme.primary,
+                        secondaryTint: AppTheme.aqua,
                         innerDarkness: 0.46
                     )
             }
@@ -578,8 +578,8 @@ private struct DemoAccountCard: View {
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 24,
-            tint: isSelected ? Color(red: 0.93, green: 0.35, blue: 0.76) : Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: isSelected ? AppTheme.coral : AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.36
         )
     }

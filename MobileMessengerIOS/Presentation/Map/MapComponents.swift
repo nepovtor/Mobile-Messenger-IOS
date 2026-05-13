@@ -5,7 +5,7 @@ struct MapPrivacyCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Privacy", systemImage: "lock.shield.fill")
                 .font(.headline)
-                .foregroundStyle(Color(red: 0.30, green: 0.47, blue: 1.00))
+                .foregroundStyle(AppTheme.primary)
 
             Text("Your location is shared only with your contacts while sharing is enabled.")
                 .font(.subheadline)
@@ -18,8 +18,8 @@ struct MapPrivacyCard: View {
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 22,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.18
         )
     }
@@ -37,8 +37,8 @@ struct MapMarkerBadge: View {
                     .fill(
                         LinearGradient(
                             colors: isCurrentUser
-                                ? [Color.green.opacity(0.92), Color.blue.opacity(0.78)]
-                                : [Color.blue.opacity(0.92), Color.cyan.opacity(0.78)],
+                                ? [AppTheme.mint.opacity(0.92), AppTheme.primary.opacity(0.78)]
+                                : [AppTheme.primary.opacity(0.92), AppTheme.aqua.opacity(0.78)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -110,8 +110,8 @@ struct MapLocationDetailCard: View {
                 }
                 .buttonStyle(
                     LiquidGlassProminentButtonStyle(
-                        tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                        tint: AppTheme.primary,
+                        secondaryTint: AppTheme.aqua
                     )
                 )
                 .disabled(isOpeningChat)
@@ -120,8 +120,8 @@ struct MapLocationDetailCard: View {
         .padding(18)
         .liquidGlassCard(
             cornerRadius: 24,
-            tint: Color(red: 0.93, green: 0.35, blue: 0.76),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.coral,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.18
         )
     }

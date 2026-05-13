@@ -90,7 +90,7 @@ struct ProfileView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.blue.opacity(0.95), Color.cyan.opacity(0.72)],
+                            colors: [AppTheme.primary.opacity(0.95), AppTheme.aqua.opacity(0.72)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -118,8 +118,8 @@ struct ProfileView: View {
         .padding(22)
         .liquidGlassCard(
             cornerRadius: 30,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: isHighContrastDarkActive ? 0.10 : 0.06
         )
     }
@@ -158,7 +158,7 @@ struct ProfileView: View {
                                 LiquidGlassRoundedSurface(
                                     cornerRadius: 16,
                                     tint: .white,
-                                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                                    secondaryTint: AppTheme.aqua,
                                     innerDarkness: isHighContrastDarkActive ? 0.18 : 0.10
                                 )
                             )
@@ -176,7 +176,7 @@ struct ProfileView: View {
                             .buttonStyle(
                                 LiquidGlassSecondaryButtonStyle(
                                     tint: .white,
-                                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                                    secondaryTint: AppTheme.aqua
                                 )
                             )
 
@@ -194,8 +194,8 @@ struct ProfileView: View {
                             }
                             .buttonStyle(
                                 LiquidGlassProminentButtonStyle(
-                                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                                    tint: AppTheme.primary,
+                                    secondaryTint: AppTheme.aqua
                                 )
                             )
                             .disabled(viewModel.isSavingDisplayName || !viewModel.canSaveDisplayName)
@@ -210,8 +210,8 @@ struct ProfileView: View {
                         }
                         .buttonStyle(
                             LiquidGlassProminentButtonStyle(
-                                tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                                secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                                tint: AppTheme.primary,
+                                secondaryTint: AppTheme.aqua
                             )
                         )
                         Spacer()
@@ -374,8 +374,8 @@ struct ProfileView: View {
                     }
                     .buttonStyle(
                         LiquidGlassProminentButtonStyle(
-                            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                            tint: AppTheme.primary,
+                            secondaryTint: AppTheme.aqua
                         )
                     )
                 }
@@ -391,7 +391,7 @@ struct ProfileView: View {
                     .buttonStyle(
                         LiquidGlassSecondaryButtonStyle(
                             tint: .white,
-                            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                            secondaryTint: AppTheme.aqua
                         )
                     )
                 }
@@ -403,7 +403,7 @@ struct ProfileView: View {
                     .buttonStyle(
                         LiquidGlassSecondaryButtonStyle(
                             tint: .white,
-                            secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76)
+                            secondaryTint: AppTheme.coral
                         )
                     )
                 }
@@ -566,9 +566,9 @@ struct ProfileView: View {
 
     private var backgroundView: some View {
         LiquidGlassBackground(
-            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
-            tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+            accent: AppTheme.primary,
+            secondaryAccent: AppTheme.aqua,
+            tertiaryAccent: AppTheme.coral
         )
     }
 

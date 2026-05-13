@@ -24,18 +24,18 @@ struct ContactsView: View {
             }
             .overlay(alignment: .top) {
                 if let successMessage = viewModel.successMessage {
-                    BannerMessageView(
-                        message: successMessage,
-                        systemImage: "checkmark.circle.fill",
-                        tint: .green
-                    )
+                        BannerMessageView(
+                            message: successMessage,
+                            systemImage: "checkmark.circle.fill",
+                            tint: AppTheme.mint
+                        )
                     .padding()
                 } else if let errorMessage = viewModel.errorMessage {
-                    BannerMessageView(
-                        message: errorMessage,
-                        systemImage: "person.crop.circle.badge.exclamationmark",
-                        tint: .red
-                    )
+                        BannerMessageView(
+                            message: errorMessage,
+                            systemImage: "person.crop.circle.badge.exclamationmark",
+                            tint: AppTheme.coral
+                        )
                     .padding()
                 }
             }
@@ -97,7 +97,7 @@ struct ContactsView: View {
                     LiquidGlassRoundedSurface(
                         cornerRadius: 20,
                         tint: .white,
-                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                        secondaryTint: AppTheme.aqua,
                         innerDarkness: 0.24
                     )
                 )
@@ -117,8 +117,8 @@ struct ContactsView: View {
             }
             .buttonStyle(
                 LiquidGlassProminentButtonStyle(
-                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                    tint: AppTheme.primary,
+                    secondaryTint: AppTheme.aqua
                 )
             )
             .disabled(viewModel.isAdding)
@@ -130,17 +130,17 @@ struct ContactsView: View {
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 24,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.10
         )
     }
 
     private var backgroundView: some View {
         LiquidGlassBackground(
-            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
-            tertiaryAccent: Color(red: 0.49, green: 0.92, blue: 0.61)
+            accent: AppTheme.primary,
+            secondaryAccent: AppTheme.aqua,
+            tertiaryAccent: AppTheme.mint
         )
     }
 
@@ -156,6 +156,7 @@ struct ContactsView: View {
                 contact: contact,
                 isOpening: viewModel.openingContactID == contact.userID
             )
+            .equatable()
         }
         .buttonStyle(.plain)
         .disabled(viewModel.openingContactID == contact.userID)

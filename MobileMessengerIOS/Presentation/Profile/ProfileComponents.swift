@@ -19,8 +19,8 @@ struct ProfileSectionCard<Content: View>: View {
             }
             .liquidGlassCard(
                 cornerRadius: 26,
-                tint: isHighContrastDarkActive ? .blue : Color(red: 0.30, green: 0.47, blue: 1.00),
-                secondaryTint: isHighContrastDarkActive ? .cyan : Color(red: 0.07, green: 0.82, blue: 0.97),
+                tint: isHighContrastDarkActive ? .blue : AppTheme.primary,
+                secondaryTint: isHighContrastDarkActive ? .cyan : AppTheme.aqua,
                 innerDarkness: isHighContrastDarkActive ? 0.12 : 0.02
             )
         }

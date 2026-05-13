@@ -78,13 +78,13 @@ private struct ConnectionStatusBadge: View {
     private var accentColor: Color {
         switch status {
         case .online:
-            return Color.green
+            return AppTheme.mint
         case .connecting:
-            return Color.blue
+            return AppTheme.primary
         case .reconnecting:
-            return Color.orange
+            return AppTheme.amber
         case .offline:
-            return Color.red
+            return AppTheme.coral
         }
     }
 

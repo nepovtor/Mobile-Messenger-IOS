@@ -2,8 +2,13 @@ import Foundation
 
 @MainActor
 final class ContactsViewModel: ObservableObject {
-    @Published private(set) var contacts: [Contact] = []
-    @Published var searchQuery = ""
+    @Published private(set) var contacts: [Contact] = [] {
+        didSet { updateFilteredContacts() }
+    }
+    @Published private(set) var filteredContacts: [Contact] = []
+    @Published var searchQuery = "" {
+        didSet { updateFilteredContacts() }
+    }
     @Published var addPhone = ""
     @Published private(set) var isLoading = false
     @Published private(set) var isAdding = false
@@ -37,11 +42,14 @@ final class ContactsViewModel: ObservableObject {
         self.analytics = analytics
     }
 
-    var filteredContacts: [Contact] {
+    private func updateFilteredContacts() {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return contacts }
+        guard !query.isEmpty else {
+            filteredContacts = contacts
+            return
+        }
 
-        return contacts.filter { contact in
+        filteredContacts = contacts.filter { contact in
             contact.displayName.lowercased().contains(query) ||
             contact.phone.lowercased().contains(query)
         }

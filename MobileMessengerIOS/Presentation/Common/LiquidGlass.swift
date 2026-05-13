@@ -1,11 +1,31 @@
 import SwiftUI
+import UIKit
+
+enum AppTheme {
+    static let primary = Color(red: 0.12, green: 0.42, blue: 0.94)
+    static let aqua = Color(red: 0.02, green: 0.70, blue: 0.82)
+    static let mint = Color(red: 0.32, green: 0.78, blue: 0.58)
+    static let coral = Color(red: 0.94, green: 0.38, blue: 0.48)
+    static let amber = Color(red: 0.94, green: 0.61, blue: 0.24)
+
+    static let lightTop = Color(red: 0.98, green: 0.99, blue: 0.98)
+    static let lightMiddle = Color(red: 0.93, green: 0.98, blue: 1.00)
+    static let lightBottom = Color(red: 0.98, green: 0.96, blue: 1.00)
+    static let lightSurface = Color(red: 0.98, green: 0.99, blue: 0.98)
+    static let lightSurfaceTint = Color(red: 0.87, green: 0.96, blue: 0.98)
+
+    static let primaryUIColor = UIColor(red: 0.12, green: 0.42, blue: 0.94, alpha: 1)
+    static let aquaUIColor = UIColor(red: 0.02, green: 0.70, blue: 0.82, alpha: 1)
+    static let lightChromeUIColor = UIColor(red: 0.96, green: 0.99, blue: 0.98, alpha: 0.94)
+    static let lightShadowUIColor = UIColor(red: 0.09, green: 0.33, blue: 0.55, alpha: 0.12)
+}
 
 struct LiquidGlassBackground: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    var accent: Color = Color(red: 0.31, green: 0.48, blue: 1.00)
-    var secondaryAccent: Color = Color(red: 0.09, green: 0.82, blue: 0.96)
-    var tertiaryAccent: Color = Color(red: 0.94, green: 0.34, blue: 0.75)
+    var accent: Color = AppTheme.primary
+    var secondaryAccent: Color = AppTheme.aqua
+    var tertiaryAccent: Color = AppTheme.coral
 
     var body: some View {
         GeometryReader { proxy in
@@ -76,19 +96,19 @@ struct LiquidGlassBackground: View {
     private var topColor: Color {
         colorScheme == .dark
             ? Color(red: 0.04, green: 0.06, blue: 0.11)
-            : Color(red: 0.96, green: 0.97, blue: 0.99)
+            : AppTheme.lightTop
     }
 
     private var middleColor: Color {
         colorScheme == .dark
             ? Color(red: 0.06, green: 0.09, blue: 0.15)
-            : Color(red: 0.92, green: 0.95, blue: 0.99)
+            : AppTheme.lightMiddle
     }
 
     private var bottomColor: Color {
         colorScheme == .dark
             ? Color(red: 0.03, green: 0.05, blue: 0.09)
-            : Color(red: 0.94, green: 0.97, blue: 1.00)
+            : AppTheme.lightBottom
     }
 }
 
@@ -96,8 +116,8 @@ struct LiquidGlassRoundedSurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let cornerRadius: CGFloat
-    var tint: Color = .blue
-    var secondaryTint: Color = .cyan
+    var tint: Color = AppTheme.primary
+    var secondaryTint: Color = AppTheme.aqua
     var innerDarkness: Double = 0
 
     var body: some View {
@@ -123,10 +143,10 @@ struct LiquidGlassRoundedSurface: View {
     private var baseGradient: LinearGradient {
         LinearGradient(
             colors: [
-                Color.white.opacity(colorScheme == .dark ? 0.10 : 0.54),
+                (colorScheme == .dark ? Color.white : AppTheme.lightSurface).opacity(colorScheme == .dark ? 0.10 : 0.74),
                 tint.opacity(colorScheme == .dark ? 0.12 : 0.10),
                 secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.08),
-                Color.black.opacity(colorScheme == .dark ? 0.15 : 0.03),
+                (colorScheme == .dark ? Color.black : AppTheme.lightSurfaceTint).opacity(colorScheme == .dark ? 0.15 : 0.30),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -173,8 +193,8 @@ struct LiquidGlassRoundedSurface: View {
 struct LiquidGlassCapsuleSurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    var tint: Color = .blue
-    var secondaryTint: Color = .cyan
+    var tint: Color = AppTheme.primary
+    var secondaryTint: Color = AppTheme.aqua
     var innerDarkness: Double = 0
 
     var body: some View {
@@ -200,10 +220,10 @@ struct LiquidGlassCapsuleSurface: View {
     private var baseGradient: LinearGradient {
         LinearGradient(
             colors: [
-                Color.white.opacity(colorScheme == .dark ? 0.10 : 0.52),
+                (colorScheme == .dark ? Color.white : AppTheme.lightSurface).opacity(colorScheme == .dark ? 0.10 : 0.72),
                 tint.opacity(colorScheme == .dark ? 0.13 : 0.10),
                 secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.08),
-                Color.black.opacity(colorScheme == .dark ? 0.15 : 0.03),
+                (colorScheme == .dark ? Color.black : AppTheme.lightSurfaceTint).opacity(colorScheme == .dark ? 0.15 : 0.28),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -250,8 +270,8 @@ struct LiquidGlassCapsuleSurface: View {
 struct LiquidGlassCircleSurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    var tint: Color = .blue
-    var secondaryTint: Color = .cyan
+    var tint: Color = AppTheme.primary
+    var secondaryTint: Color = AppTheme.aqua
     var innerDarkness: Double = 0
 
     var body: some View {
@@ -260,10 +280,10 @@ struct LiquidGlassCircleSurface: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(colorScheme == .dark ? 0.10 : 0.52),
+                            (colorScheme == .dark ? Color.white : AppTheme.lightSurface).opacity(colorScheme == .dark ? 0.10 : 0.72),
                             tint.opacity(colorScheme == .dark ? 0.13 : 0.10),
                             secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.08),
-                            Color.black.opacity(colorScheme == .dark ? 0.15 : 0.03),
+                            (colorScheme == .dark ? Color.black : AppTheme.lightSurfaceTint).opacity(colorScheme == .dark ? 0.15 : 0.26),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -357,8 +377,8 @@ private struct LiquidGlassCircleModifier: ViewModifier {
 extension View {
     func liquidGlassCard(
         cornerRadius: CGFloat = 28,
-        tint: Color = .blue,
-        secondaryTint: Color = .cyan,
+        tint: Color = AppTheme.primary,
+        secondaryTint: Color = AppTheme.aqua,
         innerDarkness: Double = 0
     ) -> some View {
         modifier(
@@ -372,8 +392,8 @@ extension View {
     }
 
     func liquidGlassCapsule(
-        tint: Color = .blue,
-        secondaryTint: Color = .cyan,
+        tint: Color = AppTheme.primary,
+        secondaryTint: Color = AppTheme.aqua,
         innerDarkness: Double = 0
     ) -> some View {
         modifier(
@@ -386,8 +406,8 @@ extension View {
     }
 
     func liquidGlassCircle(
-        tint: Color = .blue,
-        secondaryTint: Color = .cyan,
+        tint: Color = AppTheme.primary,
+        secondaryTint: Color = AppTheme.aqua,
         innerDarkness: Double = 0
     ) -> some View {
         modifier(
@@ -403,8 +423,8 @@ extension View {
 struct LiquidGlassProminentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
-    var tint: Color = .blue
-    var secondaryTint: Color = .cyan
+    var tint: Color = AppTheme.primary
+    var secondaryTint: Color = AppTheme.aqua
     var height: CGFloat = 62
 
     func makeBody(configuration: Configuration) -> some View {
@@ -448,7 +468,7 @@ struct LiquidGlassSecondaryButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var colorScheme
 
     var tint: Color = .white
-    var secondaryTint: Color = .cyan
+    var secondaryTint: Color = AppTheme.aqua
     var height: CGFloat = 56
 
     func makeBody(configuration: Configuration) -> some View {

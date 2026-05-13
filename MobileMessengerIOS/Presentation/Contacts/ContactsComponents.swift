@@ -1,29 +1,23 @@
 import SwiftUI
 
-struct ContactRow: View {
+struct ContactRow: View, Equatable {
     let contact: Contact
     let isOpening: Bool
 
+    static func == (lhs: ContactRow, rhs: ContactRow) -> Bool {
+        lhs.contact == rhs.contact && lhs.isOpening == rhs.isOpening
+    }
+
     var body: some View {
         HStack(spacing: 14) {
-            Circle()
-                .frame(width: 50, height: 50)
-                .overlay {
-                    Text(initials)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
-                }
-                .liquidGlassCircle(
-                    tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
-                    innerDarkness: 0.42
-                )
+            avatar
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(contact.displayName)
                         .font(.headline)
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
 
                     if contact.directChatID != nil {
                         Label("Direct", systemImage: "bolt.horizontal.circle.fill")
@@ -32,21 +26,19 @@ struct ContactRow: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .liquidGlassCapsule(
-                                tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                                secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
-                                innerDarkness: 0.40
-                            )
+                            .background(directBadgeBackground, in: Capsule())
                     }
                 }
 
                 Text(contact.phone)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
                 Text(contact.directChatID == nil ? "Чат будет открыт автоматически" : "Нажмите, чтобы открыть direct chat")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -55,15 +47,70 @@ struct ContactRow: View {
                 ProgressView()
             } else {
                 Image(systemName: "message.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(AppTheme.primary)
             }
         }
         .padding(16)
-        .liquidGlassCard(
-            cornerRadius: 22,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
-            innerDarkness: 0.16
+        .background(rowBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(rowBorder, lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var avatar: some View {
+        Circle()
+            .fill(avatarBackground)
+            .frame(width: 50, height: 50)
+            .overlay {
+                Text(initials)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+    }
+
+    private var rowBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(uiColor: .systemBackground).opacity(0.86),
+                AppTheme.lightSurfaceTint.opacity(0.56)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var rowBorder: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.62),
+                AppTheme.aqua.opacity(0.20)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var avatarBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                AppTheme.primary,
+                AppTheme.aqua
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var directBadgeBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                AppTheme.primary,
+                AppTheme.aqua
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
     }
 

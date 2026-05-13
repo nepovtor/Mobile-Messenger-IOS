@@ -14,13 +14,13 @@ struct MessageStatusView: View {
                 .foregroundColor(.secondary)
         case .delivered:
             Image(systemName: "checkmark.circle")
-                .foregroundColor(.blue)
+                .foregroundColor(AppTheme.primary)
         case .read:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
+                .foregroundColor(AppTheme.mint)
         case .failed:
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.red)
+                .foregroundColor(AppTheme.coral)
         }
     }
 }

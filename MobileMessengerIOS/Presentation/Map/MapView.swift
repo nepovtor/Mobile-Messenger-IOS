@@ -50,13 +50,13 @@ struct MapView: View {
                         BannerMessageView(
                             message: infoMessage,
                             systemImage: "location.circle.fill",
-                            tint: .green
+                            tint: AppTheme.mint
                         )
                     } else if let errorMessage = viewModel.errorMessage {
                         BannerMessageView(
                             message: errorMessage,
                             systemImage: "location.slash.fill",
-                            tint: .red
+                            tint: AppTheme.coral
                         )
                     }
                 }
@@ -97,8 +97,8 @@ struct MapView: View {
                 }
                 .buttonStyle(
                     LiquidGlassProminentButtonStyle(
-                        tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                        secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97)
+                        tint: AppTheme.primary,
+                        secondaryTint: AppTheme.aqua
                     )
                 )
                 .disabled(viewModel.isSharing)
@@ -111,7 +111,7 @@ struct MapView: View {
                 .buttonStyle(
                     LiquidGlassSecondaryButtonStyle(
                         tint: .white,
-                        secondaryTint: Color(red: 0.93, green: 0.35, blue: 0.76)
+                        secondaryTint: AppTheme.coral
                     )
                 )
                 .disabled(!viewModel.myLocationShare.sharingEnabled || viewModel.isStoppingShare)
@@ -175,9 +175,9 @@ struct MapView: View {
         }
         .background(
             LiquidGlassBackground(
-                accent: Color(red: 0.30, green: 0.47, blue: 1.00),
-                secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
-                tertiaryAccent: Color(red: 0.49, green: 0.92, blue: 0.61)
+                accent: AppTheme.primary,
+                secondaryAccent: AppTheme.aqua,
+                tertiaryAccent: AppTheme.mint
             )
         )
     }

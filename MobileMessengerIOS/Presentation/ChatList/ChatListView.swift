@@ -71,12 +71,12 @@ struct ChatListView: View {
                         Button(action: { isShowingProfile = true }) {
                             HStack(spacing: 10) {
                                 Circle()
-                                    .fill(Color.blue.opacity(0.16))
+                                    .fill(AppTheme.primary.opacity(0.16))
                                     .frame(width: 32, height: 32)
                                     .overlay {
                                         Text(profileInitials)
                                             .font(.caption.weight(.bold))
-                                            .foregroundStyle(.blue)
+                                            .foregroundStyle(AppTheme.primary)
                                     }
 
                                 Text("Profile")
@@ -211,7 +211,7 @@ private struct ChatRowView: View {
                 if !chat.typingParticipants.isEmpty {
                     Text("Печатает: \(chat.typingParticipants.joined(separator: ", "))")
                         .font(.subheadline)
-                        .foregroundStyle(Color.blue.opacity(0.9))
+                        .foregroundStyle(AppTheme.primary.opacity(0.9))
                         .lineLimit(2)
                 } else if let preview = chat.lastMessagePreview, !preview.isEmpty {
                     Text(preview)
@@ -231,14 +231,14 @@ private struct ChatRowView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.blue))
+                    .background(Capsule().fill(AppTheme.primary))
             }
         }
         .padding(16)
         .liquidGlassCard(
             cornerRadius: 24,
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: isHighContrastDarkActive ? 0.10 : 0.04
         )
     }
@@ -249,7 +249,7 @@ private struct ChatRowView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.blue.opacity(0.85), Color.cyan.opacity(0.75)],
+                            colors: [AppTheme.primary.opacity(0.85), AppTheme.aqua.opacity(0.75)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -298,18 +298,18 @@ private struct ChatRowView: View {
     }
 
     private var groupBadgeTextColor: Color {
-        isHighContrastDarkActive ? .blue : Color.blue.opacity(0.9)
+        isHighContrastDarkActive ? .blue : AppTheme.primary.opacity(0.9)
     }
 
     private var incomingAvatarColors: [Color] {
         if isHighContrastDarkActive {
             return [Color.blue.opacity(0.28), Color.cyan.opacity(0.18)]
         }
-        return [Color.white.opacity(0.95), Color.blue.opacity(0.18)]
+        return [Color.white.opacity(0.95), AppTheme.primary.opacity(0.18)]
     }
 
     private var incomingAvatarTextColor: Color {
-        isHighContrastDarkActive ? .white : Color.blue.opacity(0.85)
+        isHighContrastDarkActive ? .white : AppTheme.primary.opacity(0.85)
     }
 
     private var isHighContrastDarkActive: Bool {
@@ -339,7 +339,7 @@ private struct ChatRowSkeleton: View {
         .liquidGlassCard(
             cornerRadius: 24,
             tint: Color.white,
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            secondaryTint: AppTheme.aqua,
             innerDarkness: isHighContrastDarkActive ? 0.08 : 0
         )
     }
@@ -517,12 +517,12 @@ private struct GroupContactRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Circle()
-                .fill(Color.blue.opacity(isSelected ? 0.22 : 0.12))
+                .fill(AppTheme.primary.opacity(isSelected ? 0.22 : 0.12))
                 .frame(width: 44, height: 44)
                 .overlay(
                     Text(initials)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.blue.opacity(0.9))
+                        .foregroundStyle(AppTheme.primary.opacity(0.9))
                 )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -571,8 +571,8 @@ private struct SelectedContactChip: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .liquidGlassCapsule(
-            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+            tint: AppTheme.primary,
+            secondaryTint: AppTheme.aqua,
             innerDarkness: 0.08
         )
     }
@@ -584,9 +584,9 @@ private struct ChatListBackdrop: View {
 
     var body: some View {
         LiquidGlassBackground(
-            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
-            tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+            accent: AppTheme.primary,
+            secondaryAccent: AppTheme.aqua,
+            tertiaryAccent: AppTheme.coral
         )
     }
 }

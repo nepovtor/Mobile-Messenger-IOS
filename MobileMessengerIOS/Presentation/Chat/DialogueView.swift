@@ -187,13 +187,13 @@ struct DialogueView: View {
                     } else {
                         Image(systemName: "photo.on.rectangle.angled")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(Color.blue.opacity(0.9))
+                            .foregroundStyle(AppTheme.primary.opacity(0.9))
                     }
                 }
                 .frame(width: 42, height: 42)
                 .liquidGlassCircle(
                     tint: Color.white,
-                    secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                    secondaryTint: AppTheme.aqua,
                     innerDarkness: mediaInnerDarkness
                 )
             }
@@ -228,8 +228,8 @@ struct DialogueView: View {
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .liquidGlassCircle(
-                            tint: Color(red: 0.30, green: 0.47, blue: 1.00),
-                            secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                            tint: AppTheme.primary,
+                            secondaryTint: AppTheme.aqua,
                             innerDarkness: 0.54
                         )
                 }
@@ -242,7 +242,7 @@ struct DialogueView: View {
             .liquidGlassCard(
                 cornerRadius: 26,
                 tint: .white,
-                secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
+                secondaryTint: AppTheme.aqua,
                 innerDarkness: inputInnerDarkness
             )
         }
@@ -280,7 +280,7 @@ struct DialogueView: View {
             .padding()
             .liquidGlassCard(
                 cornerRadius: 18,
-                tint: .red,
+                tint: AppTheme.coral,
                 secondaryTint: .white,
                 innerDarkness: 0.42
             )
@@ -326,13 +326,13 @@ private struct NetworkStatusIndicator: View {
 
     var body: some View {
         Circle()
-            .fill(isOnline ? Color.green : Color.orange)
+            .fill(isOnline ? AppTheme.mint : AppTheme.amber)
             .frame(width: 10, height: 10)
             .overlay {
                 Circle()
                     .stroke(borderColor, lineWidth: 1)
             }
-            .shadow(color: (isOnline ? Color.green : Color.orange).opacity(0.35), radius: 4, x: 0, y: 0)
+            .shadow(color: (isOnline ? AppTheme.mint : AppTheme.amber).opacity(0.35), radius: 4, x: 0, y: 0)
             .accessibilityLabel(isOnline ? "Сеть доступна" : "Нет сети")
             .accessibilityHint("Индикатор состояния сети")
     }
@@ -354,7 +354,7 @@ private struct ChatHeaderView: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Color.blue.opacity(0.9), Color.cyan.opacity(0.75)],
+                                colors: [AppTheme.primary.opacity(0.9), AppTheme.aqua.opacity(0.75)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -398,11 +398,11 @@ private struct ChatHeaderView: View {
         if isHighContrastDarkActive {
             return Color.blue.opacity(0.24)
         }
-        return Color.blue.opacity(0.14)
+        return AppTheme.primary.opacity(0.14)
     }
 
     private var avatarTextColor: Color {
-        isHighContrastDarkActive ? .white : Color.blue.opacity(0.9)
+        isHighContrastDarkActive ? .white : AppTheme.primary.opacity(0.9)
     }
 
     private var isHighContrastDarkActive: Bool {
@@ -421,7 +421,7 @@ private struct MessageBubbleView: View {
             if isGroup && !message.isOutgoing {
                 Text(message.authorName)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.blue.opacity(0.9))
+                    .foregroundStyle(AppTheme.primary.opacity(0.9))
                     .padding(.horizontal, 6)
             }
 
@@ -482,7 +482,7 @@ private struct MessageBubbleView: View {
                 message.isOutgoing
                 ? AnyShapeStyle(
                     LinearGradient(
-                        colors: [Color.blue.opacity(0.95), Color.cyan.opacity(0.82)],
+                        colors: [AppTheme.primary.opacity(0.95), AppTheme.aqua.opacity(0.82)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -613,9 +613,9 @@ private struct ChatWallpaper: View {
 
     var body: some View {
         LiquidGlassBackground(
-            accent: Color(red: 0.30, green: 0.47, blue: 1.00),
-            secondaryAccent: Color(red: 0.07, green: 0.82, blue: 0.97),
-            tertiaryAccent: Color(red: 0.93, green: 0.35, blue: 0.76)
+            accent: AppTheme.primary,
+            secondaryAccent: AppTheme.aqua,
+            tertiaryAccent: AppTheme.coral
         )
     }
 }
