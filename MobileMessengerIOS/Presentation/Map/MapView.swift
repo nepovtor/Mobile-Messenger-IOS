@@ -5,11 +5,18 @@ struct MapView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @StateObject private var viewModel: MapViewModel
     @StateObject private var permissionManager = LocationPermissionManager()
+    @State private var mapPosition: MapCameraPosition
     @State private var openedChat: ChatListItem?
+
+    private static let defaultRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 53.9, longitude: 27.56),
+        span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
+    )
 
     @MainActor
     init(container: AppContainer) {
         _viewModel = StateObject(wrappedValue: container.makeMapViewModel())
+        _mapPosition = State(initialValue: .region(Self.defaultRegion))
     }
 
     var body: some View {
@@ -119,28 +126,27 @@ struct MapView: View {
             }
 
             ZStack {
-                Map(
-                    coordinateRegion: $viewModel.region,
-                    annotationItems: viewModel.markers
-                ) { marker in
-                    MapAnnotation(coordinate: marker.coordinate) {
-                        if marker.isCurrentUser {
-                            MapMarkerBadge(
-                                title: marker.title,
-                                isCurrentUser: true,
-                                isOutdated: marker.isOutdated
-                            )
-                        } else {
-                            Button {
-                                viewModel.selectedMarker = marker
-                            } label: {
+                Map(position: $mapPosition) {
+                    ForEach(viewModel.markers) { marker in
+                        Annotation(marker.title, coordinate: marker.coordinate) {
+                            if marker.isCurrentUser {
                                 MapMarkerBadge(
                                     title: marker.title,
-                                    isCurrentUser: false,
+                                    isCurrentUser: true,
                                     isOutdated: marker.isOutdated
                                 )
+                            } else {
+                                Button {
+                                    viewModel.selectedMarker = marker
+                                } label: {
+                                    MapMarkerBadge(
+                                        title: marker.title,
+                                        isCurrentUser: false,
+                                        isOutdated: marker.isOutdated
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -148,6 +154,12 @@ struct MapView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                }
+                .onAppear {
+                    syncMapPosition()
+                }
+                .onChange(of: MapRegionKey(viewModel.region)) {
+                    syncMapPosition()
                 }
 
                 if viewModel.contactLocations.isEmpty && !viewModel.isLoading {
@@ -170,6 +182,10 @@ struct MapView: View {
         )
     }
 
+    private func syncMapPosition() {
+        mapPosition = .region(viewModel.region)
+    }
+
     static func formattedTimestamp(_ value: String) -> String {
         guard let date = ISO8601DateFormatter.flexible.date(from: value) else {
             return "Updated recently"
@@ -178,5 +194,19 @@ struct MapView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private struct MapRegionKey: Equatable {
+    let latitude: CLLocationDegrees
+    let longitude: CLLocationDegrees
+    let latitudeDelta: CLLocationDegrees
+    let longitudeDelta: CLLocationDegrees
+
+    init(_ region: MKCoordinateRegion) {
+        latitude = region.center.latitude
+        longitude = region.center.longitude
+        latitudeDelta = region.span.latitudeDelta
+        longitudeDelta = region.span.longitudeDelta
     }
 }

@@ -19,28 +19,54 @@ struct LiquidGlassBackground: View {
                 )
 
                 Circle()
-                    .fill(accent.opacity(colorScheme == .dark ? 0.22 : 0.18))
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                accent.opacity(colorScheme == .dark ? 0.20 : 0.16),
+                                accent.opacity(0)
+                            ],
+                            center: .center,
+                            startRadius: 8,
+                            endRadius: size.width * 0.44
+                        )
+                    )
                     .frame(width: size.width * 0.82, height: size.width * 0.82)
-                    .blur(radius: 72)
                     .offset(x: size.width * 0.34, y: -size.height * 0.22)
 
                 Circle()
-                    .fill(secondaryAccent.opacity(colorScheme == .dark ? 0.18 : 0.16))
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                secondaryAccent.opacity(colorScheme == .dark ? 0.16 : 0.14),
+                                secondaryAccent.opacity(0)
+                            ],
+                            center: .center,
+                            startRadius: 8,
+                            endRadius: size.width * 0.40
+                        )
+                    )
                     .frame(width: size.width * 0.74, height: size.width * 0.74)
-                    .blur(radius: 78)
                     .offset(x: -size.width * 0.38, y: size.height * 0.18)
 
                 RoundedRectangle(cornerRadius: 88, style: .continuous)
-                    .fill(tertiaryAccent.opacity(colorScheme == .dark ? 0.14 : 0.12))
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                tertiaryAccent.opacity(colorScheme == .dark ? 0.13 : 0.10),
+                                tertiaryAccent.opacity(0)
+                            ],
+                            center: .center,
+                            startRadius: 12,
+                            endRadius: size.width * 0.34
+                        )
+                    )
                     .frame(width: size.width * 0.58, height: size.width * 0.58)
-                    .blur(radius: 68)
                     .rotationEffect(.degrees(18))
                     .offset(x: size.width * 0.30, y: size.height * 0.32)
 
                 Capsule()
-                    .fill(Color.white.opacity(colorScheme == .dark ? 0.10 : 0.40))
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.22))
                     .frame(width: size.width * 0.46, height: 92)
-                    .blur(radius: 24)
                     .offset(x: -size.width * 0.28, y: -size.height * 0.28)
             }
         }
@@ -77,9 +103,6 @@ struct LiquidGlassRoundedSurface: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(baseGradient)
 
             if innerDarkness > 0 {
@@ -92,52 +115,18 @@ struct LiquidGlassRoundedSurface: View {
                 .strokeBorder(borderGradient, lineWidth: 1)
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.16 : 0.55), lineWidth: 0.9)
-                .mask(alignment: .top) {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.white, .clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: cornerRadius + 28)
-                }
-
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [.clear, secondaryTint.opacity(colorScheme == .dark ? 0.34 : 0.46)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1.2
-                )
-                .blur(radius: 0.8)
-                .mask(alignment: .bottom) {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.clear, .white],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: cornerRadius + 24)
-                }
+                .fill(topHighlight)
         }
-        .shadow(color: tint.opacity(colorScheme == .dark ? 0.16 : 0.18), radius: 20, x: 0, y: 10)
-        .shadow(color: secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.14), radius: 28, x: 0, y: 18)
+        .shadow(color: tint.opacity(colorScheme == .dark ? 0.07 : 0.07), radius: 5, x: 0, y: 3)
     }
 
     private var baseGradient: LinearGradient {
         LinearGradient(
             colors: [
                 Color.white.opacity(colorScheme == .dark ? 0.10 : 0.54),
-                tint.opacity(colorScheme == .dark ? 0.14 : 0.12),
-                secondaryTint.opacity(colorScheme == .dark ? 0.12 : 0.10),
-                Color.black.opacity(colorScheme == .dark ? 0.18 : 0.04),
+                tint.opacity(colorScheme == .dark ? 0.12 : 0.10),
+                secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.08),
+                Color.black.opacity(colorScheme == .dark ? 0.15 : 0.03),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -148,9 +137,9 @@ struct LiquidGlassRoundedSurface: View {
         LinearGradient(
             colors: [
                 Color.black.opacity(innerDarkness),
-                tint.opacity(0.18),
-                secondaryTint.opacity(0.14),
-                Color.black.opacity(innerDarkness * 0.72),
+                tint.opacity(0.12),
+                secondaryTint.opacity(0.10),
+                Color.black.opacity(innerDarkness * 0.62),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -162,10 +151,21 @@ struct LiquidGlassRoundedSurface: View {
             colors: [
                 Color.white.opacity(colorScheme == .dark ? 0.26 : 0.84),
                 Color.white.opacity(colorScheme == .dark ? 0.08 : 0.18),
-                secondaryTint.opacity(colorScheme == .dark ? 0.24 : 0.42),
+                secondaryTint.opacity(colorScheme == .dark ? 0.18 : 0.30),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
+        )
+    }
+
+    private var topHighlight: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(colorScheme == .dark ? 0.06 : 0.22),
+                Color.white.opacity(0)
+            ],
+            startPoint: .top,
+            endPoint: .center
         )
     }
 }
@@ -180,9 +180,6 @@ struct LiquidGlassCapsuleSurface: View {
     var body: some View {
         ZStack {
             Capsule()
-                .fill(.ultraThinMaterial)
-
-            Capsule()
                 .fill(baseGradient)
 
             if innerDarkness > 0 {
@@ -195,42 +192,18 @@ struct LiquidGlassCapsuleSurface: View {
                 .strokeBorder(borderGradient, lineWidth: 1)
 
             Capsule()
-                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.16 : 0.58), lineWidth: 0.9)
-                .mask(alignment: .top) {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.white, .clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: 34)
-                }
-
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [secondaryTint.opacity(0.34), .clear],
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
-                )
-                .frame(height: 18)
-                .blur(radius: 10)
-                .offset(y: 14)
+                .fill(topHighlight)
         }
-        .shadow(color: tint.opacity(colorScheme == .dark ? 0.18 : 0.16), radius: 18, x: 0, y: 10)
-        .shadow(color: secondaryTint.opacity(colorScheme == .dark ? 0.14 : 0.12), radius: 24, x: 0, y: 16)
+        .shadow(color: tint.opacity(colorScheme == .dark ? 0.07 : 0.07), radius: 5, x: 0, y: 3)
     }
 
     private var baseGradient: LinearGradient {
         LinearGradient(
             colors: [
                 Color.white.opacity(colorScheme == .dark ? 0.10 : 0.52),
-                tint.opacity(colorScheme == .dark ? 0.16 : 0.13),
-                secondaryTint.opacity(colorScheme == .dark ? 0.13 : 0.11),
-                Color.black.opacity(colorScheme == .dark ? 0.18 : 0.03),
+                tint.opacity(colorScheme == .dark ? 0.13 : 0.10),
+                secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.08),
+                Color.black.opacity(colorScheme == .dark ? 0.15 : 0.03),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -241,9 +214,9 @@ struct LiquidGlassCapsuleSurface: View {
         LinearGradient(
             colors: [
                 Color.black.opacity(innerDarkness),
-                tint.opacity(0.28),
-                secondaryTint.opacity(0.18),
-                Color.black.opacity(innerDarkness * 0.72),
+                tint.opacity(0.18),
+                secondaryTint.opacity(0.12),
+                Color.black.opacity(innerDarkness * 0.62),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -255,10 +228,21 @@ struct LiquidGlassCapsuleSurface: View {
             colors: [
                 Color.white.opacity(colorScheme == .dark ? 0.28 : 0.88),
                 Color.white.opacity(colorScheme == .dark ? 0.08 : 0.20),
-                secondaryTint.opacity(colorScheme == .dark ? 0.26 : 0.44),
+                secondaryTint.opacity(colorScheme == .dark ? 0.18 : 0.30),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
+        )
+    }
+
+    private var topHighlight: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(colorScheme == .dark ? 0.06 : 0.22),
+                Color.white.opacity(0)
+            ],
+            startPoint: .top,
+            endPoint: .center
         )
     }
 }
@@ -273,16 +257,13 @@ struct LiquidGlassCircleSurface: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(.ultraThinMaterial)
-
-            Circle()
                 .fill(
                     LinearGradient(
                         colors: [
                             Color.white.opacity(colorScheme == .dark ? 0.10 : 0.52),
-                            tint.opacity(colorScheme == .dark ? 0.16 : 0.14),
-                            secondaryTint.opacity(colorScheme == .dark ? 0.12 : 0.10),
-                            Color.black.opacity(colorScheme == .dark ? 0.18 : 0.03),
+                            tint.opacity(colorScheme == .dark ? 0.13 : 0.10),
+                            secondaryTint.opacity(colorScheme == .dark ? 0.10 : 0.08),
+                            Color.black.opacity(colorScheme == .dark ? 0.15 : 0.03),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -295,8 +276,8 @@ struct LiquidGlassCircleSurface: View {
                         LinearGradient(
                             colors: [
                                 Color.black.opacity(innerDarkness),
-                                tint.opacity(0.22),
-                                Color.black.opacity(innerDarkness * 0.72),
+                                tint.opacity(0.14),
+                                Color.black.opacity(innerDarkness * 0.62),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -311,7 +292,7 @@ struct LiquidGlassCircleSurface: View {
                         colors: [
                             Color.white.opacity(colorScheme == .dark ? 0.28 : 0.86),
                             Color.white.opacity(colorScheme == .dark ? 0.08 : 0.18),
-                            secondaryTint.opacity(colorScheme == .dark ? 0.22 : 0.40),
+                            secondaryTint.opacity(colorScheme == .dark ? 0.16 : 0.28),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -319,8 +300,7 @@ struct LiquidGlassCircleSurface: View {
                     lineWidth: 1
                 )
         }
-        .shadow(color: tint.opacity(colorScheme == .dark ? 0.18 : 0.16), radius: 16, x: 0, y: 10)
-        .shadow(color: secondaryTint.opacity(colorScheme == .dark ? 0.12 : 0.10), radius: 22, x: 0, y: 14)
+        .shadow(color: tint.opacity(colorScheme == .dark ? 0.07 : 0.07), radius: 4, x: 0, y: 2)
     }
 }
 

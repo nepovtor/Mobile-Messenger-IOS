@@ -652,7 +652,7 @@ struct ProfileView: View {
         if isHighContrastDarkActive {
             return AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
         }
-        return AnyShapeStyle(.ultraThinMaterial)
+        return AnyShapeStyle(Color(uiColor: .systemBackground).opacity(0.72))
     }
 
     private var headerCardBorderColor: Color {

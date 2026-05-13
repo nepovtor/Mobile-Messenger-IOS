@@ -173,7 +173,10 @@ struct DialogueView: View {
     private var messageInput: some View {
         let isSendingMedia = viewModel.isSendingMedia
         let isSendDisabled = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingMedia
-        let mediaBackgroundColor = mediaButtonBackgroundColor
+        let useHighContrast = isHighContrastDarkActive
+        let mediaInnerDarkness = useHighContrast ? 0.10 : 0.03
+        let inputInnerDarkness = useHighContrast ? 0.10 : 0.06
+        let toolbarBackground = toolbarBackgroundColor
 
         return HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -191,7 +194,7 @@ struct DialogueView: View {
                 .liquidGlassCircle(
                     tint: Color.white,
                     secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
-                    innerDarkness: isHighContrastDarkActive ? 0.12 : 0.04
+                    innerDarkness: mediaInnerDarkness
                 )
             }
             .disabled(isSendingMedia)
@@ -240,7 +243,7 @@ struct DialogueView: View {
                 cornerRadius: 26,
                 tint: .white,
                 secondaryTint: Color(red: 0.07, green: 0.82, blue: 0.97),
-                innerDarkness: isHighContrastDarkActive ? 0.12 : 0.08
+                innerDarkness: inputInnerDarkness
             )
         }
         .padding(.horizontal, 12)
@@ -248,7 +251,7 @@ struct DialogueView: View {
         .padding(.bottom, 10)
         .background(
             Rectangle()
-                .fill(.thinMaterial)
+                .fill(toolbarBackground)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(toolbarDividerColor)
@@ -298,25 +301,11 @@ struct DialogueView: View {
         }
     }
 
-    private var mediaButtonBackgroundColor: Color {
+    private var toolbarBackgroundColor: Color {
         if isHighContrastDarkActive {
-            return Color(uiColor: .secondarySystemBackground)
+            return Color(uiColor: .systemBackground).opacity(0.94)
         }
-        return Color.white.opacity(0.86)
-    }
-
-    private var inputBackgroundStyle: AnyShapeStyle {
-        if isHighContrastDarkActive {
-            return AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
-        }
-        return AnyShapeStyle(.ultraThinMaterial)
-    }
-
-    private var inputBorderColor: Color {
-        if isHighContrastDarkActive {
-            return Color.white.opacity(0.14)
-        }
-        return Color.white.opacity(0.5)
+        return Color(uiColor: .systemBackground).opacity(0.78)
     }
 
     private var toolbarDividerColor: Color {
