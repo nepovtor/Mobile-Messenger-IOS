@@ -152,7 +152,7 @@ public final class ChatViewModel: ObservableObject {
                 upsert(message: message)
                 updateBannerState()
             } catch {
-                banner = .error("Не удалось отправить фото")
+                banner = .error(AppError.presentableMessage(for: error))
                 analytics.track(error: error, context: "send_image")
             }
         }

@@ -4,6 +4,17 @@ import SwiftUI
 
 @MainActor
 public final class AppContainer: ObservableObject {
+    private struct BackendHealthCheckResponse: Decodable {
+        let status: String
+        let uptime: TimeInterval?
+        let timestamp: String?
+    }
+
+    private struct BackendVersionResponse: Decodable {
+        let name: String
+        let version: String
+    }
+
     public enum AppearanceMode: String, CaseIterable, Identifiable {
         case system
         case light
@@ -165,6 +176,7 @@ public final class AppContainer: ObservableObject {
         configureNetworkingServices()
         bindSessionState()
         bindConnectionState()
+        runDebugBackendHealthCheck()
     }
 
     public func updateAppearanceMode(_ mode: AppearanceMode) {
@@ -388,9 +400,48 @@ public final class AppContainer: ObservableObject {
         configureNetworkingServices()
         bindConnectionState()
         configurationRevision += 1
+        runDebugBackendHealthCheck()
         if isSceneActive {
             Task { await refreshApplicationState() }
         }
+    }
+
+    private func runDebugBackendHealthCheck() {
+        #if DEBUG
+        guard configService.features.isLoggingVerbose else { return }
+        let restBaseURL = configService.restBaseURL
+        Task.detached(priority: .background) {
+            do {
+                let health: BackendHealthCheckResponse = try await Self.fetchDebugEndpoint(
+                    "health",
+                    from: restBaseURL
+                )
+                let version: BackendVersionResponse = try await Self.fetchDebugEndpoint(
+                    "version",
+                    from: restBaseURL
+                )
+                let uptimeDescription = health.uptime.map { String(format: "%.0f", $0) } ?? "n/a"
+                let timestamp = health.timestamp ?? "n/a"
+                let message = "[Backend] health=\(health.status) uptime=\(uptimeDescription)s version=\(version.name)@\(version.version) timestamp=\(timestamp)\n"
+                if let data = message.data(using: .utf8) {
+                    FileHandle.standardError.write(data)
+                }
+            } catch {
+                let message = "[Backend] health check failed for \(restBaseURL.absoluteString): \(AppError.presentableMessage(for: error))\n"
+                if let data = message.data(using: .utf8) {
+                    FileHandle.standardError.write(data)
+                }
+            }
+        }
+        #endif
+    }
+
+    private static func fetchDebugEndpoint<Response: Decodable>(
+        _ path: String,
+        from baseURL: URL
+    ) async throws -> Response {
+        let request = URLRequest(url: baseURL.appendingAPIPath(path))
+        return try await APIResponseParser.requestJSON(request, using: .shared)
     }
 
     public func handleScenePhase(_ scenePhase: ScenePhase) {

@@ -1,6 +1,6 @@
 SLASH = /
-PRODUCTION_API_HOST = mobile-messenger-ios-production.up.railway.app
-PRODUCTION_WS_HOST = mobile-messenger-ios-production.up.railway.app
+PRODUCTION_API_HOST = phpstack-1634854-6489525.cloudwaysapps.com
+PRODUCTION_WS_HOST = phpstack-1634854-6489525.cloudwaysapps.com
 REST_BASE_URL = https:$(SLASH)$(SLASH)$(PRODUCTION_API_HOST)$(SLASH)api
 WEBSOCKET_URL = wss:$(SLASH)$(SLASH)$(PRODUCTION_WS_HOST)$(SLASH)realtime
 TELEGRAM_BOT_USERNAME = verificMobileMessengerIOSbot

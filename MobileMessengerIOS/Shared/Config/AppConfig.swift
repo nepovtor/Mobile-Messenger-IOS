@@ -40,8 +40,8 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
     private enum Constants {
         static let restBaseURLOverrideKey = "debug.rest_base_url_override"
         static let defaultTelegramBotUsername = "verificMobileMessengerIOSbot"
-        static let fallbackRESTBaseURLString = "https://mobile-messenger-ios-production.up.railway.app/api"
-        static let fallbackWebSocketURLString = "wss://mobile-messenger-ios-production.up.railway.app/realtime"
+        static let fallbackRESTBaseURLString = "https://phpstack-1634854-6489525.cloudwaysapps.com/api"
+        static let fallbackWebSocketURLString = "wss://phpstack-1634854-6489525.cloudwaysapps.com/realtime"
     }
 
     @Published public private(set) var restBaseURL: URL
@@ -57,7 +57,8 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
         self.telegramBotUsername = Self.readTelegramBotUsername(from: bundle)
         self.features = Self.readFeatures(from: bundle)
 
-        if let overrideValue = defaults.string(forKey: Constants.restBaseURLOverrideKey),
+        if Self.isRuntimeOverrideAllowed,
+           let overrideValue = defaults.string(forKey: Constants.restBaseURLOverrideKey),
            let overrideURL = try? Self.normalizeRESTBaseURL(overrideValue),
            !Self.isPlaceholderRESTBaseURL(overrideURL) {
             self.restBaseURL = overrideURL
@@ -193,5 +194,13 @@ public final class DefaultConfigService: ObservableObject, ConfigService {
         }
 
         return host.contains("example.com") || host.contains("your-production-domain.com")
+    }
+
+    private static var isRuntimeOverrideAllowed: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
     }
 }

@@ -4,10 +4,10 @@ import XCTest
 @MainActor
 final class AppConfigTests: XCTestCase {
     private let restBaseURLOverrideKey = "debug.rest_base_url_override"
-    private let railwayRESTBaseURL = "https://mobile-messenger-ios-production.up.railway.app/api"
-    private let railwayWebSocketURL = "wss://mobile-messenger-ios-production.up.railway.app/realtime"
+    private let productionRESTBaseURL = "https://phpstack-1634854-6489525.cloudwaysapps.com/api"
+    private let productionWebSocketURL = "wss://phpstack-1634854-6489525.cloudwaysapps.com/realtime"
 
-    func testPlaceholderBundledRESTBaseURLFallsBackToRailway() throws {
+    func testPlaceholderBundledRESTBaseURLFallsBackToProductionBackend() throws {
         let temporaryBundle = try makeBundle(
             infoDictionary: [
                 "REST_BASE_URL": "https://api.example.com/api",
@@ -19,9 +19,9 @@ final class AppConfigTests: XCTestCase {
         let defaults = makeIsolatedDefaults()
         let configService = DefaultConfigService(bundle: temporaryBundle.bundle, defaults: defaults)
 
-        XCTAssertEqual(configService.defaultRESTBaseURL.absoluteString, railwayRESTBaseURL)
-        XCTAssertEqual(configService.restBaseURL.absoluteString, railwayRESTBaseURL)
-        XCTAssertEqual(configService.websocketURL.absoluteString, railwayWebSocketURL)
+        XCTAssertEqual(configService.defaultRESTBaseURL.absoluteString, productionRESTBaseURL)
+        XCTAssertEqual(configService.restBaseURL.absoluteString, productionRESTBaseURL)
+        XCTAssertEqual(configService.websocketURL.absoluteString, productionWebSocketURL)
         XCTAssertEqual(configService.telegramBotUsername, "verificMobileMessengerIOSbot")
         XCTAssertFalse(configService.hasCustomRESTBaseURL)
     }
@@ -29,7 +29,7 @@ final class AppConfigTests: XCTestCase {
     func testPlaceholderPersistedOverrideIsIgnoredAndRemoved() throws {
         let temporaryBundle = try makeBundle(
             infoDictionary: [
-                "REST_BASE_URL": railwayRESTBaseURL
+                "REST_BASE_URL": productionRESTBaseURL
             ]
         )
         defer { temporaryBundle.cleanup() }
@@ -39,7 +39,7 @@ final class AppConfigTests: XCTestCase {
 
         let configService = DefaultConfigService(bundle: temporaryBundle.bundle, defaults: defaults)
 
-        XCTAssertEqual(configService.restBaseURL.absoluteString, railwayRESTBaseURL)
+        XCTAssertEqual(configService.restBaseURL.absoluteString, productionRESTBaseURL)
         XCTAssertNil(defaults.string(forKey: restBaseURLOverrideKey))
         XCTAssertFalse(configService.hasCustomRESTBaseURL)
     }
@@ -47,7 +47,7 @@ final class AppConfigTests: XCTestCase {
     func testUpdateRESTBaseURLRejectsPlaceholderHosts() throws {
         let temporaryBundle = try makeBundle(
             infoDictionary: [
-                "REST_BASE_URL": railwayRESTBaseURL
+                "REST_BASE_URL": productionRESTBaseURL
             ]
         )
         defer { temporaryBundle.cleanup() }
@@ -62,14 +62,14 @@ final class AppConfigTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(configService.restBaseURL.absoluteString, railwayRESTBaseURL)
+        XCTAssertEqual(configService.restBaseURL.absoluteString, productionRESTBaseURL)
         XCTAssertNil(defaults.string(forKey: restBaseURLOverrideKey))
     }
 
     func testCustomRESTBaseURLUpdatesRealtimeURL() throws {
         let temporaryBundle = try makeBundle(
             infoDictionary: [
-                "REST_BASE_URL": railwayRESTBaseURL
+                "REST_BASE_URL": productionRESTBaseURL
             ]
         )
         defer { temporaryBundle.cleanup() }

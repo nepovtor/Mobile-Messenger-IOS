@@ -559,9 +559,9 @@ struct ProfileView: View {
     }
 
     private var taskKey: String {
-        let tokenPart = sessionStore.authToken ?? "logged-out"
+        let authPart = sessionStore.currentUserID?.uuidString ?? "logged-out"
         let realtimePart = String(describing: container.realtimeConnectionState)
-        return "\(tokenPart)-\(container.configurationRevision)-\(realtimePart)"
+        return "\(authPart)-\(container.configurationRevision)-\(realtimePart)"
     }
 
     private var backgroundView: some View {

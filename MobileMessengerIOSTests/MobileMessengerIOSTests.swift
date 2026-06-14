@@ -747,7 +747,7 @@ final class TransportDecodingTests: XCTestCase {
         XCTAssertEqual(response.expiresIn, 300)
     }
 
-    func testAuthRequestResponseDecodesLegacyRailwayPayload() throws {
+    func testAuthRequestResponseDecodesLegacyMinimalPayload() throws {
         let payload = """
         {
           "expiresIn": 300

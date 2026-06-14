@@ -95,7 +95,9 @@ struct AuthView: View {
                 backendSupportSection
             }
 
-            demoAccountsSection
+            if viewModel.isDemoAuthAvailable {
+                demoAccountsSection
+            }
         }
         .padding(20)
         .liquidGlassCard(
@@ -342,7 +344,7 @@ struct AuthView: View {
                 .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Если авторизация или Telegram pairing работают нестабильно, можно сразу сбросить override и вернуться на встроенный Railway backend. Адрес API и токены здесь не показываются.")
+            Text("Если авторизация или Telegram pairing работают нестабильно, можно сразу сбросить override и вернуться на встроенный production backend. Адрес API и токены здесь не показываются.")
                 .font(.footnote)
                 .foregroundStyle(Color.white.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)

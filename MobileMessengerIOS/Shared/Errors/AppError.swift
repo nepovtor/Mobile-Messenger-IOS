@@ -24,6 +24,10 @@ public enum AppError: LocalizedError, Sendable {
             return description
         }
 
+        if let mediaMessage = mediaUploadMessage(for: error) {
+            return mediaMessage
+        }
+
         if let parseError = error as? APIResponseParser.ParseError,
            parseError.backendCode == "TELEGRAM_NOT_LINKED" {
             return "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту."
@@ -102,5 +106,18 @@ public enum AppError: LocalizedError, Sendable {
         }
 
         return .network(description: presentableMessage(for: error))
+    }
+
+    private static func mediaUploadMessage(for error: Error) -> String? {
+        let rawMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        let lowercase = rawMessage.lowercased()
+
+        if lowercase.contains("failed to access media bucket") ||
+            lowercase.contains("uploaded media file was not found") ||
+            lowercase.contains("media upload is not confirmed") {
+            return "Загрузка медиа временно недоступна."
+        }
+
+        return nil
     }
 }

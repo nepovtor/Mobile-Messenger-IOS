@@ -77,17 +77,11 @@ public final class AuthViewModel: ObservableObject {
     @Published public var telegramPairingExpiresIn: Int?
     @Published public private(set) var lastUsedLogin: AuthLastUsedLogin?
     public let telegramBotURL: URL?
+    public let demoAccounts: [AuthDemoAccount]
 
     private let authService: AuthNetworking
     let sessionStore: SessionStore
     private let defaults: UserDefaults
-    public let demoAccounts: [AuthDemoAccount] = [
-        AuthDemoAccount(displayName: "Анна Demo", contact: "+15551230011", password: "demo1111"),
-        AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222"),
-        AuthDemoAccount(displayName: "Вера Demo", contact: "+15551230013", password: "demo3333"),
-        AuthDemoAccount(displayName: "Глеб Demo", contact: "+15551230014", password: "demo4444"),
-        AuthDemoAccount(displayName: "Даша Demo", contact: "+15551230015", password: "demo5555")
-    ]
 
     public init(
         authService: AuthNetworking,
@@ -99,6 +93,7 @@ public final class AuthViewModel: ObservableObject {
         self.sessionStore = sessionStore
         self.telegramBotURL = telegramBotURL
         self.defaults = defaults
+        self.demoAccounts = Self.makeDemoAccounts()
         restoreLastUsedLogin()
     }
 
@@ -124,6 +119,10 @@ public final class AuthViewModel: ObservableObject {
 
     public var selectedDemoAccount: AuthDemoAccount? {
         demoAccounts.first { $0.contact == contact }
+    }
+
+    public var isDemoAuthAvailable: Bool {
+        !demoAccounts.isEmpty
     }
 
     public func setScreenMode(_ mode: AuthScreenMode) {
@@ -349,5 +348,19 @@ public final class AuthViewModel: ObservableObject {
         isVerifyingCode = false
         codeExpirationSeconds = nil
         telegramPairingExpiresIn = nil
+    }
+
+    private static func makeDemoAccounts() -> [AuthDemoAccount] {
+        #if DEBUG
+        return [
+            AuthDemoAccount(displayName: "Анна Demo", contact: "+15551230011", password: "demo1111"),
+            AuthDemoAccount(displayName: "Борис Demo", contact: "+15551230012", password: "demo2222"),
+            AuthDemoAccount(displayName: "Вера Demo", contact: "+15551230013", password: "demo3333"),
+            AuthDemoAccount(displayName: "Глеб Demo", contact: "+15551230014", password: "demo4444"),
+            AuthDemoAccount(displayName: "Даша Demo", contact: "+15551230015", password: "demo5555")
+        ]
+        #else
+        []
+        #endif
     }
 }
