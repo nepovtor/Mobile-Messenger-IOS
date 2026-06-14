@@ -5,18 +5,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.production
     environment:
       NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: ${DB_PORT:-5432}
+      PORT: ${PORT:-3001}
       DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-false}
     command: sh -c "npm run migration:run:dist && npm run start"
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-3001}:${PORT:-3001}"
     volumes:
       - backend_logs:/app/logs
     networks:

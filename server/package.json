@@ -6,6 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node dist/main.js",
+    "start:prod": "DOTENV_CONFIG_PATH=.env.production node dist/main.js",
     "build": "tsc -p tsconfig.json",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -16,10 +17,12 @@
     "migration:generate": "npm run typeorm -- migration:generate src/database/migrations/GeneratedMigration",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:run:dist": "npm run typeorm:dist -- migration:run",
+    "migration:run:prod": "DOTENV_CONFIG_PATH=.env.production npm run typeorm:dist -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "migration:revert:dist": "npm run typeorm:dist -- migration:revert",
     "migration:show": "npm run typeorm -- migration:show",
     "migration:show:dist": "npm run typeorm:dist -- migration:show",
+    "migration:show:prod": "DOTENV_CONFIG_PATH=.env.production npm run typeorm:dist -- migration:show",
     "test": "npm run test:e2e",
     "test:e2e": "node --require ts-node/register --test test/**/*.test.ts"
   },
