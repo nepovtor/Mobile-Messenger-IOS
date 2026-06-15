@@ -51,19 +51,14 @@ public enum AppError: LocalizedError, Sendable {
         let rawMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         let trimmed = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let friendlyMessages = [
-            "Server returned an invalid response.",
-            "Backend is unavailable. Please try again later.",
-            "Request failed. Please check API configuration."
-        ]
-        if friendlyMessages.contains(trimmed) {
-            return trimmed
+        if let friendly = friendlyBackendMessage(for: trimmed) {
+            return friendly
         }
 
         if let urlError = error as? URLError {
             switch urlError.code {
             case .badURL, .unsupportedURL, .cannotFindHost, .dnsLookupFailed:
-                return "Request failed. Please check API configuration."
+                return "Не удалось выполнить запрос. Проверьте настройки подключения."
             case .timedOut,
                  .cannotConnectToHost,
                  .networkConnectionLost,
@@ -74,9 +69,9 @@ public enum AppError: LocalizedError, Sendable {
                  .serverCertificateUntrusted,
                  .serverCertificateHasUnknownRoot,
                  .serverCertificateNotYetValid:
-                return "Backend is unavailable. Please try again later."
+                return "Сервис временно недоступен. Попробуйте позже."
             default:
-                return "Server returned an invalid response."
+                return "Сервер вернул некорректный ответ."
             }
         }
 
@@ -94,10 +89,10 @@ public enum AppError: LocalizedError, Sendable {
         ]
         let lowercase = trimmed.lowercased()
         if technicalFragments.contains(where: { lowercase.contains($0) }) {
-            return "Server returned an invalid response."
+            return "Сервер вернул некорректный ответ."
         }
 
-        return trimmed.isEmpty ? "Server returned an invalid response." : trimmed
+        return trimmed.isEmpty ? "Сервер вернул некорректный ответ." : trimmed
     }
 
     public static func wrapped(_ error: Error) -> AppError {
@@ -106,6 +101,56 @@ public enum AppError: LocalizedError, Sendable {
         }
 
         return .network(description: presentableMessage(for: error))
+    }
+
+    private static func friendlyBackendMessage(for message: String) -> String? {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let lowercase = trimmed.lowercased()
+
+        switch lowercase {
+        case "server returned an invalid response.":
+            return "Сервер вернул некорректный ответ."
+        case "backend is unavailable. please try again later.":
+            return "Сервис временно недоступен. Попробуйте позже."
+        case "request failed. please check api configuration.":
+            return "Не удалось выполнить запрос. Проверьте настройки подключения."
+        case "invalid verification code":
+            return "Неверный код подтверждения."
+        case "verification code expired":
+            return "Срок действия кода истек. Запросите новый код."
+        case "too many verification attempts":
+            return "Слишком много попыток. Запросите новый код и попробуйте позже."
+        case "verification provider unavailable":
+            return "Сервис подтверждения временно недоступен. Попробуйте позже."
+        case "telegram pairing unavailable":
+            return "Привязка Telegram временно недоступна."
+        case "password login is disabled":
+            return "Вход по паролю отключен."
+        case "invalid demo credentials":
+            return "Неверный пароль."
+        case "user not found":
+            return "Пользователь не найден."
+        case "invalid or expired token":
+            return "Сессия истекла. Пожалуйста, войдите снова."
+        default:
+            break
+        }
+
+        if lowercase.hasPrefix("resend cooldown active.") {
+            return "Код уже отправлен. Подождите немного перед повторным запросом."
+        }
+
+        if lowercase.contains("too many auth requests") {
+            return "Слишком много запросов. Попробуйте позже."
+        }
+
+        if lowercase.contains("too many auth attempts") {
+            return "Слишком много попыток входа. Попробуйте позже."
+        }
+
+        return nil
     }
 
     private static func mediaUploadMessage(for error: Error) -> String? {

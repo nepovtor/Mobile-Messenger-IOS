@@ -159,7 +159,9 @@ public final class AppContainer: ObservableObject {
         ) ?? .system
         highContrastDarkMode = defaults.object(forKey: DefaultsKeys.highContrastDarkMode) as? Bool ?? true
         showPhoneNumberInProfile = defaults.object(forKey: DefaultsKeys.showPhoneNumberInProfile) as? Bool ?? true
-        showTechnicalDetailsInProfile = defaults.object(forKey: DefaultsKeys.showTechnicalDetailsInProfile) as? Bool ?? true
+        showTechnicalDetailsInProfile =
+            defaults.object(forKey: DefaultsKeys.showTechnicalDetailsInProfile) as? Bool ??
+            Self.defaultShowTechnicalDetailsInProfile
 
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
@@ -564,5 +566,13 @@ public final class AppContainer: ObservableObject {
         case .failed:
             connectionStatus = .offline
         }
+    }
+
+    private static var defaultShowTechnicalDetailsInProfile: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
     }
 }
