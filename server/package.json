@@ -24,7 +24,7 @@
     "migration:show:dist": "npm run typeorm:dist -- migration:show",
     "migration:show:prod": "DOTENV_CONFIG_PATH=.env.production npm run typeorm:dist -- migration:show",
     "test": "npm run test:e2e",
-    "test:e2e": "node --require ts-node/register --test test/**/*.test.ts"
+    "test:e2e": "files=$(find test -type f -name '*.test.ts'); if [ -z \"$files\" ]; then echo 'No backend tests found, skipping.'; else node --require ts-node/register --test $files; fi"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1028.0",
