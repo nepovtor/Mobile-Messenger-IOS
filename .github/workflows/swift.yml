@@ -18,12 +18,111 @@ jobs:
     - uses: actions/checkout@v4
     - name: Show Xcode version
       run: xcodebuild -version
+    - name: Select iOS simulator
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        import re
+        import subprocess
+        import sys
+
+        PREFERRED_IPHONES = [
+            "iPhone 16 Pro",
+            "iPhone 16",
+            "iPhone 16e",
+            "iPhone 15 Pro",
+            "iPhone 15",
+        ]
+
+        def load_json(*args: str) -> dict:
+            return json.loads(subprocess.check_output(args, text=True))
+
+        def version_key(identifier: str) -> tuple[int, ...]:
+            return tuple(int(part) for part in re.findall(r"\d+", identifier))
+
+        devices_by_runtime = load_json("xcrun", "simctl", "list", "devices", "available", "-j")["devices"]
+        candidates: list[dict[str, str]] = []
+
+        for runtime_id, devices in devices_by_runtime.items():
+            for device in devices:
+                if device.get("isAvailable") and device["name"].startswith("iPhone"):
+                    candidates.append(
+                        {
+                            "name": device["name"],
+                            "runtime_id": runtime_id,
+                            "udid": device["udid"],
+                        }
+                    )
+
+        candidates.sort(key=lambda device: (version_key(device["runtime_id"]), device["name"]), reverse=True)
+
+        selected = None
+        for preferred_name in PREFERRED_IPHONES:
+            selected = next((device for device in candidates if device["name"] == preferred_name), None)
+            if selected is not None:
+                break
+
+        if selected is None and candidates:
+            selected = candidates[0]
+
+        if selected is None:
+            inventory = load_json("xcrun", "simctl", "list", "-j", "devicetypes", "runtimes")
+            runtimes = [
+                runtime
+                for runtime in inventory["runtimes"]
+                if runtime.get("isAvailable") and runtime.get("platform") == "iOS"
+            ]
+            if not runtimes:
+                print("No available iOS simulator runtimes found.", file=sys.stderr)
+                sys.exit(1)
+
+            runtimes.sort(key=lambda runtime: version_key(runtime["identifier"]), reverse=True)
+            device_types = {
+                device_type["name"]: device_type["identifier"]
+                for device_type in inventory["devicetypes"]
+                if device_type.get("productFamily") == "iPhone"
+            }
+
+            selected_name = next((name for name in PREFERRED_IPHONES if name in device_types), None)
+            if selected_name is None:
+                selected_name = sorted(device_types)[0]
+
+            selected_runtime = runtimes[0]
+            selected_udid = subprocess.check_output(
+                [
+                    "xcrun",
+                    "simctl",
+                    "create",
+                    f"CI {selected_name}",
+                    device_types[selected_name],
+                    selected_runtime["identifier"],
+                ],
+                text=True,
+            ).strip()
+            selected = {
+                "name": selected_name,
+                "runtime_id": selected_runtime["identifier"],
+                "udid": selected_udid,
+            }
+            print(
+                f"Created simulator: {selected['name']} ({selected['runtime_id']}) [{selected['udid']}]"
+            )
+        else:
+            print(
+                f"Selected existing simulator: {selected['name']} ({selected['runtime_id']}) [{selected['udid']}]"
+            )
+
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+            env.write(f"IOS_SIMULATOR_ID={selected['udid']}\n")
+            env.write(f"IOS_SIMULATOR_NAME={selected['name']}\n")
+        PY
     - name: Run iOS tests
       run: |
         xcodebuild \
           -project "$PROJECT" \
           -scheme "$SCHEME" \
-          -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+          -destination "id=$IOS_SIMULATOR_ID" \
           CODE_SIGNING_ALLOWED=NO \
           test
 
