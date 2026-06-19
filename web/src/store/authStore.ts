@@ -214,7 +214,27 @@ export function mapAuthErrorMessage(
   fallback = "Could not complete the authentication request.",
 ) {
   if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
-    return "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту.";
+    return "Откройте Телеграм и привяжите номер.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    /telegram pairing unavailable/i.test(error.message)
+  ) {
+    return "Телеграм-вход временно не настроен.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    /(invalid|incorrect).*(code)|verification code|код.*(невер|ошиб)/i.test(
+      error.message,
+    )
+  ) {
+    return "Неверный код.";
+  }
+
+  if (error instanceof ApiError && error.status >= 500) {
+    return "Backend is unavailable.";
   }
 
   if (
@@ -228,11 +248,34 @@ export function mapAuthErrorMessage(
 
   if (
     error instanceof Error &&
+    /telegram pairing unavailable/i.test(error.message)
+  ) {
+    return "Телеграм-вход временно не настроен.";
+  }
+
+  if (
+    error instanceof Error &&
+    /(invalid|incorrect).*(code)|verification code|код.*(невер|ошиб)/i.test(
+      error.message,
+    )
+  ) {
+    return "Неверный код.";
+  }
+
+  if (
+    error instanceof Error &&
     /(international format|valid phone number|E\.164|start with \+)/i.test(
       error.message,
     )
   ) {
     return "Введите номер в международном формате, например +375291234567.";
+  }
+
+  if (
+    error instanceof Error &&
+    /(backend is unavailable|network error|timed out)/i.test(error.message)
+  ) {
+    return "Backend is unavailable.";
   }
 
   if (error instanceof Error) {

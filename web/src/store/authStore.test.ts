@@ -192,9 +192,25 @@ describe("authStore", () => {
       authStore.getState().requestCode("+15550005"),
     ).rejects.toBeDefined();
 
-    expect(authStore.getState().error).toBe(
-      "Сначала привяжите Telegram через кнопку выше и отправьте свой контакт боту.",
-    );
+    expect(authStore.getState().error).toBe("Откройте Телеграм и привяжите номер.");
+  });
+
+  it("maps Telegram pairing misconfiguration into a dedicated auth error", () => {
+    expect(
+      mapAuthErrorMessage(new ApiError("Telegram pairing unavailable", 503)),
+    ).toBe("Телеграм-вход временно не настроен.");
+  });
+
+  it("maps invalid verification codes into a short auth error", () => {
+    expect(
+      mapAuthErrorMessage(new ApiError("Invalid verification code", 401)),
+    ).toBe("Неверный код.");
+  });
+
+  it("maps generic 5xx auth failures into backend-unavailable copy", () => {
+    expect(
+      mapAuthErrorMessage(new ApiError("Internal server error", 503)),
+    ).toBe("Backend is unavailable.");
   });
 
   it("maps invalid phone errors into an international-format hint", () => {
