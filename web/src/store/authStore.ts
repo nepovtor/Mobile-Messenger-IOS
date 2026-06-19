@@ -214,14 +214,14 @@ export function mapAuthErrorMessage(
   fallback = "Could not complete the authentication request.",
 ) {
   if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
-    return "Откройте Телеграм и привяжите номер.";
+    return "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.";
   }
 
   if (
     error instanceof ApiError &&
     /telegram pairing unavailable/i.test(error.message)
   ) {
-    return "Телеграм-вход временно не настроен.";
+    return "Telegram-вход временно не настроен на сервере.";
   }
 
   if (
@@ -234,7 +234,7 @@ export function mapAuthErrorMessage(
   }
 
   if (error instanceof ApiError && error.status >= 500) {
-    return "Backend is unavailable.";
+    return "Backend is unavailable right now. Please try again.";
   }
 
   if (
@@ -250,7 +250,7 @@ export function mapAuthErrorMessage(
     error instanceof Error &&
     /telegram pairing unavailable/i.test(error.message)
   ) {
-    return "Телеграм-вход временно не настроен.";
+    return "Telegram-вход временно не настроен на сервере.";
   }
 
   if (
@@ -275,7 +275,7 @@ export function mapAuthErrorMessage(
     error instanceof Error &&
     /(backend is unavailable|network error|timed out)/i.test(error.message)
   ) {
-    return "Backend is unavailable.";
+    return "Backend is unavailable right now. Please try again.";
   }
 
   if (error instanceof Error) {

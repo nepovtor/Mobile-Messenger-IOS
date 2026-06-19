@@ -192,13 +192,15 @@ describe("authStore", () => {
       authStore.getState().requestCode("+15550005"),
     ).rejects.toBeDefined();
 
-    expect(authStore.getState().error).toBe("Откройте Телеграм и привяжите номер.");
+    expect(authStore.getState().error).toBe(
+      "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.",
+    );
   });
 
   it("maps Telegram pairing misconfiguration into a dedicated auth error", () => {
     expect(
       mapAuthErrorMessage(new ApiError("Telegram pairing unavailable", 503)),
-    ).toBe("Телеграм-вход временно не настроен.");
+    ).toBe("Telegram-вход временно не настроен на сервере.");
   });
 
   it("maps invalid verification codes into a short auth error", () => {
@@ -210,7 +212,7 @@ describe("authStore", () => {
   it("maps generic 5xx auth failures into backend-unavailable copy", () => {
     expect(
       mapAuthErrorMessage(new ApiError("Internal server error", 503)),
-    ).toBe("Backend is unavailable.");
+    ).toBe("Backend is unavailable right now. Please try again.");
   });
 
   it("maps invalid phone errors into an international-format hint", () => {
