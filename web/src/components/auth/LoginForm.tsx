@@ -14,13 +14,11 @@ type LoginFormProps = {
   status: string | null;
   codeSent: boolean;
   pendingAction: "pairing" | "code" | "verify" | null;
+  telegramStartUrl: string | null;
   showTelegramButton?: boolean;
   onResetFeedback: () => void;
   onPhoneEdit: () => void;
-  onLinkTelegram: (payload: {
-    phone: string;
-    telegramWindow: Window | null;
-  }) => Promise<void>;
+  onPrepareTelegram: (payload: { phone: string }) => Promise<void>;
   onRequestCode: (payload: { phone: string }) => Promise<void>;
   onVerifyCode: (payload: { phone: string; code: string }) => Promise<void>;
 };
@@ -38,10 +36,11 @@ export function LoginForm({
   status,
   codeSent,
   pendingAction,
+  telegramStartUrl,
   showTelegramButton = false,
   onResetFeedback,
   onPhoneEdit,
-  onLinkTelegram,
+  onPrepareTelegram,
   onRequestCode,
   onVerifyCode,
 }: LoginFormProps) {
@@ -115,6 +114,11 @@ export function LoginForm({
               }
               onPhoneEdit();
             }}
+            onBlur={() => {
+              if (phone.trim() && !telegramStartUrl) {
+                void onPrepareTelegram({ phone }).catch(() => undefined);
+              }
+            }}
             placeholder="+375291234567"
           />
         </div>
@@ -158,13 +162,16 @@ export function LoginForm({
             variant="ghost"
             size="sm"
             isLoading={pendingAction === "pairing"}
-            disabled={isLoading || !phone.trim()}
+            disabled={isLoading || !telegramStartUrl}
             className="rounded-[18px] px-0 text-cyan-100 hover:bg-transparent hover:text-cyan-50"
             onClick={() => {
-              const telegramWindow = window.open("", "_blank");
-              void onLinkTelegram({ phone, telegramWindow }).catch(
-                () => undefined,
-              );
+              if (telegramStartUrl) {
+                window.open(
+                  telegramStartUrl,
+                  "_blank",
+                  "noopener,noreferrer",
+                );
+              }
             }}
           >
             Открыть Telegram
@@ -178,7 +185,7 @@ export function LoginForm({
           type="button"
           variant="secondary"
           isLoading={pendingAction === "code"}
-          disabled={isLoading || !phone.trim()}
+          disabled={isLoading || !phone.trim() || !telegramStartUrl}
           onClick={() => {
             void onRequestCode({ phone }).catch(() => undefined);
           }}

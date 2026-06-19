@@ -49,7 +49,7 @@ describe("authApi", () => {
     );
   });
 
-  it("requestCode posts the Railway-compatible contact payload", async () => {
+  it("requestCode posts the phone payload", async () => {
     await authApi.requestCode("+375291234567");
 
     expect(fetch).toHaveBeenCalledWith(
@@ -57,14 +57,13 @@ describe("authApi", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          method: "phone",
-          contact: "+375291234567",
+          phone: "+375291234567",
         }),
       }),
     );
   });
 
-  it("verifyCode posts the Railway-compatible contact payload", async () => {
+  it("verifyCode posts the phone and code payload", async () => {
     await authApi.verifyCode("+375291234567", "123456");
 
     expect(fetch).toHaveBeenCalledWith(
@@ -72,8 +71,7 @@ describe("authApi", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          method: "phone",
-          contact: "+375291234567",
+          phone: "+375291234567",
           code: "123456",
         }),
       }),

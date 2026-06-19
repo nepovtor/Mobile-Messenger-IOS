@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import appIcon from "../../../MobileMessengerIOS/Assets.xcassets/AppIcon.appiconset/icon-180.png";
 import { LoginForm } from "../components/auth/LoginForm";
-import { ApiError } from "../api/httpClient";
 import { Card } from "../components/ui/Card";
 import { authStore } from "../store/authStore";
 
@@ -15,12 +14,13 @@ export function LoginPage() {
     verifyCode,
     isLoading,
     error,
+    telegramStartUrl,
+    clearTelegramPairing,
     clearError,
   } = authStore();
   const [status, setStatus] = useState<string | null>(null);
   const [codeSent, setCodeSent] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [telegramStartUrl, setTelegramStartUrl] = useState<string | null>(null);
 
   const resetFeedback = () => {
     if (error) {
@@ -32,7 +32,7 @@ export function LoginPage() {
   const handlePhoneEdit = () => {
     resetFeedback();
     setCodeSent(false);
-    setTelegramStartUrl(null);
+    clearTelegramPairing();
   };
 
   return (
@@ -75,26 +75,23 @@ export function LoginPage() {
                   status={status}
                   codeSent={codeSent}
                   pendingAction={pendingAction}
+                  telegramStartUrl={telegramStartUrl}
                   showTelegramButton
                   onResetFeedback={resetFeedback}
                   onPhoneEdit={handlePhoneEdit}
-                  onLinkTelegram={async ({ phone, telegramWindow }) => {
+                  onPrepareTelegram={async ({ phone }) => {
+                    if (telegramStartUrl) {
+                      return;
+                    }
+
                     resetFeedback();
                     setPendingAction("pairing");
                     try {
-                      const pairingUrl =
-                        telegramStartUrl ??
-                        (
-                          await requestTelegramPairing(phone.trim())
-                        ).telegramStartUrl;
-
-                      setTelegramStartUrl(pairingUrl);
-                      openTelegramWindow(pairingUrl, telegramWindow);
+                      await requestTelegramPairing(phone.trim());
                       setCodeSent(false);
-                      setStatus("Telegram открыт");
-                    } catch (requestError) {
-                      telegramWindow?.close();
-                      throw requestError;
+                      setStatus(
+                        "Нажмите «Открыть Telegram» и отправьте боту свой контакт.",
+                      );
                     } finally {
                       setPendingAction(null);
                     }
@@ -106,26 +103,12 @@ export function LoginPage() {
                     setPendingAction("code");
                     try {
                       const response = await requestCode(normalizedPhone);
-                      setTelegramStartUrl(null);
                       setCodeSent(true);
                       setStatus(
                         response.debugCode
                           ? `Код: ${response.debugCode}`
                           : "Код отправлен",
                       );
-                    } catch (requestError) {
-                      if (isTelegramNotLinkedError(requestError)) {
-                        const pairingResponse =
-                          await requestTelegramPairing(normalizedPhone);
-                        setTelegramStartUrl(pairingResponse.telegramStartUrl);
-                        setCodeSent(false);
-                        setStatus(
-                          "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.",
-                        );
-                        return;
-                      }
-
-                      throw requestError;
                     } finally {
                       setPendingAction(null);
                     }
@@ -167,7 +150,7 @@ function compactAuthMessage(message: string | null) {
       message,
     )
   ) {
-    return "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.";
+    return "Номер ещё не привязан к Telegram. Откройте Telegram и отправьте боту свой контакт.";
   }
 
   if (/telegram pairing unavailable/i.test(message)) {
@@ -191,21 +174,4 @@ function compactAuthMessage(message: string | null) {
   }
 
   return message;
-}
-
-function isTelegramNotLinkedError(error: unknown): error is ApiError {
-  return error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED";
-}
-
-function openTelegramWindow(
-  telegramStartUrl: string,
-  telegramWindow: Window | null,
-) {
-  if (telegramWindow) {
-    telegramWindow.opener = null;
-    telegramWindow.location.replace(telegramStartUrl);
-    return;
-  }
-
-  window.open(telegramStartUrl, "_blank", "noopener,noreferrer");
 }

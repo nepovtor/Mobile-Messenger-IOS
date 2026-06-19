@@ -4,12 +4,21 @@ import { adminStorage, storage } from "../utils/storage";
 export class ApiError extends Error {
   status: number;
   code?: string;
+  backendMessage: string;
+  details?: unknown;
 
-  constructor(message: string, status = 500, code?: string) {
+  constructor(
+    message: string,
+    status = 500,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.backendMessage = message;
+    this.details = details;
   }
 }
 
@@ -30,31 +39,30 @@ export function registerUnauthorizedHandler(
 }
 
 function toApiError(status: number, payload: unknown): ApiError {
+  const payloadRecord =
+    typeof payload === "object" && payload !== null ? payload : null;
   const code =
-    typeof payload === "object" &&
-    payload !== null &&
-    "code" in payload &&
-    typeof payload.code === "string"
-      ? payload.code
+    payloadRecord &&
+    "code" in payloadRecord &&
+    typeof payloadRecord.code === "string"
+      ? payloadRecord.code
       : undefined;
   const message =
-    typeof payload === "object" &&
-    payload !== null &&
-    "message" in payload &&
-    typeof payload.message === "string"
-      ? payload.message
+    payloadRecord &&
+    "message" in payloadRecord &&
+    typeof payloadRecord.message === "string"
+      ? payloadRecord.message
       : status === 401
-        ? "Session expired. Please sign in again."
+        ? "Unauthorized"
         : status >= 500
           ? "Backend is unavailable right now. Please try again."
           : "The request could not be completed.";
+  const details =
+    payloadRecord && "details" in payloadRecord
+      ? payloadRecord.details
+      : undefined;
 
-  const normalizedMessage =
-    status >= 500 && /internal server error/i.test(message)
-      ? "Backend is unavailable right now. Please try again."
-      : message;
-
-  return new ApiError(normalizedMessage, status, code);
+  return new ApiError(message, status, code, details);
 }
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -128,9 +136,9 @@ export async function httpRequest<T>(
       throw error;
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiError("The request timed out. Please try again.");
+      throw new ApiError("The request timed out. Please try again.", 0);
     }
-    throw new ApiError("Network error. Please check your connection.");
+    throw new ApiError("Network error. Please check your connection.", 0);
   } finally {
     window.clearTimeout(timeout);
   }

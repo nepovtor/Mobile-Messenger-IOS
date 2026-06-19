@@ -55,6 +55,7 @@ describe("authStore", () => {
       isAuthenticated: true,
       isLoading: false,
       error: null,
+      telegramStartUrl: null,
     });
     chatStore.setState({
       chats: [
@@ -177,6 +178,9 @@ describe("authStore", () => {
 
     expect(response.telegramStartUrl).toContain("secure-pair-token");
     expect(response.expiresIn).toBe(600);
+    expect(authStore.getState().telegramStartUrl).toBe(
+      "https://t.me/mobile_auth_bot?start=secure-pair-token",
+    );
   });
 
   it("maps TELEGRAM_NOT_LINKED into a user-friendly auth error", async () => {
@@ -193,7 +197,7 @@ describe("authStore", () => {
     ).rejects.toBeDefined();
 
     expect(authStore.getState().error).toBe(
-      "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.",
+      "Номер ещё не привязан к Telegram. Откройте Telegram и отправьте боту свой контакт.",
     );
   });
 
@@ -203,10 +207,47 @@ describe("authStore", () => {
     ).toBe("Telegram-вход временно не настроен на сервере.");
   });
 
+  it("stores the dedicated Telegram error when pairing returns 503", async () => {
+    vi.mocked(authApi.requestTelegramPairing).mockRejectedValue(
+      new ApiError("Telegram pairing unavailable", 503),
+    );
+
+    await expect(
+      authStore.getState().requestTelegramPairing("+15550006"),
+    ).rejects.toBeDefined();
+
+    expect(authStore.getState().telegramStartUrl).toBeNull();
+    expect(authStore.getState().error).toBe(
+      "Telegram-вход временно не настроен на сервере.",
+    );
+  });
+
   it("maps invalid verification codes into a short auth error", () => {
     expect(
-      mapAuthErrorMessage(new ApiError("Invalid verification code", 401)),
+      mapAuthErrorMessage(
+        new ApiError(
+          "Verification failed",
+          401,
+          "INVALID_VERIFICATION_CODE",
+        ),
+      ),
     ).toBe("Неверный код.");
+  });
+
+  it("maps network errors into backend-unavailable copy", () => {
+    expect(
+      mapAuthErrorMessage(
+        new ApiError("Network error. Please check your connection.", 0),
+      ),
+    ).toBe("Backend is unavailable right now. Please try again.");
+  });
+
+  it("maps missing bearer tokens into an authentication error", () => {
+    expect(
+      mapAuthErrorMessage(
+        new ApiError("Unauthorized", 401, "MISSING_BEARER_TOKEN"),
+      ),
+    ).toBe("Не удалось выполнить вход. Проверьте данные и попробуйте снова.");
   });
 
   it("maps generic 5xx auth failures into backend-unavailable copy", () => {

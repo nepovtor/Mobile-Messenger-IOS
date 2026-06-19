@@ -1,7 +1,6 @@
 import type { ComponentProps } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../api/httpClient";
 import { LoginPage } from "./LoginPage";
 
 const {
@@ -9,12 +8,14 @@ const {
   requestCodeMock,
   requestTelegramPairingMock,
   verifyCodeMock,
+  clearTelegramPairingMock,
   clearErrorMock,
 } = vi.hoisted(() => ({
   authStoreMock: vi.fn(),
   requestCodeMock: vi.fn(),
   requestTelegramPairingMock: vi.fn(),
   verifyCodeMock: vi.fn(),
+  clearTelegramPairingMock: vi.fn(),
   clearErrorMock: vi.fn(),
 }));
 
@@ -42,63 +43,42 @@ describe("LoginPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("auto-creates Telegram pairing and reuses the saved start URL", async () => {
-    const telegramStartUrl =
-      "https://t.me/verificMobileMessengerIOSbot?start=pair-token";
-    const replaceSpy = vi.fn();
-    const closeSpy = vi.fn();
-
+  it("prepares Telegram pairing after the phone field is completed", async () => {
     authStoreMock.mockReturnValue({
       requestTelegramPairing: requestTelegramPairingMock,
       requestCode: requestCodeMock,
       verifyCode: verifyCodeMock,
       isLoading: false,
       error: null,
+      telegramStartUrl: null,
+      clearTelegramPairing: clearTelegramPairingMock,
       clearError: clearErrorMock,
     });
 
-    requestCodeMock.mockRejectedValue(
-      new ApiError(
-        "Link Telegram in the app first and send your own contact to the bot before requesting a code.",
-        400,
-        "TELEGRAM_NOT_LINKED",
-      ),
-    );
     requestTelegramPairingMock.mockResolvedValue({
       botUsername: "verificMobileMessengerIOSbot",
-      telegramStartUrl,
+      telegramStartUrl:
+        "https://t.me/verificMobileMessengerIOSbot?start=pair-token",
       expiresIn: 600,
     });
 
-    vi.spyOn(window, "open").mockReturnValue({
-      opener: null,
-      location: {
-        replace: replaceSpy,
-      },
-      close: closeSpy,
-    } as unknown as Window);
-
     render(<LoginPage />);
 
-    fireEvent.change(screen.getByLabelText("Телефон"), {
+    const phoneInput = screen.getByLabelText("Телефон");
+    fireEvent.change(phoneInput, {
       target: { value: "+375291234567" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Получить код" }));
-
-    expect(requestCodeMock).toHaveBeenCalledWith("+375291234567");
-
-    await screen.findByText(
-      "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.",
-    );
-
-    expect(requestTelegramPairingMock).toHaveBeenCalledTimes(1);
-    expect(requestTelegramPairingMock).toHaveBeenCalledWith("+375291234567");
-
-    fireEvent.click(screen.getByRole("button", { name: "Открыть Telegram" }));
+    fireEvent.blur(phoneInput);
 
     await waitFor(() => {
       expect(requestTelegramPairingMock).toHaveBeenCalledTimes(1);
-      expect(replaceSpy).toHaveBeenCalledWith(telegramStartUrl);
+      expect(requestTelegramPairingMock).toHaveBeenCalledWith("+375291234567");
     });
+    expect(requestCodeMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Нажмите «Открыть Telegram» и отправьте боту свой контакт.",
+      ),
+    ).toBeInTheDocument();
   });
 });

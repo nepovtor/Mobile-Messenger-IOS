@@ -21,6 +21,7 @@ type AuthStore = {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  telegramStartUrl: string | null;
   requestTelegramPairing: (phone: string) => Promise<TelegramPairingResponse>;
   requestCode: (phone: string) => Promise<AuthCodeResponse>;
   verifyCode: (phone: string, code: string) => Promise<void>;
@@ -29,6 +30,7 @@ type AuthStore = {
   restoreSession: () => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<void>;
   handleUnauthorized: (message: string) => void;
+  clearTelegramPairing: () => void;
   clearError: () => void;
 };
 
@@ -38,15 +40,20 @@ export const authStore = create<AuthStore>((set, get) => ({
   isAuthenticated: Boolean(storage.getToken()),
   isLoading: false,
   error: null,
+  telegramStartUrl: null,
   async requestTelegramPairing(phone) {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, telegramStartUrl: null });
     try {
       const response = await authApi.requestTelegramPairing(phone);
-      set({ isLoading: false, error: null });
+      set({
+        isLoading: false,
+        error: null,
+        telegramStartUrl: response.telegramStartUrl,
+      });
       return response;
     } catch (error) {
       const message = mapAuthErrorMessage(error);
-      set({ isLoading: false, error: message });
+      set({ isLoading: false, error: message, telegramStartUrl: null });
       throw error;
     }
   },
@@ -100,6 +107,7 @@ export const authStore = create<AuthStore>((set, get) => ({
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      telegramStartUrl: null,
     });
   },
   async restoreSession() {
@@ -178,7 +186,11 @@ export const authStore = create<AuthStore>((set, get) => ({
       isAuthenticated: false,
       isLoading: false,
       error: message,
+      telegramStartUrl: null,
     });
+  },
+  clearTelegramPairing() {
+    set({ telegramStartUrl: null });
   },
   clearError() {
     set({ error: null });
@@ -214,23 +226,35 @@ export function mapAuthErrorMessage(
   fallback = "Could not complete the authentication request.",
 ) {
   if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
-    return "Номер ещё не привязан к Telegram. Нажмите «Открыть Telegram» и отправьте боту свой контакт.";
+    return "Номер ещё не привязан к Telegram. Откройте Telegram и отправьте боту свой контакт.";
   }
 
   if (
     error instanceof ApiError &&
-    /telegram pairing unavailable/i.test(error.message)
+    (error.code === "TELEGRAM_PAIRING_UNAVAILABLE" ||
+      /telegram pairing unavailable/i.test(error.backendMessage))
   ) {
     return "Telegram-вход временно не настроен на сервере.";
   }
 
   if (
     error instanceof ApiError &&
-    /(invalid|incorrect).*(code)|verification code|код.*(невер|ошиб)/i.test(
-      error.message,
-    )
+    (error.code === "INVALID_VERIFICATION_CODE" ||
+      /(invalid|incorrect).*(code)|verification code|код.*(невер|ошиб)/i.test(
+        error.backendMessage,
+      ))
   ) {
     return "Неверный код.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    (error.code === "MISSING_BEARER_TOKEN" ||
+      error.code === "UNAUTHORIZED" ||
+      error.status === 401 ||
+      /unauthorized/i.test(error.backendMessage))
+  ) {
+    return "Не удалось выполнить вход. Проверьте данные и попробуйте снова.";
   }
 
   if (error instanceof ApiError && error.status >= 500) {
@@ -240,7 +264,7 @@ export function mapAuthErrorMessage(
   if (
     error instanceof ApiError &&
     /(international format|valid phone number|E\.164|start with \+)/i.test(
-      error.message,
+      error.backendMessage,
     )
   ) {
     return "Введите номер в международном формате, например +375291234567.";

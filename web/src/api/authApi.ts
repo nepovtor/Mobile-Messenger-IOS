@@ -24,8 +24,7 @@ export const authApi = {
         method: "POST",
         authMode: "none",
         body: JSON.stringify({
-          method: "phone",
-          contact: phone,
+          phone,
         }),
       },
     );
@@ -43,8 +42,7 @@ export const authApi = {
       method: "POST",
       authMode: "none",
       body: JSON.stringify({
-        method: "phone",
-        contact: phone,
+        phone,
         code,
       }),
     });
