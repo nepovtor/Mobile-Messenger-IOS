@@ -29,9 +29,9 @@ describe("resolveAppConfig", () => {
 
   it("keeps production fallbacks when local dev overrides are absent", () => {
     expect(resolveAppConfig({ DEV: false }, "127.0.0.1")).toEqual({
-      apiBaseUrl: "https://mobile-messenger-ios-production.up.railway.app/api",
+      apiBaseUrl: "https://phpstack-1634854-6489525.cloudwaysapps.com/api",
       websocketUrl:
-        "wss://mobile-messenger-ios-production.up.railway.app/realtime",
+        "wss://phpstack-1634854-6489525.cloudwaysapps.com/realtime",
       telegramBotUsername: "verificMobileMessengerIOSbot",
       telegramBotUrl: "https://t.me/verificMobileMessengerIOSbot",
       requestTimeoutMs: 15000,

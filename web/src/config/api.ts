@@ -1,7 +1,7 @@
 const PRODUCTION_API_URL =
-  "https://mobile-messenger-ios-production.up.railway.app/api";
+  "https://phpstack-1634854-6489525.cloudwaysapps.com/api";
 const PRODUCTION_WEBSOCKET_URL =
-  "wss://mobile-messenger-ios-production.up.railway.app/realtime";
+  "wss://phpstack-1634854-6489525.cloudwaysapps.com/realtime";
 const PRODUCTION_TELEGRAM_BOT_USERNAME = "verificMobileMessengerIOSbot";
 const LOCAL_BACKEND_PORT = 8080;
 const DEV_API_PATH = "/api";

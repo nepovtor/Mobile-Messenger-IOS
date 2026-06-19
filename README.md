@@ -8,7 +8,7 @@ Portfolio-ready messenger platform with three coordinated parts:
 - `web/`: React + TypeScript web client
 - `server/`: NestJS backend with REST, WebSocket realtime, and push delivery
 
-The project keeps the existing backend contract, Telegram verification flow, Railway deployment setup, and native WebSocket realtime.
+The project keeps the existing backend contract, Telegram verification flow, Cloudways deployment setup, and native WebSocket realtime.
 
 ## Repository Layout
 
@@ -80,7 +80,7 @@ iOS SwiftUI / Web React
   -> Push endpoints for Web Push subscriptions and APNs device tokens
   -> Native WebSocket for realtime events
   -> NestJS modules (auth, chat, contacts, users, realtime, media, push)
-  -> PostgreSQL / Railway deployment
+  -> PostgreSQL / Cloudways deployment
 ```
 
 ## Shared API Contract
@@ -138,9 +138,13 @@ Recommended sections in portfolio docs:
 
 If screenshots are not available yet, keep the placeholders above and add the real images into `docs/screenshots/`.
 
-## Railway
+## Deployment
 
-- Railway config lives in [railway.toml](./railway.toml)
+- Cloudways backend base URL: `https://phpstack-1634854-6489525.cloudwaysapps.com`
+- Health endpoint: `https://phpstack-1634854-6489525.cloudwaysapps.com/api/health`
+- Version endpoint: `https://phpstack-1634854-6489525.cloudwaysapps.com/api/version`
+- Realtime endpoint: `wss://phpstack-1634854-6489525.cloudwaysapps.com/realtime`
+- legacy Railway config still lives in [railway.toml](./railway.toml)
 - backend Docker setup lives in [server/Dockerfile](./server/Dockerfile) and [Dockerfile](./Dockerfile)
 - backend keeps `process.env.PORT`, `JWT_SECRET_KEY` with `JWT_SECRET` fallback, `/api/health`, and Telegram provider safety checks intact
 
@@ -221,13 +225,13 @@ npm install
 npm run dev
 ```
 
-By default the Vite dev server runs on `http://127.0.0.1:3000` and proxies to the Railway backend at `https://mobile-messenger-ios-production.up.railway.app`.
+By default the Vite dev server runs on `http://127.0.0.1:3000` and proxies to the Cloudways backend at `https://phpstack-1634854-6489525.cloudwaysapps.com`.
 To use a local backend instead, set `VITE_DEV_PROXY_TARGET=http://127.0.0.1:8080` or `VITE_DEV_DIRECT_BACKEND=true` before `npm run dev`.
 
 ### iOS
 
 Open `MobileMessengerIOS.xcodeproj` in Xcode and run the `MobileMessengerIOS` scheme.
-Debug and Release builds point to the Railway backend by default.
+Debug and Release builds point to the Cloudways backend by default.
 Use `MobileMessengerIOS/Configurations/Debug.public.xcconfig` or a local `Config/Config.xcconfig` only when you intentionally want to override that with a tunnel or local backend.
 
 Useful configs:

@@ -4,7 +4,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
 const DEFAULT_DEV_PROXY_TARGET =
-  "https://mobile-messenger-ios-production.up.railway.app";
+  "https://phpstack-1634854-6489525.cloudwaysapps.com";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
