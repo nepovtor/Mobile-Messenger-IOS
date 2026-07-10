@@ -10,19 +10,19 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import appIcon from "../../../../MobileMessengerIOS/Assets.xcassets/AppIcon.appiconset/icon-180.png";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
-import { toastStore } from "../../store/toastStore";
-import type { CurrentUser } from "../../types/auth";
-import type { ChatSummary } from "../../types/chat";
-import type { ContactEntry } from "../../types/contact";
-import { validateDisplayName } from "../../utils/displayName";
-import { ChatList } from "../chat/ChatList";
-import { ConnectionBadge } from "../chat/ConnectionBadge";
-import { Avatar } from "../ui/Avatar";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
-import { PushNotificationsPanel } from "../ui/PushNotificationsPanel";
-import { Skeleton } from "../ui/Skeleton";
+import type { ConnectionState } from "@/features/chat/realtime/realtimeTypes";
+import { toastStore } from "@/shared/model/toastStore";
+import type { CurrentUser } from "@/features/auth/types/auth";
+import type { ChatSummary } from "@/features/chat/types/chat";
+import type { ContactEntry } from "@/features/contacts/types/contact";
+import { validateDisplayName } from "@/utils/displayName";
+import { ChatList } from "@/features/chat/ui/ChatList";
+import { ConnectionBadge } from "@/features/chat/ui/ConnectionBadge";
+import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { PushNotificationsPanel } from "@/features/push/ui/PushNotificationsPanel";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export function Sidebar({
   user,

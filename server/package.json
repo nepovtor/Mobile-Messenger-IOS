@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "start:prod": "DOTENV_CONFIG_PATH=.env.production node dist/main.js",
     "build": "tsc -p tsconfig.json",
+    "contract:check": "node ../Scripts/generate-api-contract.mjs --check",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",

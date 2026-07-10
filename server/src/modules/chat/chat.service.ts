@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, LessThanOrEqual, Not, Repository } from "typeorm";
@@ -17,11 +16,11 @@ import {
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { normalizeContact } from "../common/contact.utils";
-import { isDemoChatSeedingEnabled } from "../common/runtime-config";
+import { ChatEventsService } from "../chat-events/chat-events.service";
 import { MediaService } from "../media/media.service";
 import { PushService } from "../push/push.service";
-import { RealtimeService } from "../realtime/realtime.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
+import { ChatPresenter } from "./chat.presenter";
 import { SendMessageDto } from "./dto/send-message.dto";
 import { SetTypingDto } from "./dto/set-typing.dto";
 import { UpdateMessageDto } from "./dto/update-message.dto";
@@ -64,7 +63,7 @@ interface RealtimeSendMessageDto {
 }
 
 @Injectable()
-export class ChatService implements OnModuleInit {
+export class ChatService {
   constructor(
     @InjectRepository(ChatEntity)
     private readonly chatsRepository: Repository<ChatEntity>,
@@ -74,17 +73,11 @@ export class ChatService implements OnModuleInit {
     private readonly messagesRepository: Repository<MessageEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
-    private readonly realtimeService: RealtimeService,
+    private readonly chatEvents: ChatEventsService,
     private readonly mediaService: MediaService,
     private readonly pushService: PushService,
+    private readonly presenter: ChatPresenter,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    if (!isDemoChatSeedingEnabled()) {
-      return;
-    }
-    await this.seedDemoChats();
-  }
 
   async createChat(
     dto: CreateChatDto,
@@ -116,7 +109,7 @@ export class ChatService implements OnModuleInit {
           user.sub,
         );
         if (wasRestored) {
-          this.realtimeService.publishToUsers([user.sub], {
+          this.chatEvents.publishToUsers([user.sub], {
             type: "chat.created",
             payload: {
               chatID: existingDirectChat.id,
@@ -149,7 +142,7 @@ export class ChatService implements OnModuleInit {
 
     const summary = await this.getChatSummary(chat.id, user.sub);
     const createdPayload = { chatID: chat.id, chat: summary };
-    this.realtimeService.publishToUsers(Array.from(participantIDs), {
+    this.chatEvents.publishToUsers(Array.from(participantIDs), {
       type: "chat.created",
       payload: createdPayload,
     });
@@ -169,7 +162,7 @@ export class ChatService implements OnModuleInit {
 
     const summaries = await Promise.all(
       visibleParticipants.map((participant) =>
-        this.buildChatSummaryEnvelope(participant.chat, participant, userID),
+        this.presenter.buildSummary(participant.chat, participant, userID),
       ),
     );
 
@@ -218,8 +211,8 @@ export class ChatService implements OnModuleInit {
       latestMessage?.id ?? participant.lastReadMessageId;
     await this.participantsRepository.save(participant);
 
-    this.realtimeService.setTyping(chatID, user.sub, user.displayName, false);
-    this.realtimeService.publishToUsers([user.sub], {
+    this.chatEvents.setTyping(chatID, user.sub, user.displayName, false);
+    this.chatEvents.publishToUsers([user.sub], {
       type: "chat.deleted",
       payload: { chatID },
     });
@@ -261,7 +254,9 @@ export class ChatService implements OnModuleInit {
       : messages;
 
     const ascending = filteredMessages.reverse();
-    return Promise.all(ascending.map((message) => this.mapMessage(message)));
+    return Promise.all(
+      ascending.map((message) => this.presenter.mapMessage(message)),
+    );
   }
 
   async addMessage(
@@ -327,7 +322,7 @@ export class ChatService implements OnModuleInit {
       relations: { author: true, media: true },
     });
     if (existingMessage) {
-      return this.mapMessage(existingMessage);
+      return this.presenter.mapMessage(existingMessage);
     }
 
     if (dto.kind === MessageKind.TEXT) {
@@ -402,7 +397,7 @@ export class ChatService implements OnModuleInit {
 
     for (const restoredUserID of restoredParticipantIDs) {
       const summary = await this.getChatSummary(chatID, restoredUserID);
-      this.realtimeService.publishToUsers([restoredUserID], {
+      this.chatEvents.publishToUsers([restoredUserID], {
         type: "chat.created",
         payload: {
           chatID,
@@ -411,8 +406,8 @@ export class ChatService implements OnModuleInit {
       });
     }
 
-    const payload = await this.mapMessage(hydratedMessage);
-    this.realtimeService.broadcastToChatParticipants(participants, {
+    const payload = await this.presenter.mapMessage(hydratedMessage);
+    this.chatEvents.broadcastToChatParticipants(participants, {
       event: "message.created",
       data: {
         chatID,
@@ -470,7 +465,7 @@ export class ChatService implements OnModuleInit {
     const participants = await this.participantsRepository.find({
       where: { chatId: chatID },
     });
-    this.realtimeService.publishToUsers(
+    this.chatEvents.publishToUsers(
       participants.map((item) => item.userId),
       {
         type: "message.read",
@@ -516,8 +511,8 @@ export class ChatService implements OnModuleInit {
       where: { chatId: chatID },
     });
     const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
-    const payload = await this.mapMessage(hydratedMessage);
-    this.realtimeService.broadcastToChatParticipants(participants, {
+    const payload = await this.presenter.mapMessage(hydratedMessage);
+    this.chatEvents.broadcastToChatParticipants(participants, {
       event: "message.updated",
       data: {
         chatID,
@@ -536,7 +531,9 @@ export class ChatService implements OnModuleInit {
     const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
 
     if (message.deletedAt) {
-      return this.mapMessage(await this.requireHydratedMessage(message.id));
+      return this.presenter.mapMessage(
+        await this.requireHydratedMessage(message.id),
+      );
     }
 
     message.text = "Сообщение удалено";
@@ -550,8 +547,8 @@ export class ChatService implements OnModuleInit {
       where: { chatId: chatID },
     });
     const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
-    const payload = await this.mapMessage(hydratedMessage);
-    this.realtimeService.broadcastToChatParticipants(participants, {
+    const payload = await this.presenter.mapMessage(hydratedMessage);
+    this.chatEvents.broadcastToChatParticipants(participants, {
       event: "message.deleted",
       data: {
         chatID,
@@ -579,14 +576,14 @@ export class ChatService implements OnModuleInit {
       where: { chatId: chatID },
     });
     const displayName = currentUser?.displayName ?? user.displayName;
-    const typingParticipants = this.realtimeService.setTyping(
+    const typingParticipants = this.chatEvents.setTyping(
       chatID,
       user.sub,
       displayName,
       dto.isTyping,
     );
 
-    this.realtimeService.broadcastToChatParticipants(participants, {
+    this.chatEvents.broadcastToChatParticipants(participants, {
       event: dto.isTyping ? "typing.started" : "typing.stopped",
       data: {
         chatID,
@@ -735,80 +732,8 @@ export class ChatService implements OnModuleInit {
   ): Promise<ChatSummary> {
     const participant = await this.getParticipantOrFail(chatID, userID);
     return (
-      await this.buildChatSummaryEnvelope(participant.chat, participant, userID)
+      await this.presenter.buildSummary(participant.chat, participant, userID)
     ).summary;
-  }
-
-  private async buildChatSummaryEnvelope(
-    chat: ChatEntity,
-    participant: ChatParticipantEntity,
-    userID: string,
-  ): Promise<{ summary: ChatSummary; dedupeKey: string }> {
-    const participants = await this.participantsRepository.find({
-      where: { chatId: chat.id },
-      relations: { user: true },
-    });
-    const unreadQuery = this.messagesRepository
-      .createQueryBuilder("message")
-      .where("message.chat_id = :chatID", { chatID: chat.id })
-      .andWhere("message.author_id != :userID", { userID });
-
-    if (participant.lastReadAt) {
-      unreadQuery.andWhere("message.created_at > :lastReadAt", {
-        lastReadAt: participant.lastReadAt,
-      });
-    }
-
-    const unreadCount = await unreadQuery.getCount();
-    const otherParticipants = participants.filter(
-      (item) => item.userId !== userID,
-    );
-    const displayTitle =
-      participants.length === 2
-        ? (otherParticipants[0]?.user.displayName ?? chat.title)
-        : chat.title;
-    return {
-      summary: {
-        id: chat.id,
-        title: displayTitle,
-        lastMessagePreview: chat.lastMessagePreview,
-        lastActivity: chat.lastActivity,
-        unreadCount,
-        typingParticipants: this.realtimeService.getTypingParticipants(
-          chat.id,
-          userID,
-        ),
-        participantNames: otherParticipants.map(
-          (item) => item.user.displayName,
-        ),
-        participantCount: participants.length,
-      },
-      dedupeKey:
-        participants.length === 2
-          ? `direct:${otherParticipants
-              .map((item) => item.userId)
-              .sort()
-              .join(":")}`
-          : `chat:${chat.id}`,
-    };
-  }
-
-  private async mapMessage(message: MessageEntity): Promise<MessageResponse> {
-    return {
-      id: message.id,
-      messageID: message.clientMessageId,
-      chatID: message.chatId,
-      authorID: message.authorId,
-      authorName: message.author.displayName,
-      kind: message.kind,
-      text: message.text,
-      mediaID: message.mediaId,
-      mediaURL: await this.mediaService.buildDownloadUrl(message.media),
-      status: message.status,
-      createdAt: message.createdAt,
-      editedAt: message.editedAt,
-      deletedAt: message.deletedAt,
-    };
   }
 
   private async getOwnMessageOrFail(
@@ -940,159 +865,6 @@ export class ChatService implements OnModuleInit {
       );
 
     return matchedChats[0] ?? null;
-  }
-
-  private async seedDemoChats(): Promise<void> {
-    const demoUsers = new Map<string, UserEntity>();
-    for (const account of [
-      ["+15551230011", "Анна Demo"],
-      ["+15551230012", "Борис Demo"],
-      ["+15551230013", "Вера Demo"],
-      ["+15551230014", "Глеб Demo"],
-      ["+15551230015", "Даша Demo"],
-    ] as const) {
-      const [contact, displayName] = account;
-      let user = await this.usersRepository.findOne({
-        where: { contact },
-      });
-      if (!user) {
-        user = await this.usersRepository.save(
-          this.usersRepository.create({
-            method: AuthMethod.PHONE,
-            contact,
-            phone: contact,
-            displayName,
-          }),
-        );
-      }
-      demoUsers.set(contact, user);
-    }
-
-    const seeds = [
-      {
-        id: "10000000-0000-0000-0000-000000000001",
-        title: "Анна и Борис",
-        participants: ["+15551230011", "+15551230012"],
-        messages: [
-          {
-            id: "20000000-0000-0000-0000-000000000001",
-            author: "+15551230011",
-            text: "Привет, Борис!",
-          },
-        ],
-      },
-      {
-        id: "10000000-0000-0000-0000-000000000002",
-        title: "Анна и Вера",
-        participants: ["+15551230011", "+15551230013"],
-        messages: [
-          {
-            id: "20000000-0000-0000-0000-000000000002",
-            author: "+15551230013",
-            text: "Я собрала идеи для фото.",
-          },
-        ],
-      },
-      {
-        id: "10000000-0000-0000-0000-000000000003",
-        title: "Борис и Глеб",
-        participants: ["+15551230012", "+15551230014"],
-        messages: [
-          {
-            id: "20000000-0000-0000-0000-000000000003",
-            author: "+15551230014",
-            text: "Соберу билд сегодня вечером.",
-          },
-        ],
-      },
-      {
-        id: "10000000-0000-0000-0000-000000000004",
-        title: "Demo Team",
-        participants: [
-          "+15551230011",
-          "+15551230012",
-          "+15551230014",
-          "+15551230015",
-        ],
-        messages: [
-          {
-            id: "20000000-0000-0000-0000-000000000004",
-            author: "+15551230015",
-            text: "Проверила demo flow перед ревью.",
-          },
-        ],
-      },
-    ];
-
-    for (const seed of seeds) {
-      let chat: ChatEntity | null = await this.chatsRepository.findOneBy({
-        id: seed.id as ChatEntity["id"],
-      });
-
-      if (!chat) {
-        const seededChat = this.chatsRepository.create({
-          id: seed.id as ChatEntity["id"],
-          title: seed.title,
-          lastActivity: new Date("2026-04-24T12:00:00.000Z"),
-          lastMessagePreview: null,
-        });
-        chat = await this.chatsRepository.save(seededChat);
-      }
-
-      if (!chat) {
-        continue;
-      }
-
-      const existingParticipants = await this.participantsRepository.find({
-        where: { chatId: chat.id },
-      });
-      if (existingParticipants.length === 0) {
-        await this.participantsRepository.save(
-          seed.participants.map((contact) => {
-            const user = demoUsers.get(contact);
-            if (!user) {
-              throw new Error(`Missing demo user ${contact}`);
-            }
-            return this.participantsRepository.create({
-              chatId: chat.id,
-              userId: user.id,
-              lastReadAt: null,
-              lastReadMessageId: null,
-            });
-          }),
-        );
-      }
-
-      for (const seedMessage of seed.messages) {
-        const exists = await this.messagesRepository.findOneBy({
-          id: seedMessage.id as MessageEntity["id"],
-        });
-        if (exists) {
-          continue;
-        }
-
-        const author = demoUsers.get(seedMessage.author);
-        if (!author) {
-          continue;
-        }
-
-        const seededMessage = this.messagesRepository.create({
-          id: seedMessage.id as MessageEntity["id"],
-          chatId: chat.id,
-          authorId: author.id,
-          clientMessageId: seedMessage.id as MessageEntity["clientMessageId"],
-          kind: MessageKind.TEXT,
-          text: seedMessage.text,
-          mediaId: null,
-          status: MessageStatus.READ,
-        });
-        await this.messagesRepository.save(seededMessage);
-
-        chat.lastMessagePreview = seedMessage.text;
-        chat.lastActivity = new Date("2026-04-24T12:00:00.000Z");
-        await this.chatsRepository.save(chat);
-      }
-    }
   }
 }
 

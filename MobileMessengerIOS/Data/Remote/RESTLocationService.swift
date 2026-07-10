@@ -88,7 +88,7 @@ public struct RESTLocationService: LocationNetworking {
     }
 
     public func fetchMyLocation() async throws -> ServerMyLocationShare {
-        var request = URLRequest(url: baseURL.appendingAPIPath("location/me"))
+        var request = URLRequest(url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.getMyLocation)))
         request.httpMethod = "GET"
         try await authorize(&request)
 
@@ -114,7 +114,7 @@ public struct RESTLocationService: LocationNetworking {
         accuracy: Double?,
         sharingEnabled: Bool
     ) async throws -> ServerMyLocationShare {
-        var request = URLRequest(url: baseURL.appendingAPIPath("location/me"))
+        var request = URLRequest(url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.updateMyLocation)))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
@@ -144,7 +144,7 @@ public struct RESTLocationService: LocationNetworking {
     }
 
     public func stopSharing() async throws {
-        var request = URLRequest(url: baseURL.appendingAPIPath("location/me"))
+        var request = URLRequest(url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.stopLocationSharing)))
         request.httpMethod = "DELETE"
         try await authorize(&request)
 
@@ -165,7 +165,7 @@ public struct RESTLocationService: LocationNetworking {
     }
 
     public func fetchContactLocations() async throws -> [ServerSharedLocation] {
-        var request = URLRequest(url: baseURL.appendingAPIPath("location/contacts"))
+        var request = URLRequest(url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.listContactLocations)))
         request.httpMethod = "GET"
         try await authorize(&request)
 

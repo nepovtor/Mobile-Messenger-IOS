@@ -1,4 +1,4 @@
-import { ApiError } from "../api/httpClient";
+import { ApiError } from "@/shared/api/httpClient";
 
 export function validateContactPhone(phone: string): string | null {
   const trimmed = phone.trim();

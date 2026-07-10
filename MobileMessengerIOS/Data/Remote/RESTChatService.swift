@@ -231,7 +231,10 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func listChats(searchQuery: String?) async throws -> [ServerChat] {
-        var components = URLComponents(url: baseURL.appendingAPIPath("chats"), resolvingAgainstBaseURL: false)
+        var components = URLComponents(
+            url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.listChats)),
+            resolvingAgainstBaseURL: false
+        )
         if let searchQuery, !searchQuery.isEmpty {
             components?.queryItems = [URLQueryItem(name: "search", value: searchQuery)]
         }
@@ -242,7 +245,10 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func createChat(title: String, participantContacts: [String]) async throws -> ServerChat {
-        var request = try await authorizedRequest(path: "chats", method: "POST")
+        var request = try await authorizedRequest(
+            path: GeneratedAPIContract.path(.createChat),
+            method: "POST"
+        )
         let normalizedContacts = participantContacts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -255,14 +261,19 @@ public struct RESTChatService: ChatNetworking {
 
     public func deleteChat(chatID: UUID) async throws {
         let request = try await authorizedRequest(
-            path: "chats/\(chatID.uuidString)",
+            path: GeneratedAPIContract.path(.deleteChat, parameters: ["chatID": chatID.uuidString]),
             method: "DELETE"
         )
         _ = try await performRaw(request: request)
     }
 
     public func loadMessages(chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [ServerMessage] {
-        var components = URLComponents(url: baseURL.appendingAPIPath("chats/\(chatID.uuidString)/messages"), resolvingAgainstBaseURL: false)
+        var components = URLComponents(
+            url: baseURL.appendingAPIPath(
+                GeneratedAPIContract.path(.listMessages, parameters: ["chatID": chatID.uuidString])
+            ),
+            resolvingAgainstBaseURL: false
+        )
         components?.queryItems = [
             URLQueryItem(name: "limit", value: String(limit))
         ]
@@ -276,7 +287,10 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func sendMessage(chatID: UUID, kind: Message.Kind, text: String?, mediaID: UUID?, localID: UUID) async throws -> ServerMessage {
-        var request = try await authorizedRequest(path: "chats/\(chatID.uuidString)/messages", method: "POST")
+        var request = try await authorizedRequest(
+            path: GeneratedAPIContract.path(.sendMessage, parameters: ["chatID": chatID.uuidString]),
+            method: "POST"
+        )
         request.httpBody = try encode([
             "messageID": localID.uuidString,
             "kind": kind.rawValue,
@@ -288,7 +302,10 @@ public struct RESTChatService: ChatNetworking {
 
     public func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> ServerMessage {
         var request = try await authorizedRequest(
-            path: "chats/\(chatID.uuidString)/messages/\(messageID.uuidString)",
+            path: GeneratedAPIContract.path(
+                .updateMessage,
+                parameters: ["chatID": chatID.uuidString, "messageID": messageID.uuidString]
+            ),
             method: "PATCH"
         )
         request.httpBody = try encode([
@@ -299,25 +316,40 @@ public struct RESTChatService: ChatNetworking {
 
     public func deleteMessage(chatID: UUID, messageID: UUID) async throws -> ServerMessage {
         let request = try await authorizedRequest(
-            path: "chats/\(chatID.uuidString)/messages/\(messageID.uuidString)",
+            path: GeneratedAPIContract.path(
+                .deleteMessage,
+                parameters: ["chatID": chatID.uuidString, "messageID": messageID.uuidString]
+            ),
             method: "DELETE"
         )
         return try await perform(request: request)
     }
 
     public func markRead(chatID: UUID, messageID: UUID) async throws {
-        let request = try await authorizedRequest(path: "chats/\(chatID.uuidString)/messages/\(messageID.uuidString)/read", method: "POST")
+        let request = try await authorizedRequest(
+            path: GeneratedAPIContract.path(
+                .markMessageRead,
+                parameters: ["chatID": chatID.uuidString, "messageID": messageID.uuidString]
+            ),
+            method: "POST"
+        )
         _ = try await performRaw(request: request)
     }
 
     public func setTyping(chatID: UUID, isTyping: Bool) async throws {
-        var request = try await authorizedRequest(path: "chats/\(chatID.uuidString)/typing", method: "POST")
+        var request = try await authorizedRequest(
+            path: GeneratedAPIContract.path(.setTyping, parameters: ["chatID": chatID.uuidString]),
+            method: "POST"
+        )
         request.httpBody = try encode(["isTyping": isTyping])
         _ = try await performRaw(request: request)
     }
 
     public func requestUploadURL(mimeType: String, sizeBytes: Int, width: Int?, height: Int?) async throws -> MediaUploadTarget {
-        var request = try await authorizedRequest(path: "media/upload-url", method: "POST")
+        var request = try await authorizedRequest(
+            path: GeneratedAPIContract.path(.requestMediaUpload),
+            method: "POST"
+        )
         request.httpBody = try encode([
             "mimeType": mimeType,
             "sizeBytes": sizeBytes,
@@ -345,7 +377,10 @@ public struct RESTChatService: ChatNetworking {
     }
 
     public func confirmUpload(mediaID: UUID, etag: String?) async throws {
-        var request = try await authorizedRequest(path: "media/\(mediaID.uuidString)/confirm", method: "POST")
+        var request = try await authorizedRequest(
+            path: GeneratedAPIContract.path(.confirmMediaUpload, parameters: ["mediaID": mediaID.uuidString]),
+            method: "POST"
+        )
         request.httpBody = try encode(["etag": etag])
         _ = try await performRaw(request: request)
     }

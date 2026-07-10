@@ -1,6 +1,6 @@
 import { AnimatePresence } from "framer-motion";
-import { toastStore } from "../../store/toastStore";
-import { Toast } from "./Toast";
+import { toastStore } from "@/shared/model/toastStore";
+import { Toast } from "@/components/ui/Toast";
 
 export function ToastViewport() {
   const toasts = toastStore((state) => state.toasts);

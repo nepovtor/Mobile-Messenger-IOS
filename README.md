@@ -83,7 +83,29 @@ iOS SwiftUI / Web React
   -> PostgreSQL / Cloudways deployment
 ```
 
+The repository follows feature-oriented boundaries:
+
+- iOS keeps composition in `AppContainer` and delegates navigation, settings,
+  session lifecycle, and connection lifecycle to dedicated coordinators.
+- Web features live under `web/src/features/<feature>`; app-level
+  orchestration lives under `web/src/app`, and shared infrastructure under
+  `web/src/shared`.
+- Backend modules communicate chat delivery through `ChatEventsModule`, so
+  the chat domain does not depend on the realtime transport.
+
+REST paths are defined canonically in `contracts/openapi.json`. Generated
+Swift and TypeScript path helpers must not be edited manually.
+
+```bash
+node Scripts/generate-api-contract.mjs
+make contract-check
+```
+
 ## Shared API Contract
+
+The route list below is a readable overview. The executable source of truth is
+`contracts/openapi.json`; CI verifies both generated clients and NestJS
+controller coverage.
 
 These endpoints are used by both clients:
 

@@ -1,4 +1,4 @@
-import { Module, forwardRef } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
@@ -8,9 +8,11 @@ import { UserEntity } from "../../entities/user.entity";
 import { AuthModule } from "../auth/auth.module";
 import { MediaModule } from "../media/media.module";
 import { PushModule } from "../push/push.module";
-import { RealtimeModule } from "../realtime/realtime.module";
+import { ChatEventsModule } from "../chat-events/chat-events.module";
 import { ChatController } from "./chat.controller";
+import { ChatPresenter } from "./chat.presenter";
 import { ChatService } from "./chat.service";
+import { DemoChatSeeder } from "./demo-chat.seeder";
 
 @Module({
   imports: [
@@ -22,12 +24,12 @@ import { ChatService } from "./chat.service";
       MediaEntity,
     ]),
     AuthModule,
-    forwardRef(() => RealtimeModule),
+    ChatEventsModule,
     MediaModule,
     PushModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, ChatPresenter, DemoChatSeeder],
   exports: [ChatService],
 })
 export class ChatModule {}

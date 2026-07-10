@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "contract:check": "node ../Scripts/generate-api-contract.mjs --check",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.ts\"",

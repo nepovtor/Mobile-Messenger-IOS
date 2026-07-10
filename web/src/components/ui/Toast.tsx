@@ -8,7 +8,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Toast as ToastModel } from "../../store/toastStore";
+import type { Toast as ToastModel } from "@/shared/model/toastStore";
 
 const iconsByTone = {
   info: Info,

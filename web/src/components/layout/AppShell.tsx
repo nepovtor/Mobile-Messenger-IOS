@@ -1,20 +1,17 @@
 import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { chatApi } from "../../api/chatApi";
-import { contactsApi } from "../../api/contactsApi";
-import { ConnectionBadge } from "../chat/ConnectionBadge";
-import { chatStore } from "../../store/chatStore";
-import { realtimeStore } from "../../store/realtimeStore";
-import { toastStore } from "../../store/toastStore";
-import type { CurrentUser } from "../../types/auth";
-import type { ContactEntry } from "../../types/contact";
-import {
-  mapContactErrorMessage,
-  validateContactPhone,
-} from "../../utils/contacts";
-import { ChatPanel } from "./ChatPanel";
-import { Sidebar } from "./Sidebar";
+import { chatApi } from "@/features/chat/api/chatApi";
+import { contactsApi } from "@/features/contacts/api/contactsApi";
+import { ConnectionBadge } from "@/features/chat/ui/ConnectionBadge";
+import { chatStore } from "@/features/chat/model/chatStore";
+import { realtimeStore } from "@/features/chat/model/realtimeStore";
+import { toastStore } from "@/shared/model/toastStore";
+import type { CurrentUser } from "@/features/auth/types/auth";
+import type { ContactEntry } from "@/features/contacts/types/contact";
+import { mapContactErrorMessage, validateContactPhone } from "@/utils/contacts";
+import { ChatPanel } from "@/components/layout/ChatPanel";
+import { Sidebar } from "@/components/layout/Sidebar";
 
 export function AppShell({
   currentUser,

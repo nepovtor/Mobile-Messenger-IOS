@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { dedupeMessages, upsertMessage } from "./messageDedup";
-import type { Message } from "../types/message";
+import { dedupeMessages, upsertMessage } from "@/utils/messageDedup";
+import type { Message } from "@/features/chat/types/message";
 
 const baseMessage: Message = {
   id: "server-1",

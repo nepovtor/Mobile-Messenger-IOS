@@ -15,110 +15,18 @@ public final class AppContainer: ObservableObject {
         let version: String
     }
 
-    public enum AppearanceMode: String, CaseIterable, Identifiable {
-        case system
-        case light
-        case dark
-
-        public var id: String { rawValue }
-
-        public var title: String {
-            switch self {
-            case .system:
-                return "Системная"
-            case .light:
-                return "Светлая"
-            case .dark:
-                return "Тёмная"
-            }
-        }
-
-        public var systemImage: String {
-            switch self {
-            case .system:
-                return "gearshape.2.fill"
-            case .light:
-                return "sun.max.fill"
-            case .dark:
-                return "moon.fill"
-            }
-        }
-
-        public var colorScheme: ColorScheme? {
-            switch self {
-            case .system:
-                return nil
-            case .light:
-                return .light
-            case .dark:
-                return .dark
-            }
-        }
-    }
-
-    public enum ConnectionStatus: Equatable {
-        case offline
-        case connecting
-        case reconnecting
-        case online
-
-        public var title: String {
-            switch self {
-            case .offline:
-                return "Оффлайн"
-            case .connecting:
-                return "Подключение"
-            case .reconnecting:
-                return "Переподключаемся"
-            case .online:
-                return "Онлайн"
-            }
-        }
-
-        public var subtitle: String {
-            switch self {
-            case .offline:
-                return "Показываем сохраненные данные"
-            case .connecting:
-                return "Поднимаем соединение"
-            case .reconnecting:
-                return "Восстанавливаем realtime и синхронизацию"
-            case .online:
-                return "Синхронизация работает"
-            }
-        }
-
-        public var systemImage: String {
-            switch self {
-            case .offline:
-                return "wifi.slash"
-            case .connecting:
-                return "antenna.radiowaves.left.and.right"
-            case .reconnecting:
-                return "arrow.triangle.2.circlepath"
-            case .online:
-                return "checkmark.circle.fill"
-            }
-        }
-    }
-
-    public enum MainTab: Hashable {
-        case contacts
-        case map
-        case chats
-        case profile
-    }
+    public typealias AppearanceMode = AppSettingsStore.AppearanceMode
+    public typealias ConnectionStatus = ConnectionCoordinator.Status
+    public typealias MainTab = AppRouter.MainTab
 
     public static let shared = AppContainer()
-    private enum DefaultsKeys {
-        static let appearanceMode = "ui.appearance_mode"
-        static let highContrastDarkMode = "ui.high_contrast_dark_mode"
-        static let showPhoneNumberInProfile = "profile.show_phone_number"
-        static let showTechnicalDetailsInProfile = "profile.show_technical_details"
-    }
 
     private let configService: DefaultConfigService
     public let sessionStore: SessionStore
+    public let router: AppRouter
+    public let settings: AppSettingsStore
+    public let connectionCoordinator: ConnectionCoordinator
+    private let sessionCoordinator: AppSessionCoordinator
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
@@ -134,41 +42,40 @@ public final class AppContainer: ObservableObject {
     private var profileRepository: ProfileRepository!
     private var locationRepository: LocationRepository!
     private var realtimeService: ChatRealtimeService!
-    private var sessionStateCancellable: AnyCancellable?
-    private var connectionStateTask: Task<Void, Never>?
-    private var isSceneActive = false
-    private var latestRealtimeState: ChatRealtimeConnectionState = .disconnected
-    private var lastAuthenticatedUserID: UUID?
     private let defaults: UserDefaults
-    @Published public private(set) var connectionStatus: ConnectionStatus = .offline
-    @Published public private(set) var realtimeConnectionState: ChatRealtimeConnectionState = .disconnected
-    @Published public private(set) var appearanceMode: AppearanceMode
-    @Published public private(set) var highContrastDarkMode: Bool
-    @Published public private(set) var showPhoneNumberInProfile: Bool
-    @Published public private(set) var showTechnicalDetailsInProfile: Bool
-    @Published public var selectedTab: MainTab = .contacts
-    @Published public private(set) var pendingPushChatID: UUID?
+    private var childStateCancellables: Set<AnyCancellable> = []
+
+    public var connectionStatus: ConnectionStatus { connectionCoordinator.status }
+    public var realtimeConnectionState: ChatRealtimeConnectionState { connectionCoordinator.realtimeState }
+    public var appearanceMode: AppearanceMode { settings.appearanceMode }
+    public var highContrastDarkMode: Bool { settings.highContrastDarkMode }
+    public var showPhoneNumberInProfile: Bool { settings.showPhoneNumberInProfile }
+    public var showTechnicalDetailsInProfile: Bool { settings.showTechnicalDetailsInProfile }
+    public var selectedTab: MainTab {
+        get { router.selectedTab }
+        set { router.selectedTab = newValue }
+    }
+    public var pendingPushChatID: UUID? { router.pendingPushChatID }
 
     @Published public private(set) var configurationRevision: Int = 0
 
     private init() {
         let tokenStore = KeychainTokenStore()
         defaults = .standard
-        appearanceMode = AppearanceMode(
-            rawValue: defaults.string(forKey: DefaultsKeys.appearanceMode) ?? ""
-        ) ?? .system
-        highContrastDarkMode = defaults.object(forKey: DefaultsKeys.highContrastDarkMode) as? Bool ?? true
-        showPhoneNumberInProfile = defaults.object(forKey: DefaultsKeys.showPhoneNumberInProfile) as? Bool ?? true
-        showTechnicalDetailsInProfile =
-            defaults.object(forKey: DefaultsKeys.showTechnicalDetailsInProfile) as? Bool ??
-            Self.defaultShowTechnicalDetailsInProfile
-
         configService = DefaultConfigService()
         analytics = DefaultAnalyticsService.shared
         reachability = DefaultReachabilityService()
 
         // Initialize main-actor isolated components safely
         sessionStore = SessionStore(tokenStore: tokenStore)
+        router = AppRouter()
+        settings = AppSettingsStore(defaults: defaults)
+        connectionCoordinator = ConnectionCoordinator(sessionStore: sessionStore, reachability: reachability)
+        sessionCoordinator = AppSessionCoordinator(
+            sessionStore: sessionStore,
+            router: router,
+            connectionCoordinator: connectionCoordinator
+        )
         authTokenProvider = { [sessionStore] in
             await MainActor.run { sessionStore.authToken }
         }
@@ -176,29 +83,25 @@ public final class AppContainer: ObservableObject {
         chatStore = SwiftDataChatStore()
         notificationManager = PushNotificationManager.shared
         configureNetworkingServices()
-        bindSessionState()
-        bindConnectionState()
+        configureCoordinators()
+        bindChildState()
         runDebugBackendHealthCheck()
     }
 
     public func updateAppearanceMode(_ mode: AppearanceMode) {
-        appearanceMode = mode
-        defaults.set(mode.rawValue, forKey: DefaultsKeys.appearanceMode)
+        settings.updateAppearanceMode(mode)
     }
 
     public func updateHighContrastDarkMode(_ isEnabled: Bool) {
-        highContrastDarkMode = isEnabled
-        defaults.set(isEnabled, forKey: DefaultsKeys.highContrastDarkMode)
+        settings.updateHighContrastDarkMode(isEnabled)
     }
 
     public func updateShowPhoneNumberInProfile(_ isEnabled: Bool) {
-        showPhoneNumberInProfile = isEnabled
-        defaults.set(isEnabled, forKey: DefaultsKeys.showPhoneNumberInProfile)
+        settings.updateShowPhoneNumberInProfile(isEnabled)
     }
 
     public func updateShowTechnicalDetailsInProfile(_ isEnabled: Bool) {
-        showTechnicalDetailsInProfile = isEnabled
-        defaults.set(isEnabled, forKey: DefaultsKeys.showTechnicalDetailsInProfile)
+        settings.updateShowTechnicalDetailsInProfile(isEnabled)
     }
 
     public var restBaseURLString: String {
@@ -393,18 +296,52 @@ public final class AppContainer: ObservableObject {
                 self?.sessionStore.authToken != nil
             },
             routeHandler: { [weak self] chatID in
-                self?.openChatFromPush(chatID: chatID)
+                self?.router.openChatFromPush(chatID: chatID)
             }
         )
     }
 
+    private func configureCoordinators() {
+        connectionCoordinator.configure(
+            realtimeService: realtimeService,
+            foregroundRefresh: { [weak self] in
+                guard let self, self.sessionStore.authToken != nil else { return }
+                await self.notificationManager.syncAuthorizedStateForCurrentSession()
+                self.realtimeService.activate()
+                await self.chatRepository.refreshForForeground()
+            }
+        )
+        sessionCoordinator.configure(
+            realtimeService: realtimeService,
+            resetLocalState: { [weak self] in
+                await self?.chatRepository?.resetLocalState()
+            },
+            syncNotifications: { [weak self] in
+                await self?.notificationManager.syncAuthorizedStateForCurrentSession()
+            },
+            sessionEnded: { [weak self] in
+                self?.notificationManager.handleSessionEnded()
+            },
+            detachNotifications: { [weak self] in
+                await self?.notificationManager.detachFromCurrentSession()
+            }
+        )
+    }
+
+    private func bindChildState() {
+        settings.objectWillChange
+            .merge(with: router.objectWillChange, connectionCoordinator.objectWillChange)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &childStateCancellables)
+    }
+
     private func applyConfigurationChange() {
         configureNetworkingServices()
-        bindConnectionState()
+        configureCoordinators()
         configurationRevision += 1
         runDebugBackendHealthCheck()
-        if isSceneActive {
-            Task { await refreshApplicationState() }
+        if connectionCoordinator.isSceneActive {
+            Task { await connectionCoordinator.refresh() }
         }
     }
 
@@ -447,132 +384,26 @@ public final class AppContainer: ObservableObject {
     }
 
     public func handleScenePhase(_ scenePhase: ScenePhase) {
-        switch scenePhase {
-        case .active:
-            isSceneActive = true
-            Task { await refreshApplicationState() }
-        case .inactive, .background:
-            isSceneActive = false
-            realtimeService.deactivate()
-            updateConnectionStatus()
-        @unknown default:
-            break
-        }
-    }
-
-    private func bindSessionState() {
-        sessionStateCancellable = sessionStore.$state.sink { [weak self] state in
-            guard let self else { return }
-            switch state {
-            case .authenticated(_, let userID, _):
-                let previousUserID = self.lastAuthenticatedUserID
-                self.lastAuthenticatedUserID = userID
-                Task {
-                    if previousUserID != nil, previousUserID != userID {
-                        self.realtimeService.handleLogout()
-                        await self.chatRepository?.resetLocalState()
-                    }
-
-                    await self.notificationManager.syncAuthorizedStateForCurrentSession()
-                    if self.isSceneActive {
-                        await self.refreshApplicationState()
-                    }
-                }
-            case .unauthenticated:
-                self.lastAuthenticatedUserID = nil
-                realtimeService?.handleLogout()
-                notificationManager.handleSessionEnded()
-                pendingPushChatID = nil
-                selectedTab = .contacts
-                Task { await self.chatRepository?.resetLocalState() }
-                connectionStatus = .offline
-            }
-        }
-    }
-
-    private func bindConnectionState() {
-        connectionStateTask?.cancel()
-        connectionStateTask = Task { [weak self] in
-            guard let self else { return }
-            for await state in realtimeService.observeConnectionState() {
-                await MainActor.run {
-                    self.latestRealtimeState = state
-                    self.realtimeConnectionState = state
-                    self.updateConnectionStatus()
-                }
-            }
-        }
-        updateConnectionStatus()
-    }
-
-    private func refreshApplicationState() async {
-        guard sessionStore.authToken != nil else {
-            realtimeService.deactivate()
-            connectionStatus = .offline
-            return
-        }
-        await notificationManager.syncAuthorizedStateForCurrentSession()
-        realtimeService.activate()
-        updateConnectionStatus()
-        await chatRepository.refreshForForeground()
+        connectionCoordinator.handleScenePhase(scenePhase)
     }
 
     public func logout() async {
-        await notificationManager.detachFromCurrentSession()
-        sessionStore.logout()
+        await sessionCoordinator.logout()
     }
 
     public func openChatFromPush(chatID: UUID?) {
-        selectedTab = .chats
-        pendingPushChatID = chatID
+        router.openChatFromPush(chatID: chatID)
     }
 
     public func consumePendingPushChatNavigation(for chatID: UUID) {
-        guard pendingPushChatID == chatID else { return }
-        pendingPushChatID = nil
+        router.consumePendingPushChatNavigation(for: chatID)
     }
 
     public func clearPendingPushChatNavigation() {
-        pendingPushChatID = nil
+        router.clearPendingPushChatNavigation()
     }
 
     private func handleUnauthorizedSessionReset() async {
-        await MainActor.run {
-            notificationManager.handleSessionEnded()
-            sessionStore.logout()
-        }
-    }
-
-    private func updateConnectionStatus() {
-        guard sessionStore.authToken != nil else {
-            connectionStatus = .offline
-            return
-        }
-        guard isSceneActive else {
-            connectionStatus = reachability.isReachable ? .reconnecting : .offline
-            return
-        }
-        guard reachability.isReachable else {
-            connectionStatus = .offline
-            return
-        }
-        switch latestRealtimeState {
-        case .connected:
-            connectionStatus = .online
-        case .connecting:
-            connectionStatus = .connecting
-        case .reconnecting, .disconnected:
-            connectionStatus = .reconnecting
-        case .failed:
-            connectionStatus = .offline
-        }
-    }
-
-    private static var defaultShowTechnicalDetailsInProfile: Bool {
-        #if DEBUG
-        true
-        #else
-        false
-        #endif
+        sessionCoordinator.handleUnauthorized()
     }
 }

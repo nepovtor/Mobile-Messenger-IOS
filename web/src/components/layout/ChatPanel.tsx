@@ -1,14 +1,14 @@
 import clsx from "clsx";
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
-import type { ConnectionState } from "../../realtime/realtimeTypes";
-import type { CurrentUser } from "../../types/auth";
-import type { ChatSummary } from "../../types/chat";
-import type { Message } from "../../types/message";
-import { MessageInput } from "../chat/MessageInput";
-import { MessageList } from "../chat/MessageList";
-import { Avatar } from "../ui/Avatar";
-import { Button } from "../ui/Button";
+import type { ConnectionState } from "@/features/chat/realtime/realtimeTypes";
+import type { CurrentUser } from "@/features/auth/types/auth";
+import type { ChatSummary } from "@/features/chat/types/chat";
+import type { Message } from "@/features/chat/types/message";
+import { MessageInput } from "@/features/chat/ui/MessageInput";
+import { MessageList } from "@/features/chat/ui/MessageList";
+import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 
 export function ChatPanel({
   chat,

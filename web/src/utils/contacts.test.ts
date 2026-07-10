@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "../api/httpClient";
-import { mapContactErrorMessage } from "./contacts";
+import { ApiError } from "@/shared/api/httpClient";
+import { mapContactErrorMessage } from "@/utils/contacts";
 
 describe("mapContactErrorMessage", () => {
   it("maps USER_NOT_FOUND", () => {

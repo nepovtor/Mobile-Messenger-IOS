@@ -140,6 +140,9 @@ test-ios:
 		CODE_SIGNING_ALLOWED=NO \
 		test
 
+contract-check:
+	@node Scripts/generate-api-contract.mjs --check
+
 install-ios:
 	@xcrun devicectl device install app \
 		--device $(DEVICE_ID) \

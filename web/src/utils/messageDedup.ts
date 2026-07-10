@@ -1,4 +1,4 @@
-import type { Message } from "../types/message";
+import type { Message } from "@/features/chat/types/message";
 
 export function dedupeMessages(messages: Message[]): Message[] {
   const result: Message[] = [];

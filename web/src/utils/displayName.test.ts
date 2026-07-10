@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateDisplayName } from "./displayName";
+import { validateDisplayName } from "@/utils/displayName";
 
 describe("validateDisplayName", () => {
   it("rejects empty names", () => {

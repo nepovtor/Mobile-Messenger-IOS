@@ -1,31 +1,34 @@
 import { lazy, Suspense, useEffect } from "react";
+import { initializeSessionCoordinator } from "@/app/sessionCoordinator";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { Card } from "./components/ui/Card";
-import { Spinner } from "./components/ui/Spinner";
-import { ToastViewport } from "./components/ui/ToastViewport";
-import { LoginPage } from "./pages/LoginPage";
-import { MessengerPage } from "./pages/MessengerPage";
-import { adminStore } from "./store/adminStore";
-import { authStore } from "./store/authStore";
-import { locationStore } from "./store/locationStore";
-import { pushStore } from "./store/pushStore";
+import { Card } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
+import { ToastViewport } from "@/components/ui/ToastViewport";
+import { LoginPage } from "@/features/auth/ui/LoginPage";
+import { MessengerPage } from "@/features/chat/ui/MessengerPage";
+import { adminStore } from "@/features/admin/model/adminStore";
+import { authStore } from "@/features/auth/model/authStore";
+import { locationStore } from "@/features/location/model/locationStore";
+import { pushStore } from "@/features/push/model/pushStore";
 
 const AdminLoginPage = lazy(async () => ({
-  default: (await import("./pages/AdminLoginPage")).AdminLoginPage,
+  default: (await import("@/features/admin/ui/AdminLoginPage")).AdminLoginPage,
 }));
 
 const MapPage = lazy(async () => ({
-  default: (await import("./pages/MapPage")).MapPage,
+  default: (await import("@/features/location/ui/MapPage")).MapPage,
 }));
 
 const SystemPage = lazy(async () => ({
-  default: (await import("./pages/SystemPage")).SystemPage,
+  default: (await import("@/features/admin/ui/SystemPage")).SystemPage,
 }));
 
 const TelegramSubscriptionPage = lazy(async () => ({
-  default: (await import("./pages/TelegramSubscriptionPage"))
+  default: (await import("@/features/auth/ui/TelegramSubscriptionPage"))
     .TelegramSubscriptionPage,
 }));
+
+initializeSessionCoordinator();
 
 function RouteFallback() {
   return (

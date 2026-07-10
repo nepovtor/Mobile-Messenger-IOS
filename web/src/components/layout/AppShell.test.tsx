@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { contactsApi } from "../../api/contactsApi";
-import { AppShell } from "./AppShell";
-import { chatStore } from "../../store/chatStore";
-import { realtimeStore } from "../../store/realtimeStore";
-import { toastStore } from "../../store/toastStore";
-import type { CurrentUser } from "../../types/auth";
+import { contactsApi } from "@/features/contacts/api/contactsApi";
+import { AppShell } from "@/components/layout/AppShell";
+import { chatStore } from "@/features/chat/model/chatStore";
+import { realtimeStore } from "@/features/chat/model/realtimeStore";
+import { toastStore } from "@/shared/model/toastStore";
+import type { CurrentUser } from "@/features/auth/types/auth";
 
-vi.mock("../../api/contactsApi", () => ({
+vi.mock("@/features/contacts/api/contactsApi", () => ({
   contactsApi: {
     getContacts: vi.fn(),
   },
@@ -43,7 +43,7 @@ vi.mock("./ChatPanel", () => ({
   ),
 }));
 
-vi.mock("../chat/ConnectionBadge", () => ({
+vi.mock("@/features/chat/ui/ConnectionBadge", () => ({
   ConnectionBadge: () => <div data-testid="connection-badge" />,
 }));
 

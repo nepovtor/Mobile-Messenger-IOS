@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
 import clsx from "clsx";
-import { Spinner } from "./Spinner";
+import { Spinner } from "@/components/ui/Spinner";
 
 type ButtonProps = PropsWithChildren<
   ButtonHTMLAttributes<HTMLButtonElement> & {

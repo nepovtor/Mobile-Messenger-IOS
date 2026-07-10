@@ -9,6 +9,13 @@ The web client keeps the live backend contract, native WebSocket realtime flow, 
 - React + TypeScript + Vite
 - Tailwind CSS
 - Zustand
+
+## Source Layout
+
+- `src/app`: routing and cross-feature coordinators
+- `src/features`: feature-owned API, model, realtime, types, and UI
+- `src/shared`: shared HTTP, generated OpenAPI paths, UI primitives, and utilities
+- `src/components/layout`: application shell composition
 - React Router
 - Framer Motion
 - lucide-react

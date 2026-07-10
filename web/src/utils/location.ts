@@ -1,4 +1,4 @@
-import { ApiError } from "../api/httpClient";
+import { ApiError } from "@/shared/api/httpClient";
 
 export function mapLocationErrorMessage(
   error: unknown,

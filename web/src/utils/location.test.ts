@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "../api/httpClient";
-import { formatLocationUpdatedAt, mapLocationErrorMessage } from "./location";
+import { ApiError } from "@/shared/api/httpClient";
+import {
+  formatLocationUpdatedAt,
+  mapLocationErrorMessage,
+} from "@/utils/location";
 
 describe("location utils", () => {
   it("maps api errors into readable location messages", () => {

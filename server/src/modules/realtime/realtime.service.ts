@@ -4,8 +4,9 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { Observable, Subject, interval, map, merge } from "rxjs";
+import { Observable, Subject, Subscription, interval, map, merge } from "rxjs";
 import { WebSocket } from "ws";
+import { ChatEventsService } from "../chat-events/chat-events.service";
 import {
   getRealtimeHeartbeatIntervalMs,
   getRealtimeHeartbeatTimeoutMs,
@@ -35,21 +36,27 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly userStreams = new Map<string, Subject<MessageEvent>>();
   private readonly userConnections = new Map<string, Set<WebSocket>>();
   private readonly connectionMeta = new Map<WebSocket, ConnectionMeta>();
-  private readonly typingState = new Map<
-    string,
-    Map<string, { userID: string; displayName: string }>
-  >();
   private readonly heartbeatIntervalMs = getRealtimeHeartbeatIntervalMs();
   private readonly heartbeatTimeoutMs = getRealtimeHeartbeatTimeoutMs();
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private chatEventsSubscription: Subscription | null = null;
+
+  constructor(
+    private readonly chatEvents: ChatEventsService = new ChatEventsService(),
+  ) {}
 
   onModuleInit(): void {
+    this.chatEventsSubscription = this.chatEvents.deliveries.subscribe(
+      ({ userIDs, envelope }) => this.broadcastToUsers(userIDs, envelope),
+    );
     this.heartbeatTimer = setInterval(() => {
       this.flushHeartbeat();
     }, this.heartbeatIntervalMs);
   }
 
   onModuleDestroy(): void {
+    this.chatEventsSubscription?.unsubscribe();
+    this.chatEventsSubscription = null;
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -137,41 +144,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     for (const userID of uniqueUserIDs) {
       this.sendToUser(userID, event);
     }
-  }
-
-  setTyping(
-    chatID: string,
-    userID: string,
-    displayName: string,
-    isTyping: boolean,
-  ): string[] {
-    const chatTyping =
-      this.typingState.get(chatID) ??
-      new Map<string, { userID: string; displayName: string }>();
-    if (isTyping) {
-      chatTyping.set(userID, { userID, displayName });
-    } else {
-      chatTyping.delete(userID);
-    }
-
-    if (chatTyping.size === 0) {
-      this.typingState.delete(chatID);
-      return [];
-    }
-
-    this.typingState.set(chatID, chatTyping);
-    return Array.from(chatTyping.values()).map((item) => item.displayName);
-  }
-
-  getTypingParticipants(chatID: string, excludeUserID?: string): string[] {
-    const chatTyping = this.typingState.get(chatID);
-    if (!chatTyping) {
-      return [];
-    }
-
-    return Array.from(chatTyping.values())
-      .filter((item) => item.userID !== excludeUserID)
-      .map((item) => item.displayName);
   }
 
   publishToUsers(userIDs: string[], message: RealtimePayload): void {
