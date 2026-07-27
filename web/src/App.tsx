@@ -47,12 +47,10 @@ export default function App() {
   const {
     restoreSession,
     isAuthenticated: isUserAuthenticated,
-    isLoading: isUserLoading,
   } = authStore();
   const {
     restoreSession: restoreAdminSession,
     isAuthenticated: isAdminAuthenticated,
-    isLoading: isAdminLoading,
   } = adminStore();
 
   useEffect(() => {
@@ -112,21 +110,6 @@ export default function App() {
       );
     };
   }, [navigate]);
-
-  if (isUserLoading || isAdminLoading) {
-    return (
-      <>
-        <ToastViewport />
-        <div className="app-page app-page--workspace flex items-center justify-center px-4 text-slate-200">
-          <div className="app-grid-fade" />
-          <Card className="app-shell relative z-10 flex items-center gap-3 px-5 py-4">
-            <Spinner />
-            Восстанавливаем сессии…
-          </Card>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
