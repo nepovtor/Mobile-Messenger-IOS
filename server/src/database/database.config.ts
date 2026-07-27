@@ -33,17 +33,31 @@ function readDatabaseEnv(
 export function buildDatabaseOptions(): DataSourceOptions {
   const databaseUrl = readDatabaseEnv("DATABASE_URL");
 
+  const commonOptions = {
+    type: "postgres" as const,
+    entities: [...DATABASE_ENTITIES],
+    migrations: [path.join(__dirname, "migrations", "*{.ts,.js}")],
+    synchronize: isDatabaseSynchronizationEnabled(),
+  };
+
+  // A connection URL is a complete set of connection parameters. Supplying
+  // fallback host/user/password fields alongside it makes node-postgres
+  // override the URL's credentials, which breaks Supabase pooler URLs where
+  // the username is project-specific.
+  if (databaseUrl) {
+    return {
+      ...commonOptions,
+      url: databaseUrl,
+    };
+  }
+
   return {
-    type: "postgres",
-    url: databaseUrl,
+    ...commonOptions,
     host: readDatabaseEnv("DB_HOST", "PGHOST") || "localhost",
     port: readPort(readDatabaseEnv("DB_PORT", "PGPORT"), 5432),
     username: readDatabaseEnv("DB_USER", "PGUSER") || "postgres",
     password: readDatabaseEnv("DB_PASSWORD", "PGPASSWORD") || "postgres",
     database: readDatabaseEnv("DB_NAME", "PGDATABASE") || "messenger",
-    entities: [...DATABASE_ENTITIES],
-    migrations: [path.join(__dirname, "migrations", "*{.ts,.js}")],
-    synchronize: isDatabaseSynchronizationEnabled(),
   };
 }
 
