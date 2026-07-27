@@ -194,17 +194,29 @@ async function authenticateWithBackendResult(
   storage.setToken(result.token);
   set({
     token: result.token,
-    isAuthenticated: true,
+    currentUser: null,
+    isAuthenticated: false,
   });
-  const currentUser = await authApi.getMe();
-  storage.setUser(currentUser);
-  set({
-    token: result.token,
-    currentUser,
-    isAuthenticated: true,
-    isLoading: false,
-    error: null,
-  });
+  try {
+    const currentUser = await authApi.getMe();
+    storage.setUser(currentUser);
+    set({
+      token: result.token,
+      currentUser,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+  } catch (error) {
+    storage.clearAll();
+    set({
+      token: null,
+      currentUser: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    throw error;
+  }
 }
 
 export function mapAuthErrorMessage(
