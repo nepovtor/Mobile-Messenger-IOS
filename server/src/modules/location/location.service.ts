@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { ContactEntity } from "../../entities/contact.entity";
 import { LocationShareEntity } from "../../entities/location-share.entity";
 import { UserEntity } from "../../entities/user.entity";
@@ -109,6 +109,7 @@ export class LocationService {
     }
 
     const shares = await this.locationSharesRepository.findBy({
+      userId: In(contacts.map((contact) => contact.contactUserId)),
       sharingEnabled: true,
     });
     const shareByUserId = new Map(shares.map((share) => [share.userId, share]));

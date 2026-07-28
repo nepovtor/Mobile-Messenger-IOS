@@ -127,16 +127,16 @@ export function Sidebar({
             <Link
               to="/map"
               aria-label="Открыть карту"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-[16px] text-slate-400 transition hover:bg-white/[0.06] hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-400 transition hover:bg-white/6 hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
             >
-              <MapPinned className="h-[18px] w-[18px]" />
+              <MapPinned className="h-4.5 w-4.5" />
             </Link>
 
             <div className="relative">
               <button
                 type="button"
                 aria-label="Профиль"
-                className="relative rounded-[16px] p-0.5 transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+                className="relative rounded-2xl p-0.5 transition hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
                 onClick={() => {
                   setMenuOpen((value) => !value);
                   setEditingProfile(false);
@@ -145,7 +145,7 @@ export function Sidebar({
                 <Avatar
                   name={user.displayName}
                   size="sm"
-                  className="h-10 w-10 rounded-[16px] text-[11px] shadow-none"
+                  className="h-10 w-10 rounded-2xl text-[11px] shadow-none"
                 />
                 <span
                   className={clsx(
@@ -251,7 +251,7 @@ export function Sidebar({
                     <div className="space-y-2 pt-3">
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2 rounded-[16px] px-3 py-2.5 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                        className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm text-slate-100 transition hover:bg-white/6"
                         onClick={() => setEditingProfile(true)}
                       >
                         <PencilLine className="h-4 w-4" />
@@ -259,7 +259,7 @@ export function Sidebar({
                       </button>
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2 rounded-[16px] px-3 py-2.5 text-left text-sm text-rose-100 transition hover:bg-rose-500/12"
+                        className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm text-rose-100 transition hover:bg-rose-500/12"
                         onClick={onLogout}
                       >
                         <LogOut className="h-4 w-4" />
@@ -281,22 +281,22 @@ export function Sidebar({
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <Input
             aria-label="Поиск"
-            className="h-11 rounded-[16px] border-white/8 bg-slate-950/70 pl-10 text-[16px] sm:text-sm"
+            className="h-11 rounded-2xl border-white/8 bg-slate-950/70 pl-10 text-[16px] sm:text-sm"
             placeholder="Поиск чатов и контактов"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-[18px] border border-white/8 bg-white/[0.03] p-1">
+        <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-[18px] border border-white/8 bg-white/3 p-1">
           <button
             type="button"
             aria-pressed={activeTab === "chats"}
             className={clsx(
               "flex min-h-11 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-sm font-medium transition",
               activeTab === "chats"
-                ? "bg-white/[0.09] text-white"
-                : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100",
+                ? "bg-white/9 text-white"
+                : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
             )}
             onClick={() => setActiveTab("chats")}
           >
@@ -309,8 +309,8 @@ export function Sidebar({
             className={clsx(
               "flex min-h-11 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-sm font-medium transition",
               activeTab === "contacts"
-                ? "bg-white/[0.09] text-white"
-                : "text-slate-400 hover:bg-white/[0.05] hover:text-slate-100",
+                ? "bg-white/9 text-white"
+                : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
             )}
             onClick={() => setActiveTab("contacts")}
           >
@@ -330,7 +330,7 @@ export function Sidebar({
           />
         ) : (
           <div className="space-y-3 px-2 pb-3">
-            <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3">
+            <div className="rounded-[18px] border border-white/8 bg-white/3 p-3">
               <div className="flex gap-2">
                 <Input
                   aria-label="Телефон контакта"
@@ -361,11 +361,11 @@ export function Sidebar({
             {isLoadingContacts ? (
               <div className="space-y-2">
                 {Array.from({ length: 4 }).map((_, index) => (
-                  <Skeleton key={index} className="h-[68px] rounded-[18px]" />
+                  <Skeleton key={index} className="h-17 rounded-[18px]" />
                 ))}
               </div>
             ) : filteredContacts.length === 0 ? (
-              <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.03] px-4 py-8 text-center text-sm text-slate-400">
+              <div className="rounded-[18px] border border-dashed border-white/8 bg-white/3 px-4 py-8 text-center text-sm text-slate-400">
                 Нет контактов
               </div>
             ) : (
@@ -373,11 +373,11 @@ export function Sidebar({
                 {filteredContacts.map((contact) => (
                   <div
                     key={contact.id}
-                    className="flex items-center gap-2 rounded-[18px] px-2 py-2 transition hover:bg-white/[0.04]"
+                    className="flex items-center gap-2 rounded-[18px] px-2 py-2 transition hover:bg-white/4"
                   >
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 items-center gap-3 rounded-[16px] px-2 py-1 text-left"
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left"
                       onClick={() => {
                         void onOpenContact(contact);
                       }}

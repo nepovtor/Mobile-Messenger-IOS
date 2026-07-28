@@ -39,7 +39,9 @@ final class ChatRepositorySpy: ChatRepository {
     }
 
     var onSendMessage: ((UUID, String, UUID?) -> Void)?
+    var onMarkMessage: ((UUID) -> Void)?
     var deletedChatIDs: [UUID] = []
+    var markedMessageIDs: [UUID] = []
 
     func createChat(title _: String, participantContacts _: [String]) async throws -> Chat {
         createChatResult
@@ -96,7 +98,10 @@ final class ChatRepositorySpy: ChatRepository {
 
     func refreshForForeground() async {}
 
-    func markMessage(_: UUID, in _: UUID, with _: MessageStatus) async throws {}
+    func markMessage(_ messageID: UUID, in _: UUID, with _: MessageStatus) async throws {
+        markedMessageIDs.append(messageID)
+        onMarkMessage?(messageID)
+    }
 
     func resetLocalState() async {}
 }

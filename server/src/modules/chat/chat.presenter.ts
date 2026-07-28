@@ -1,12 +1,22 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
 import { MessageEntity } from "../../entities/message.entity";
 import { ChatEventsService } from "../chat-events/chat-events.service";
 import { MediaService } from "../media/media.service";
 import type { ChatSummary, MessageResponse } from "./chat.service";
+
+type ChatSummaryInput = {
+  chat: ChatEntity;
+  participant: ChatParticipantEntity;
+};
+
+type ChatSummaryResult = {
+  summary: ChatSummary;
+  dedupeKey: string;
+};
 
 @Injectable()
 export class ChatPresenter {
@@ -23,60 +33,109 @@ export class ChatPresenter {
     chat: ChatEntity,
     participant: ChatParticipantEntity,
     userID: string,
-  ): Promise<{ summary: ChatSummary; dedupeKey: string }> {
-    const participants = await this.participantsRepository.find({
-      where: { chatId: chat.id },
-      relations: { user: true },
-    });
-    const unreadQuery = this.messagesRepository
-      .createQueryBuilder("message")
-      .where("message.chat_id = :chatID", { chatID: chat.id })
-      .andWhere("message.author_id != :userID", { userID });
+  ): Promise<ChatSummaryResult> {
+    const [result] = await this.buildSummaries([{ chat, participant }], userID);
+    if (!result) {
+      throw new Error(`Failed to build summary for chat ${chat.id}`);
+    }
+    return result;
+  }
 
-    if (participant.lastReadAt) {
-      unreadQuery.andWhere("message.created_at > :lastReadAt", {
-        lastReadAt: participant.lastReadAt,
-      });
+  async buildSummaries(
+    inputs: ChatSummaryInput[],
+    userID: string,
+  ): Promise<ChatSummaryResult[]> {
+    if (inputs.length === 0) {
+      return [];
     }
 
-    const unreadCount = await unreadQuery.getCount();
-    const otherParticipants = participants.filter(
-      (item) => item.userId !== userID,
-    );
-    const displayTitle =
-      participants.length === 2
-        ? (otherParticipants[0]?.user.displayName ?? chat.title)
-        : chat.title;
-    const lastMessage =
-      chat.lastMessage ??
-      (chat.lastMessageId
-        ? await this.messagesRepository.findOneBy({ id: chat.lastMessageId })
-        : null);
+    const chatIDs = inputs.map(({ chat }) => chat.id);
+    const participants = await this.participantsRepository.find({
+      where: { chatId: In(chatIDs) },
+      relations: { user: true },
+    });
 
-    return {
-      summary: {
-        id: chat.id,
-        title: displayTitle,
-        lastMessagePreview: this.messagePreview(lastMessage),
-        lastActivity: chat.lastActivity,
-        unreadCount,
-        typingParticipants: this.chatEvents.getTypingParticipants(
-          chat.id,
-          userID,
-        ),
-        participantNames: otherParticipants.map(
-          (item) => item.user.displayName,
-        ),
-        participantCount: participants.length,
-      },
-      dedupeKey:
-        participants.length === 2
-          ? `direct:${otherParticipants
-              .map((item) => item.userId)
-              .sort()
-              .join(":")}`
-          : `chat:${chat.id}`,
-    };
+    const participantsByChatID = new Map<string, ChatParticipantEntity[]>();
+    for (const item of participants) {
+      const chatParticipants = participantsByChatID.get(item.chatId) ?? [];
+      chatParticipants.push(item);
+      participantsByChatID.set(item.chatId, chatParticipants);
+    }
+
+    const unreadRows = await this.messagesRepository
+      .createQueryBuilder("message")
+      .select("message.chat_id", "chatID")
+      .addSelect("COUNT(*)", "unreadCount")
+      .innerJoin(
+        ChatParticipantEntity,
+        "viewer",
+        "viewer.chat_id = message.chat_id AND viewer.user_id = :userID",
+        { userID },
+      )
+      .where("message.chat_id IN (:...chatIDs)", { chatIDs })
+      .andWhere("message.author_id != :userID", { userID })
+      .andWhere(
+        "(viewer.last_read_at IS NULL OR message.created_at > viewer.last_read_at)",
+      )
+      .groupBy("message.chat_id")
+      .getRawMany<{ chatID: string; unreadCount: string }>();
+    const unreadCountByChatID = new Map(
+      unreadRows.map((row) => [row.chatID, Number(row.unreadCount)]),
+    );
+
+    const missingLastMessageIDs = inputs.flatMap(({ chat }) =>
+      chat.lastMessageId && !chat.lastMessage ? [chat.lastMessageId] : [],
+    );
+    const missingLastMessages =
+      missingLastMessageIDs.length > 0
+        ? await this.messagesRepository.findBy({
+            id: In(missingLastMessageIDs),
+          })
+        : [];
+    const missingLastMessageByID = new Map(
+      missingLastMessages.map((message) => [message.id, message]),
+    );
+
+    return inputs.map(({ chat }) => {
+      const chatParticipants = participantsByChatID.get(chat.id) ?? [];
+      const otherParticipants = chatParticipants.filter(
+        (item) => item.userId !== userID,
+      );
+      const displayTitle =
+        chatParticipants.length === 2
+          ? (otherParticipants[0]?.user.displayName ?? chat.title)
+          : chat.title;
+      const lastMessage =
+        chat.lastMessage ??
+        (chat.lastMessageId
+          ? (missingLastMessageByID.get(chat.lastMessageId) ?? null)
+          : null);
+
+      return {
+        summary: {
+          id: chat.id,
+          title: displayTitle,
+          lastMessagePreview: this.messagePreview(lastMessage),
+          lastActivity: chat.lastActivity,
+          unreadCount: unreadCountByChatID.get(chat.id) ?? 0,
+          typingParticipants: this.chatEvents.getTypingParticipants(
+            chat.id,
+            userID,
+          ),
+          participantNames: otherParticipants.map(
+            (item) => item.user.displayName,
+          ),
+          participantCount: chatParticipants.length,
+        },
+        dedupeKey:
+          chatParticipants.length === 2
+            ? `direct:${otherParticipants
+                .map((item) => item.userId)
+                .sort()
+                .join(":")}`
+            : `chat:${chat.id}`,
+      };
+    });
   }
 
   async mapMessage(message: MessageEntity): Promise<MessageResponse> {

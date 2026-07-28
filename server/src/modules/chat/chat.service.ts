@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, LessThanOrEqual, Not, Repository } from "typeorm";
+import { In, IsNull, LessThanOrEqual, Not, Repository } from "typeorm";
 import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
 import { MediaEntity } from "../../entities/media.entity";
@@ -151,19 +151,17 @@ export class ChatService {
 
   async listChats(userID: string, search?: string): Promise<ChatSummary[]> {
     const participants = await this.participantsRepository.find({
-      where: { userId: userID },
+      where: { userId: userID, hiddenAt: IsNull() },
       relations: { chat: { lastMessage: true } },
       order: { chat: { lastActivity: "DESC" } },
     });
 
-    const visibleParticipants = participants.filter(
-      (participant) => participant.hiddenAt == null,
-    );
-
-    const summaries = await Promise.all(
-      visibleParticipants.map((participant) =>
-        this.presenter.buildSummary(participant.chat, participant, userID),
-      ),
+    const summaries = await this.presenter.buildSummaries(
+      participants.map((participant) => ({
+        chat: participant.chat,
+        participant,
+      })),
+      userID,
     );
 
     const normalizedSearch = search?.trim().toLowerCase();
@@ -239,21 +237,23 @@ export class ChatService {
       }
     }
 
-    const messages = await this.messagesRepository.find({
-      where: {
-        chatId: chatID,
-        ...(createdBefore ? { createdAt: LessThanOrEqual(createdBefore) } : {}),
-      },
-      relations: { author: true, media: true },
-      order: { createdAt: "DESC" },
-      take: Math.min(Math.max(limit, 1), 200),
-    });
+    const query = this.messagesRepository
+      .createQueryBuilder("message")
+      .leftJoinAndSelect("message.author", "author")
+      .leftJoinAndSelect("message.media", "media")
+      .where("message.chat_id = :chatID", { chatID })
+      .orderBy("message.createdAt", "DESC")
+      .addOrderBy("message.id", "DESC")
+      .take(Math.min(Math.max(limit, 1), 200));
 
-    const filteredMessages = before
-      ? messages.filter((message) => message.id !== before)
-      : messages;
+    if (createdBefore && before) {
+      query.andWhere(
+        "(message.created_at < :createdBefore OR (message.created_at = :createdBefore AND message.id < :before))",
+        { createdBefore, before },
+      );
+    }
 
-    const ascending = filteredMessages.reverse();
+    const ascending = (await query.getMany()).reverse();
     return Promise.all(
       ascending.map((message) => this.presenter.mapMessage(message)),
     );
@@ -445,6 +445,12 @@ export class ChatService {
     if (!message) {
       throw new NotFoundException("Message not found");
     }
+    if (
+      participant.lastReadAt &&
+      participant.lastReadAt.getTime() >= message.createdAt.getTime()
+    ) {
+      return { ok: true };
+    }
 
     participant.lastReadAt = message.createdAt;
     participant.lastReadMessageId = message.id;
@@ -608,6 +614,65 @@ export class ChatService {
     return this.findExistingDirectChat([firstUserID, secondUserID].sort());
   }
 
+  async findExistingDirectChatIDsByUsers(
+    ownerUserID: string,
+    otherUserIDs: string[],
+  ): Promise<Map<string, string>> {
+    const uniqueOtherUserIDs = Array.from(
+      new Set(otherUserIDs.filter((userID) => userID !== ownerUserID)),
+    );
+    if (uniqueOtherUserIDs.length === 0) {
+      return new Map();
+    }
+
+    const candidateRows = await this.participantsRepository
+      .createQueryBuilder("owner")
+      .select("other.user_id", "otherUserID")
+      .addSelect("owner.chat_id", "chatID")
+      .innerJoin(
+        ChatParticipantEntity,
+        "other",
+        "other.chat_id = owner.chat_id AND other.user_id IN (:...otherUserIDs)",
+        { otherUserIDs: uniqueOtherUserIDs },
+      )
+      .innerJoin(ChatEntity, "chat", "chat.id = owner.chat_id")
+      .where("owner.user_id = :ownerUserID", { ownerUserID })
+      .orderBy("chat.last_activity", "DESC")
+      .getRawMany<{ otherUserID: string; chatID: string }>();
+
+    const candidateChatIDs = Array.from(
+      new Set(candidateRows.map((row) => row.chatID)),
+    );
+    if (candidateChatIDs.length === 0) {
+      return new Map();
+    }
+
+    const candidateParticipants = await this.participantsRepository.find({
+      where: { chatId: In(candidateChatIDs) },
+      select: { chatId: true, userId: true },
+    });
+    const userIDsByChatID = new Map<string, Set<string>>();
+    for (const participant of candidateParticipants) {
+      const userIDs = userIDsByChatID.get(participant.chatId) ?? new Set();
+      userIDs.add(participant.userId);
+      userIDsByChatID.set(participant.chatId, userIDs);
+    }
+
+    const chatIDByOtherUserID = new Map<string, string>();
+    for (const row of candidateRows) {
+      const userIDs = userIDsByChatID.get(row.chatID);
+      if (
+        userIDs?.size === 2 &&
+        userIDs.has(ownerUserID) &&
+        userIDs.has(row.otherUserID) &&
+        !chatIDByOtherUserID.has(row.otherUserID)
+      ) {
+        chatIDByOtherUserID.set(row.otherUserID, row.chatID);
+      }
+    }
+    return chatIDByOtherUserID;
+  }
+
   async findOrCreateDirectChat(
     firstUserID: string,
     secondUserID: string,
@@ -667,31 +732,28 @@ export class ChatService {
   private async resolveParticipantsByContact(
     contacts: string[],
   ): Promise<UserEntity[]> {
-    const allUsers = await this.usersRepository.find();
-    const result = new Map<string, UserEntity>();
+    const normalizedContacts = new Set<string>();
 
     for (const rawContact of contacts) {
-      const normalizedVariants = new Set<string>();
       try {
-        normalizedVariants.add(normalizeContact(AuthMethod.EMAIL, rawContact));
+        normalizedContacts.add(normalizeContact(AuthMethod.EMAIL, rawContact));
       } catch {
         // ignore invalid variant
       }
       try {
-        normalizedVariants.add(normalizeContact(AuthMethod.PHONE, rawContact));
+        normalizedContacts.add(normalizeContact(AuthMethod.PHONE, rawContact));
       } catch {
         // ignore invalid variant
-      }
-
-      const match = allUsers.find((candidate) =>
-        normalizedVariants.has(candidate.contact),
-      );
-      if (match) {
-        result.set(match.id, match);
       }
     }
 
-    return Array.from(result.values());
+    if (normalizedContacts.size === 0) {
+      return [];
+    }
+
+    return this.usersRepository.find({
+      where: { contact: In(Array.from(normalizedContacts)) },
+    });
   }
 
   private async getParticipantOrFail(
@@ -791,67 +853,21 @@ export class ChatService {
     if (participantIDs.length !== 2) {
       return null;
     }
-
-    const candidateParticipants = await this.participantsRepository.find({
-      where: {
-        userId: In(participantIDs),
-      },
-      relations: {
-        chat: true,
-      },
-    });
-
-    const candidateChatIDs = Array.from(
-      candidateParticipants.reduce((result, participant) => {
-        const chatParticipants =
-          result.get(participant.chatId) ?? new Set<string>();
-        chatParticipants.add(participant.userId);
-        result.set(participant.chatId, chatParticipants);
-        return result;
-      }, new Map<string, Set<string>>()),
-    )
-      .filter(([, userIDs]) => userIDs.size === participantIDs.length)
-      .map(([chatID]) => chatID);
-
-    if (candidateChatIDs.length === 0) {
+    const [firstUserID, secondUserID] = participantIDs;
+    if (!firstUserID || !secondUserID) {
       return null;
     }
 
-    const fullParticipants = await this.participantsRepository.find({
-      where: {
-        chatId: In(candidateChatIDs),
-      },
-      relations: {
-        chat: true,
-      },
-    });
-
-    const normalizedParticipantsKey = participantIDs.slice().sort().join(":");
-    const matchedChats = Array.from(
-      fullParticipants.reduce((result, participant) => {
-        const entry = result.get(participant.chatId) ?? {
-          userIDs: [] as string[],
-          chat: participant.chat,
-        };
-        entry.userIDs.push(participant.userId);
-        result.set(participant.chatId, entry);
-        return result;
-      }, new Map<string, { userIDs: string[]; chat: ChatEntity }>()),
-    )
-      .filter(([, entry]) => {
-        const key = entry.userIDs.slice().sort().join(":");
-        return (
-          entry.userIDs.length === participantIDs.length &&
-          key === normalizedParticipantsKey
-        );
-      })
-      .map(([, entry]) => entry.chat)
-      .sort(
-        (left, right) =>
-          right.lastActivity.getTime() - left.lastActivity.getTime(),
-      );
-
-    return matchedChats[0] ?? null;
+    const chatIDByOtherUserID = await this.findExistingDirectChatIDsByUsers(
+      firstUserID,
+      [secondUserID],
+    );
+    const chatID = chatIDByOtherUserID.get(secondUserID);
+    return chatID
+      ? this.chatsRepository.findOneBy({
+          id: chatID as ChatEntity["id"],
+        })
+      : null;
   }
 }
 

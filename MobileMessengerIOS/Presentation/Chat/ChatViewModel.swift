@@ -43,6 +43,10 @@ public final class ChatViewModel: ObservableObject {
     private var observeTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var reachabilityTask: Task<Void, Never>?
+    private var messageIndexByID: [UUID: Int] = [:]
+    private var messageIndexByLocalID: [UUID: Int] = [:]
+    private var failedOutgoingMessageIDs: Set<UUID> = []
+    private var lastMarkedReadMessageID: UUID?
     init(
         chatID: UUID,
         title: String,
@@ -159,7 +163,17 @@ public final class ChatViewModel: ObservableObject {
     }
 
     public func markAsRead(messageID: UUID) {
-        Task { try? await markStatus(chatID: chatID, messageID: messageID, status: .read) }
+        guard lastMarkedReadMessageID != messageID else { return }
+        lastMarkedReadMessageID = messageID
+        Task {
+            do {
+                try await markStatus(chatID: chatID, messageID: messageID, status: .read)
+            } catch {
+                if lastMarkedReadMessageID == messageID {
+                    lastMarkedReadMessageID = nil
+                }
+            }
+        }
     }
 
     public func beginEditing(_ message: Message) {
@@ -262,32 +276,98 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func upsert(message: Message) {
-        if let index = messages.firstIndex(where: { $0.id == message.id || $0.localID == message.localID }) {
+        if let index = existingIndex(for: message) {
+            let previous = messages[index]
             messages[index] = message
-        } else {
+            failedOutgoingMessageIDs.remove(previous.localID)
+            updateFailedMessageIndex(with: message)
+
+            messageIndexByID[previous.id.messageID] = nil
+            messageIndexByLocalID[previous.localID] = nil
+            if previous.createdAt == message.createdAt,
+               previous.id.messageID == message.id.messageID {
+                messageIndexByID[message.id.messageID] = index
+                messageIndexByLocalID[message.localID] = index
+            } else {
+                messages.sort(by: Self.sortMessages)
+                rebuildMessageIndices()
+            }
+        } else if let lastMessage = messages.last,
+                  Self.sortMessages(lhs: lastMessage, rhs: message) {
             messages.append(message)
+            let index = messages.index(before: messages.endIndex)
+            messageIndexByID[message.id.messageID] = index
+            messageIndexByLocalID[message.localID] = index
+            updateFailedMessageIndex(with: message)
+        } else {
+            messages.insert(message, at: insertionIndex(for: message))
+            rebuildMessageIndices()
         }
-        sortMessages()
     }
 
     private func merge(messages newMessages: [Message]) {
         for message in newMessages {
-            if let index = messages.firstIndex(where: { $0.id == message.id || $0.localID == message.localID }) {
+            if let index = existingIndex(for: message) {
+                let previous = messages[index]
+                messageIndexByID[previous.id.messageID] = nil
+                messageIndexByLocalID[previous.localID] = nil
                 messages[index] = message
+                messageIndexByID[message.id.messageID] = index
+                messageIndexByLocalID[message.localID] = index
             } else {
+                let index = messages.endIndex
                 messages.append(message)
+                messageIndexByID[message.id.messageID] = index
+                messageIndexByLocalID[message.localID] = index
             }
         }
-        sortMessages()
+        messages.sort(by: Self.sortMessages)
+        rebuildMessageIndices()
     }
 
-    private func sortMessages() {
-        messages.sort { lhs, rhs in
-            if lhs.createdAt == rhs.createdAt {
-                return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
+    private func existingIndex(for message: Message) -> Int? {
+        messageIndexByID[message.id.messageID] ??
+        messageIndexByLocalID[message.localID]
+    }
+
+    private func insertionIndex(for message: Message) -> Int {
+        var lowerBound = messages.startIndex
+        var upperBound = messages.endIndex
+        while lowerBound < upperBound {
+            let middle = lowerBound + (upperBound - lowerBound) / 2
+            if Self.sortMessages(lhs: messages[middle], rhs: message) {
+                lowerBound = middle + 1
+            } else {
+                upperBound = middle
             }
-            return lhs.createdAt < rhs.createdAt
         }
+        return lowerBound
+    }
+
+    private func rebuildMessageIndices() {
+        messageIndexByID.removeAll(keepingCapacity: true)
+        messageIndexByLocalID.removeAll(keepingCapacity: true)
+        failedOutgoingMessageIDs.removeAll(keepingCapacity: true)
+        for (index, message) in messages.enumerated() {
+            messageIndexByID[message.id.messageID] = index
+            messageIndexByLocalID[message.localID] = index
+            updateFailedMessageIndex(with: message)
+        }
+    }
+
+    private func updateFailedMessageIndex(with message: Message) {
+        if message.isOutgoing && message.status == .failed {
+            failedOutgoingMessageIDs.insert(message.localID)
+        } else {
+            failedOutgoingMessageIDs.remove(message.localID)
+        }
+    }
+
+    private static func sortMessages(lhs: Message, rhs: Message) -> Bool {
+        if lhs.createdAt == rhs.createdAt {
+            return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
+        }
+        return lhs.createdAt < rhs.createdAt
     }
 
     private func observeReachability() async {
@@ -304,7 +384,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func updateBannerState() {
-        if messages.contains(where: { $0.isOutgoing && $0.status == .failed }) {
+        if !failedOutgoingMessageIDs.isEmpty {
             banner = .error("Не удалось отправить сообщение. Попробуйте снова.")
             return
         }
@@ -317,7 +397,7 @@ public final class ChatViewModel: ObservableObject {
             return
         }
         if case .error = banner,
-           !messages.contains(where: { $0.isOutgoing && $0.status == .failed }) {
+           failedOutgoingMessageIDs.isEmpty {
             banner = nil
         }
     }

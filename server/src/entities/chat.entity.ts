@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -12,6 +13,7 @@ import { createEntityId } from "./entity-id";
 import { MessageEntity } from "./message.entity";
 
 @Entity({ name: "chats" })
+@Index("idx_chats_last_activity", ["lastActivity"])
 export class ChatEntity {
   @PrimaryColumn("uuid")
   id = createEntityId();

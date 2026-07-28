@@ -38,8 +38,17 @@ export class ContactsService {
       order: { createdAt: "ASC" },
     });
 
-    return Promise.all(
-      contacts.map(async (contact) => this.mapContact(contact, ownerUserId)),
+    const directChatIDByUserID =
+      await this.chatService.findExistingDirectChatIDsByUsers(
+        ownerUserId,
+        contacts.map((contact) => contact.contactUserId),
+      );
+
+    return contacts.map((contact) =>
+      this.mapContact(
+        contact,
+        directChatIDByUserID.get(contact.contactUserId) ?? null,
+      ),
     );
   }
 
@@ -82,8 +91,12 @@ export class ContactsService {
     });
 
     if (existing) {
+      const directChat = await this.chatService.findExistingDirectChatByUsers(
+        ownerUserId,
+        contactUser.id,
+      );
       return {
-        ...(await this.mapContact(existing, ownerUserId)),
+        ...this.mapContact(existing, directChat?.id ?? null),
         alreadyExists: true,
       };
     }
@@ -103,8 +116,11 @@ export class ContactsService {
       throw new BadRequestException("Failed to create contact");
     }
 
-    await this.chatService.findOrCreateDirectChat(owner.id, contactUser.id);
-    return this.mapContact(hydrated, ownerUserId);
+    const directChat = await this.chatService.findOrCreateDirectChat(
+      owner.id,
+      contactUser.id,
+    );
+    return this.mapContact(hydrated, directChat.id);
   }
 
   async removeContact(
@@ -132,22 +148,17 @@ export class ContactsService {
     throw new NotFoundException("Contact not found");
   }
 
-  private async mapContact(
+  private mapContact(
     contact: ContactEntity,
-    ownerUserId: string,
-  ): Promise<ContactResponse> {
-    const directChat = await this.chatService.findExistingDirectChatByUsers(
-      ownerUserId,
-      contact.contactUserId,
-    );
-
+    directChatID: string | null,
+  ): ContactResponse {
     return {
       id: contact.id,
       userID: contact.contactUser.id,
       displayName: contact.contactUser.displayName,
       phone: contact.contactUser.phone ?? contact.contactUser.contact,
       createdAt: contact.createdAt,
-      directChatID: directChat?.id ?? null,
+      directChatID,
     };
   }
 

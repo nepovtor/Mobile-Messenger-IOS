@@ -7,6 +7,9 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     private let storageURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private var persistenceTask: Task<Void, Never>?
+    private var persistenceGeneration = 0
+    private static let persistenceDelayNanoseconds: UInt64 = 300_000_000
 
     public init(storageURL: URL? = nil) {
         let encoder = JSONEncoder()
@@ -34,7 +37,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
                 participantCount: 1,
                 messages: []
             )
-            try persistState()
+            schedulePersistence()
         }
     }
 
@@ -46,7 +49,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             return
         }
 
-        try persistState()
+        try persistImmediately()
         broadcastChats()
         messageContinuation?.finish()
     }
@@ -67,15 +70,33 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             record.merge(chat: chat)
             self.chats[chat.id] = record
         }
-        try persistState()
+        schedulePersistence()
         broadcastChats()
     }
 
     public func upsert(messages: [Message], for chatID: UUID) async throws {
-        for message in messages {
-            try merge(message: message, into: chatID)
+        guard !messages.isEmpty else { return }
+
+        var record = chats[chatID] ?? Self.makeRecord(
+            chatID: chatID,
+            title: "Диалог",
+            lastActivity: messages[0].createdAt
+        )
+        let requiresImmediatePersistence = messages.contains { message in
+            Self.isPending(message.status) ||
+            record.messages.contains(where: {
+                ($0.id == message.id || $0.localID == message.localID) &&
+                Self.isPending($0.status)
+            })
         }
-        try persistState()
+        record.upsert(messages: messages)
+        chats[chatID] = record
+
+        if requiresImmediatePersistence {
+            try persistImmediately()
+        } else {
+            schedulePersistence()
+        }
         broadcastChats()
         for message in messages {
             messageStreams[chatID]?.yield(message)
@@ -83,8 +104,16 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func append(message: Message, for chatID: UUID) async throws {
+        let matchingMessageWasPending = chats[chatID]?.messages.contains(where: {
+            ($0.id == message.id || $0.localID == message.localID) &&
+            Self.isPending($0.status)
+        }) ?? false
         try merge(message: message, into: chatID)
-        try persistState()
+        if Self.isPending(message.status) || matchingMessageWasPending {
+            try persistImmediately()
+        } else {
+            schedulePersistence()
+        }
         broadcastChats()
         messageStreams[chatID]?.yield(message)
     }
@@ -103,14 +132,13 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         )
         record.replace(localID: localID, with: message)
         chats[chatID] = record
-        try persistState()
+        try persistImmediately()
         broadcastChats()
         messageStreams[chatID]?.yield(message)
     }
 
     public func loadMessages(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
-        guard var record = chats[chatID] else { return [] }
-        record.messages.sort(by: Self.sortMessages)
+        guard let record = chats[chatID] else { return [] }
         if let messageID {
             guard let index = record.messages.firstIndex(where: {
                 $0.id.messageID == messageID || $0.localID == messageID
@@ -150,18 +178,23 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         guard var record = chats[chatID] else { return }
         record.typingParticipants = participants
         chats[chatID] = record
-        try persistState()
+        schedulePersistence()
         broadcastChats()
     }
 
     public func updateStatus(for messageID: UUID, in chatID: UUID, status: MessageStatus) async throws {
         guard var record = chats[chatID] else { return }
         guard let index = record.messages.firstIndex(where: { $0.id.messageID == messageID }) else { return }
+        let wasPending = Self.isPending(record.messages[index].status)
         let updated = record.messages[index].updatingStatus(status)
         record.messages[index] = updated
-        record.refreshDerivedFields()
+        record.refreshDerivedFields(messagesAreSorted: true)
         chats[chatID] = record
-        try persistState()
+        if wasPending || Self.isPending(status) {
+            try persistImmediately()
+        } else {
+            schedulePersistence()
+        }
         broadcastChats()
         messageStreams[chatID]?.yield(updated)
     }
@@ -169,11 +202,16 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     public func updateStatus(forLocalID localID: UUID, in chatID: UUID, status: MessageStatus) async throws {
         guard var record = chats[chatID] else { return }
         guard let index = record.messages.firstIndex(where: { $0.localID == localID }) else { return }
+        let wasPending = Self.isPending(record.messages[index].status)
         let updated = record.messages[index].updatingStatus(status)
         record.messages[index] = updated
-        record.refreshDerivedFields()
+        record.refreshDerivedFields(messagesAreSorted: true)
         chats[chatID] = record
-        try persistState()
+        if wasPending || Self.isPending(status) {
+            try persistImmediately()
+        } else {
+            schedulePersistence()
+        }
         broadcastChats()
         messageStreams[chatID]?.yield(updated)
     }
@@ -195,16 +233,16 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     public func purgeMessages(olderThan date: Date) async throws {
         for (chatID, var record) in chats {
             record.messages.removeAll { $0.createdAt < date }
-            record.refreshDerivedFields()
+            record.refreshDerivedFields(messagesAreSorted: true)
             chats[chatID] = record
         }
-        try persistState()
+        try persistImmediately()
         broadcastChats()
     }
 
     public func reset() async throws {
         chats = [:]
-        try persistState()
+        try persistImmediately()
         broadcastChats()
     }
 
@@ -217,19 +255,31 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     private func merge(message: Message, into chatID: UUID) throws {
-        var record = chats[chatID] ?? ChatRecord(
-            id: chatID,
+        var record = chats[chatID] ?? Self.makeRecord(
+            chatID: chatID,
             title: "Диалог",
+            lastActivity: message.createdAt
+        )
+        record.upsert(message: message)
+        chats[chatID] = record
+    }
+
+    private static func makeRecord(
+        chatID: UUID,
+        title: String,
+        lastActivity: Date
+    ) -> ChatRecord {
+        ChatRecord(
+            id: chatID,
+            title: title,
             lastMessagePreview: nil,
-            lastActivity: message.createdAt,
+            lastActivity: lastActivity,
             unreadCount: 0,
             typingParticipants: [],
             participantNames: [],
             participantCount: 1,
             messages: []
         )
-        record.upsert(message: message)
-        chats[chatID] = record
     }
 
     private static func sortMessages(lhs: Message, rhs: Message) -> Bool {
@@ -251,6 +301,33 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         try data.write(to: storageURL, options: .atomic)
     }
 
+    private func persistImmediately() throws {
+        persistenceGeneration += 1
+        persistenceTask?.cancel()
+        persistenceTask = nil
+        try persistState()
+    }
+
+    private func schedulePersistence() {
+        persistenceGeneration += 1
+        let generation = persistenceGeneration
+        persistenceTask?.cancel()
+        persistenceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.persistenceDelayNanoseconds)
+            } catch {
+                return
+            }
+            await self?.persistScheduledState(generation: generation)
+        }
+    }
+
+    private func persistScheduledState(generation: Int) {
+        guard generation == persistenceGeneration else { return }
+        persistenceTask = nil
+        try? persistState()
+    }
+
     private func broadcastChats() {
         let snapshot = currentChats()
         chatStreams.values.forEach { continuation in
@@ -259,11 +336,11 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     private func currentChats(searchQuery: String? = nil) -> [Chat] {
-        chats.values
+        let normalizedQuery = searchQuery?.lowercased()
+        return chats.values
             .map { $0.toChat() }
             .filter { chat in
-                guard let query = searchQuery, !query.isEmpty else { return true }
-                let normalizedQuery = query.lowercased()
+                guard let normalizedQuery, !normalizedQuery.isEmpty else { return true }
                 return chat.title.lowercased().contains(normalizedQuery) ||
                 (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false) ||
                 chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
@@ -290,7 +367,9 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             return [:]
         }
         return payload.chats.reduce(into: [:]) { partialResult, record in
-            partialResult[record.id] = record
+            var normalizedRecord = record
+            normalizedRecord.normalize()
+            partialResult[normalizedRecord.id] = normalizedRecord
         }
     }
 
@@ -338,12 +417,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             participantNames = chat.participantNames
             participantCount = max(chat.participantCount, 1)
 
-            let latestLocalMessage = messages.max(by: { lhs, rhs in
-                if lhs.createdAt == rhs.createdAt {
-                    return lhs.id.messageID.uuidString < rhs.id.messageID.uuidString
-                }
-                return lhs.createdAt < rhs.createdAt
-            })
+            let latestLocalMessage = messages.last
             if let latestLocalMessage, latestLocalMessage.createdAt >= chat.lastActivity {
                 lastActivity = latestLocalMessage.createdAt
                 lastMessagePreview = Self.preview(for: latestLocalMessage)
@@ -355,29 +429,76 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
         mutating func upsert(message: Message) {
             if let index = messages.firstIndex(where: { $0.id == message.id || $0.localID == message.localID }) {
-                messages[index] = message
-            } else {
-                messages.append(message)
+                messages.remove(at: index)
             }
-            refreshDerivedFields()
+            messages.insert(message, at: insertionIndex(for: message))
+            refreshDerivedFields(messagesAreSorted: true)
+        }
+
+        mutating func upsert(messages newMessages: [Message]) {
+            var indexByMessageID: [Message.Identifier: Int] = [:]
+            var indexByLocalID: [UUID: Int] = [:]
+            for (index, message) in messages.enumerated() {
+                indexByMessageID[message.id] = index
+                indexByLocalID[message.localID] = index
+            }
+
+            for message in newMessages {
+                let index = indexByMessageID[message.id] ?? indexByLocalID[message.localID]
+                if let index {
+                    let previous = messages[index]
+                    indexByMessageID[previous.id] = nil
+                    indexByLocalID[previous.localID] = nil
+                    messages[index] = message
+                    indexByMessageID[message.id] = index
+                    indexByLocalID[message.localID] = index
+                } else {
+                    let newIndex = messages.endIndex
+                    messages.append(message)
+                    indexByMessageID[message.id] = newIndex
+                    indexByLocalID[message.localID] = newIndex
+                }
+            }
+
+            messages.sort(by: SwiftDataChatStore.sortMessages)
+            refreshDerivedFields(messagesAreSorted: true)
         }
 
         mutating func replace(localID: UUID, with message: Message) {
             if let index = messages.firstIndex(where: { $0.localID == localID || $0.id == message.id }) {
-                messages[index] = message
-            } else {
-                messages.append(message)
+                messages.remove(at: index)
             }
-            refreshDerivedFields()
+            messages.insert(message, at: insertionIndex(for: message))
+            refreshDerivedFields(messagesAreSorted: true)
         }
 
-        mutating func refreshDerivedFields() {
-            messages.sort(by: SwiftDataChatStore.sortMessages)
+        mutating func refreshDerivedFields(messagesAreSorted: Bool = false) {
+            if !messagesAreSorted {
+                messages.sort(by: SwiftDataChatStore.sortMessages)
+            }
             if let lastMessage = messages.last {
                 lastActivity = lastMessage.createdAt
                 lastMessagePreview = Self.preview(for: lastMessage)
             }
             unreadCount = messages.filter { !$0.isOutgoing && $0.status != .read }.count
+        }
+
+        mutating func normalize() {
+            messages.sort(by: SwiftDataChatStore.sortMessages)
+        }
+
+        private func insertionIndex(for message: Message) -> Int {
+            var lowerBound = messages.startIndex
+            var upperBound = messages.endIndex
+            while lowerBound < upperBound {
+                let middle = lowerBound + (upperBound - lowerBound) / 2
+                if SwiftDataChatStore.sortMessages(lhs: messages[middle], rhs: message) {
+                    lowerBound = middle + 1
+                } else {
+                    upperBound = middle
+                }
+            }
+            return lowerBound
         }
 
         private static func preview(for message: Message) -> String? {

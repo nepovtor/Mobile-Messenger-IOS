@@ -55,6 +55,34 @@ final class ChatViewModelTests: XCTestCase {
         }
     }
 
+    func testMarkAsReadDeduplicatesRepeatedAppearanceOfLastMessage() async {
+        let repository = ChatRepositorySpy()
+        let message = makeOutgoingMessage(status: .delivered, text: "Прочитано")
+        let markExpectation = expectation(description: "message marked as read")
+        repository.onMarkMessage = { _ in markExpectation.fulfill() }
+        let viewModel = ChatViewModel(
+            chatID: message.id.chatID,
+            title: "Read Chat",
+            observeMessages: ObserveChatMessagesUseCase(repository: repository),
+            loadHistory: LoadChatHistoryUseCase(repository: repository),
+            sendMessage: SendMessageUseCase(repository: repository),
+            sendImageMessage: SendImageMessageUseCase(repository: repository),
+            editMessage: EditMessageUseCase(repository: repository),
+            deleteMessage: DeleteMessageUseCase(repository: repository),
+            setTyping: SetTypingUseCase(repository: repository),
+            retryPending: RetryPendingMessagesUseCase(repository: repository),
+            markStatus: MarkMessageStatusUseCase(repository: repository),
+            analytics: AnalyticsServiceSpy(),
+            reachability: ReachabilityServiceStub(isReachable: true)
+        )
+
+        viewModel.markAsRead(messageID: message.id.messageID)
+        viewModel.markAsRead(messageID: message.id.messageID)
+        await fulfillment(of: [markExpectation], timeout: 1.0)
+
+        XCTAssertEqual(repository.markedMessageIDs, [message.id.messageID])
+    }
+
     private func makeOutgoingMessage(status: MessageStatus, text: String) -> Message {
         let chatID = UUID()
         let localID = UUID()
@@ -70,4 +98,3 @@ final class ChatViewModelTests: XCTestCase {
         )
     }
 }
-

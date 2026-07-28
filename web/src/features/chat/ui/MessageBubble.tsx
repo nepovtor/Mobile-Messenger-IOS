@@ -163,7 +163,7 @@ export function MessageBubble({
             "rounded-[22px] px-3.5 py-2.5 shadow-[0_16px_38px_rgba(5,12,24,0.18)] sm:px-4",
             isOwn
               ? "rounded-br-md bg-[linear-gradient(135deg,#0ea5e9,#2563eb)] text-white"
-              : "rounded-bl-md border border-white/8 bg-white/[0.06] text-white",
+              : "rounded-bl-md border border-white/8 bg-white/6 text-white",
             message.status === "failed" &&
               "border border-rose-400/20 bg-rose-500/14 text-rose-50",
             message.status === "sending" && "opacity-90",
@@ -172,7 +172,7 @@ export function MessageBubble({
           {isEditing ? (
             <div className="space-y-3">
               <textarea
-                className="min-h-[88px] w-full rounded-[18px] border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/60"
+                className="min-h-22 w-full rounded-[18px] border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/60"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={4000}
@@ -201,7 +201,7 @@ export function MessageBubble({
             <>
               <p
                 className={clsx(
-                  "whitespace-pre-wrap break-words text-sm leading-6",
+                  "whitespace-pre-wrap wrap-break-word text-sm leading-6",
                   message.deletedAt && "italic opacity-80",
                 )}
               >
@@ -257,14 +257,14 @@ export function MessageBubble({
         {isMenuOpen ? (
           <div
             className={clsx(
-              "absolute top-full z-20 mt-2 min-w-[156px] rounded-[16px] border border-white/10 bg-[#0b1420]/96 p-1.5 shadow-[0_22px_60px_rgba(3,8,20,0.46)] backdrop-blur-2xl",
+              "absolute top-full z-20 mt-2 min-w-39 rounded-2xl border border-white/10 bg-[#0b1420]/96 p-1.5 shadow-[0_22px_60px_rgba(3,8,20,0.46)] backdrop-blur-2xl",
               isOwn ? "right-0" : "left-0",
             )}
           >
             {onEditMessage ? (
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/[0.06]"
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/6"
                 onClick={() => {
                   setEditing(true);
                   setMenuOpen(false);
@@ -277,7 +277,7 @@ export function MessageBubble({
             {onDeleteMessage ? (
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm text-rose-100 transition hover:bg-rose-500/12"
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-100 transition hover:bg-rose-500/12"
                 disabled={isDeleting}
                 onClick={() => void handleDelete()}
               >

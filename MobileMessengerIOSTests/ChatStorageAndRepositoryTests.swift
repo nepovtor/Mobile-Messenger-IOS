@@ -84,6 +84,57 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         XCTAssertEqual(messages.first?.text, "Second")
     }
 
+    func testRemoteCacheUpdatesArePersistedAfterDebounce() async throws {
+        let storageURL = temporaryStoreURL()
+        let store = SwiftDataChatStore(storageURL: storageURL)
+        let chat = Chat(
+            id: UUID(),
+            title: "Отложенный кэш",
+            lastMessagePreview: "Сообщение",
+            lastActivity: Date(),
+            unreadCount: 1
+        )
+
+        try await store.upsert(chats: [chat])
+        try await Task.sleep(nanoseconds: 400_000_000)
+
+        let restoredStore = SwiftDataChatStore(storageURL: storageURL)
+        let restoredChats = try await restoredStore.fetchChats(searchQuery: nil)
+        XCTAssertEqual(restoredChats.count, 1)
+        XCTAssertEqual(restoredChats.first?.id, chat.id)
+        XCTAssertEqual(restoredChats.first?.title, chat.title)
+        XCTAssertEqual(restoredChats.first?.unreadCount, chat.unreadCount)
+    }
+
+    func testPendingOutgoingMessageIsPersistedImmediately() async throws {
+        let storageURL = temporaryStoreURL()
+        let store = SwiftDataChatStore(storageURL: storageURL)
+        let chatID = UUID()
+        let pending = Message(
+            id: Message.Identifier(chatID: chatID, messageID: UUID()),
+            localID: UUID(),
+            authorID: SessionStore.Constants.currentUserID,
+            authorName: SessionStore.Constants.currentUserDisplayName,
+            kind: .text,
+            text: "Офлайн",
+            createdAt: Date(),
+            status: .sending
+        )
+
+        try await store.append(message: pending, for: chatID)
+
+        let restoredStore = SwiftDataChatStore(storageURL: storageURL)
+        let restoredMessages = try await restoredStore.loadMessages(
+            for: chatID,
+            limit: 10,
+            before: nil
+        )
+        XCTAssertEqual(restoredMessages.count, 1)
+        XCTAssertEqual(restoredMessages.first?.id, pending.id)
+        XCTAssertEqual(restoredMessages.first?.localID, pending.localID)
+        XCTAssertEqual(restoredMessages.first?.status, .sending)
+    }
+
     func testFailedSendChangesMessageStateToFailed() async throws {
         let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
         let realtime = RealtimeServiceStub(sendError: AppError.network(description: "ws down"))
@@ -232,4 +283,3 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         return try await store.loadMessages(for: chatID, limit: 10, before: nil)
     }
 }
-

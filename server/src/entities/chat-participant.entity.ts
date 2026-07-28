@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryColumn,
@@ -14,6 +15,7 @@ import { UserEntity } from "./user.entity";
 
 @Entity({ name: "chat_participants" })
 @Unique("uq_chat_participants_chat_user", ["chatId", "userId"])
+@Index("idx_chat_participants_user_chat", ["userId", "chatId"])
 export class ChatParticipantEntity {
   @PrimaryColumn("uuid")
   id = createEntityId();
