@@ -3,7 +3,6 @@ import { initializeSessionCoordinator } from "@/app/sessionCoordinator";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { ToastViewport } from "@/components/ui/ToastViewport";
 import { LoginPage } from "@/features/auth/ui/LoginPage";
 import { MessengerPage } from "@/features/chat/ui/MessengerPage";
 import { adminStore } from "@/features/admin/model/adminStore";
@@ -44,10 +43,7 @@ function RouteFallback() {
 
 export default function App() {
   const navigate = useNavigate();
-  const {
-    restoreSession,
-    isAuthenticated: isUserAuthenticated,
-  } = authStore();
+  const { restoreSession, isAuthenticated: isUserAuthenticated } = authStore();
   const {
     restoreSession: restoreAdminSession,
     isAuthenticated: isAdminAuthenticated,
@@ -112,75 +108,68 @@ export default function App() {
   }, [navigate]);
 
   return (
-    <>
-      <ToastViewport />
-      <Routes>
-        <Route
-          path="/"
-          element={
-            isUserAuthenticated ? (
-              <Navigate to="/messenger" replace />
-            ) : (
-              <LoginPage />
-            )
-          }
-        />
-        <Route
-          path="/messenger"
-          element={
-            isUserAuthenticated ? (
-              <MessengerPage />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/map"
-          element={
-            isUserAuthenticated ? (
-              <Suspense fallback={<RouteFallback />}>
-                <MapPage />
-              </Suspense>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/telegram/subscription"
-          element={
+    <Routes>
+      <Route
+        path="/"
+        element={
+          isUserAuthenticated ? (
+            <Navigate to="/messenger" replace />
+          ) : (
+            <LoginPage />
+          )
+        }
+      />
+      <Route
+        path="/messenger"
+        element={
+          isUserAuthenticated ? <MessengerPage /> : <Navigate to="/" replace />
+        }
+      />
+      <Route
+        path="/map"
+        element={
+          isUserAuthenticated ? (
             <Suspense fallback={<RouteFallback />}>
-              <TelegramSubscriptionPage />
+              <MapPage />
             </Suspense>
-          }
-        />
-        <Route
-          path="/admin/login"
-          element={
-            isAdminAuthenticated ? (
-              <Navigate to="/admin" replace />
-            ) : (
-              <Suspense fallback={<RouteFallback />}>
-                <AdminLoginPage />
-              </Suspense>
-            )
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            isAdminAuthenticated ? (
-              <Suspense fallback={<RouteFallback />}>
-                <SystemPage />
-              </Suspense>
-            ) : (
-              <Navigate to="/admin/login" replace />
-            )
-          }
-        />
-        <Route path="/system" element={<Navigate to="/admin" replace />} />
-      </Routes>
-    </>
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+      <Route
+        path="/telegram/subscription"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <TelegramSubscriptionPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/login"
+        element={
+          isAdminAuthenticated ? (
+            <Navigate to="/admin" replace />
+          ) : (
+            <Suspense fallback={<RouteFallback />}>
+              <AdminLoginPage />
+            </Suspense>
+          )
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          isAdminAuthenticated ? (
+            <Suspense fallback={<RouteFallback />}>
+              <SystemPage />
+            </Suspense>
+          ) : (
+            <Navigate to="/admin/login" replace />
+          )
+        }
+      />
+      <Route path="/system" element={<Navigate to="/admin" replace />} />
+    </Routes>
   );
 }
