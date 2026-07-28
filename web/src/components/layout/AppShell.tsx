@@ -182,10 +182,10 @@ export function AppShell({
   useEffect(() => {
     const currentChatId = searchParams.get("chatId");
 
-    if (selectedChatId && currentChatId !== selectedChatId) {
+    if (selectedChatId && currentChatId !== selectedChatId && !isSidebarOpen) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("chatId", selectedChatId);
-      setSearchParams(nextParams, { replace: true });
+      setSearchParams(nextParams);
       return;
     }
 
@@ -196,7 +196,13 @@ export function AppShell({
     ) {
       pendingUrlSyncChatIdRef.current = null;
     }
-  }, [searchParams, selectedChatId, setSearchParams]);
+  }, [isSidebarOpen, searchParams, selectedChatId, setSearchParams]);
+
+  useEffect(() => {
+    if (!chatIdFromUrl) {
+      setSidebarOpen(true);
+    }
+  }, [chatIdFromUrl]);
 
   useEffect(() => {
     if (!selectedChat) {
@@ -312,6 +318,13 @@ export function AppShell({
     }
   }
 
+  function handleBackToList() {
+    setSidebarOpen(true);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("chatId");
+    setSearchParams(nextParams);
+  }
+
   return (
     <div className="app-page app-page--workspace px-0 py-0 sm:px-3 sm:py-3">
       <div className="glass-orb left-[3%] top-[8%] h-40 w-40 bg-sky-400/18" />
@@ -321,7 +334,7 @@ export function AppShell({
         <div className="app-shell app-workspace-shell flex h-full overflow-hidden border-white/8">
           <div
             className={clsx(
-              "min-h-0 w-full flex-col md:flex md:w-95 md:shrink-0 md:border-r md:border-white/8",
+              "mobile-list-screen min-h-0 w-full flex-col md:flex md:w-95 md:shrink-0 md:border-r md:border-white/8",
               isSidebarOpen ? "flex" : "hidden md:flex",
             )}
           >
@@ -351,7 +364,7 @@ export function AppShell({
 
           <div
             className={clsx(
-              "min-h-0 flex-1 flex-col md:flex",
+              "mobile-chat-screen min-h-0 flex-1 flex-col md:flex",
               selectedChat ? "flex" : "hidden md:flex",
             )}
           >
@@ -365,7 +378,7 @@ export function AppShell({
                   <ConnectionBadge state={connectionState} />
                 }
                 isLoadingMessages={isLoadingMessages}
-                onBack={() => setSidebarOpen(true)}
+                onBack={handleBackToList}
                 onReconnect={() => realtimeStore.getState().reconnect()}
                 onSend={(text) =>
                   sendMessage(selectedChat.id, text, currentUser)

@@ -115,10 +115,10 @@ export function Sidebar({
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">
-                Mobile Messenger
+                Сообщения
               </p>
               <p className="mt-0.5 text-[11px] text-slate-500">
-                Ваши сообщения
+                Чаты и контакты
               </p>
             </div>
           </div>

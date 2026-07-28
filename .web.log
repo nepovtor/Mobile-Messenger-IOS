@@ -1,0 +1,8 @@
+
+> mobile-messenger-web@0.1.0 dev
+> vite --host 127.0.0.1 --port 3001
+
+
+  VITE v6.4.2  ready in 206 ms
+
+  ➜  Local:   http://127.0.0.1:3001/

@@ -64,11 +64,10 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use("/api", async (request, response) => {
             try {
-              const relativeUrl =
-                request.originalUrl ??
-                (request.url?.startsWith("/api")
-                  ? request.url
-                  : `/api${request.url ?? ""}`);
+              const requestedUrl = request.originalUrl ?? request.url ?? "/";
+              const relativeUrl = requestedUrl.startsWith("/api")
+                ? requestedUrl
+                : `/api${requestedUrl.startsWith("/") ? requestedUrl : `/${requestedUrl}`}`;
               const targetUrl = new URL(relativeUrl, proxyTarget);
               const body =
                 request.method === "GET" || request.method === "HEAD"

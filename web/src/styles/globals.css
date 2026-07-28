@@ -265,6 +265,17 @@ a {
   box-shadow: 0 -18px 44px rgba(3, 8, 20, 0.22);
 }
 
+@keyframes mobile-screen-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .app-kicker {
   display: inline-flex;
   align-items: center;
@@ -361,6 +372,20 @@ a {
 
   .app-page--workspace::after {
     background: linear-gradient(180deg, transparent 60%, rgba(4, 9, 18, 0.2));
+  }
+
+  .mobile-list-screen,
+  .mobile-chat-screen {
+    animation: mobile-screen-enter 180ms ease-out;
+  }
+
+  .mobile-list-screen {
+    padding-top: var(--safe-top);
+  }
+
+  .mobile-chat-screen {
+    position: relative;
+    z-index: 1;
   }
 }
 
