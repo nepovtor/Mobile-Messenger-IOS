@@ -32,7 +32,7 @@ export function MessageList({
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col gap-2 overflow-y-auto px-3 py-4 sm:px-4">
+      <div className="flex h-full flex-col gap-2 overflow-y-auto px-3 py-4 sm:px-5">
         <Skeleton className="h-16 w-2/3 rounded-[18px]" />
         <Skeleton className="ml-auto h-20 w-3/4 rounded-[18px]" />
         <Skeleton className="h-16 w-1/2 rounded-[18px]" />
@@ -59,7 +59,7 @@ export function MessageList({
   }
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-y-auto px-3 py-4 sm:px-4">
+    <div className="flex h-full flex-col gap-2 overflow-y-auto px-3 py-4 sm:px-5">
       {messages.map((message, index) => {
         const previous = messages[index - 1];
         const isOwn = message.authorID === currentUserId;

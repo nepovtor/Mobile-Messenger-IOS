@@ -72,19 +72,19 @@ export function MessageInput({
 
   return (
     <form
-      className="border-t border-white/8 bg-slate-950/48 px-3 py-3 sm:px-4"
+      className="messenger-input border-t border-white/8 bg-slate-950/65 px-3 pt-3 backdrop-blur-xl sm:px-5"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      <div className="flex items-end gap-2 rounded-[22px] border border-white/8 bg-white/[0.03] px-2 py-2">
+      <div className="flex items-end gap-2 rounded-[22px] border border-white/10 bg-white/[0.045] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus-within:border-cyan-200/35">
         <textarea
           ref={textareaRef}
           rows={1}
           aria-label="Сообщение"
           value={value}
-          placeholder="Сообщение"
+          placeholder="Напишите сообщение…"
           onBlur={clearTyping}
           onChange={(event) => {
             const nextValue = event.target.value;
@@ -103,13 +103,13 @@ export function MessageInput({
               void submit();
             }
           }}
-          className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+          className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2 text-[16px] leading-6 text-white outline-none placeholder:text-slate-500 sm:text-sm"
         />
         <button
           type="submit"
           aria-label="Отправить"
           disabled={!value.trim() || isSending}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-300 text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-300 text-slate-950 shadow-[0_10px_22px_rgba(34,211,238,0.2)] transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <SendHorizonal className="h-4 w-4" />
         </button>

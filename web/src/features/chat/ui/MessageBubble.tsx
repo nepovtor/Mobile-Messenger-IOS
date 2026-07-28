@@ -133,7 +133,7 @@ export function MessageBubble({
     <div
       className={clsx("group flex", isOwn ? "justify-end" : "justify-start")}
     >
-      <div className="relative max-w-[84%] sm:max-w-[78%]">
+      <div className="relative max-w-[88%] sm:max-w-[78%]">
         {showAuthor && !isOwn ? (
           <p className="mb-1 px-1 text-xs font-medium text-cyan-200">
             {message.authorName}
@@ -157,7 +157,7 @@ export function MessageBubble({
 
         <div
           className={clsx(
-            "rounded-[22px] px-3.5 py-2.5 shadow-[0_16px_38px_rgba(5,12,24,0.18)]",
+            "rounded-[22px] px-3.5 py-2.5 shadow-[0_16px_38px_rgba(5,12,24,0.18)] sm:px-4",
             isOwn
               ? "rounded-br-md bg-[linear-gradient(135deg,#0ea5e9,#2563eb)] text-white"
               : "rounded-bl-md border border-white/8 bg-white/[0.06] text-white",

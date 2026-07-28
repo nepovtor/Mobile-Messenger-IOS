@@ -50,8 +50,8 @@ export function ChatPanel({
         : `${chat.participantCount} участников`;
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,rgba(7,17,29,0.84),rgba(5,12,21,0.94))]">
-      <header className="border-b border-white/8 bg-slate-950/40 px-3 py-3 sm:px-4">
+    <section className="messenger-chat flex h-full min-h-0 flex-col">
+      <header className="border-b border-white/8 bg-slate-950/35 px-3 py-3 backdrop-blur-xl sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -66,10 +66,10 @@ export function ChatPanel({
             <Avatar
               name={chat.title}
               size="sm"
-              className="h-11 w-11 rounded-[16px] text-[11px]"
+              className="h-11 w-11 rounded-[16px] text-[11px] sm:h-12 sm:w-12"
             />
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold text-white sm:text-base">
+              <h2 className="truncate text-[15px] font-semibold text-white sm:text-base">
                 {chat.title}
               </h2>
               <p
@@ -86,7 +86,7 @@ export function ChatPanel({
           </div>
 
           <div className="flex items-center gap-2">
-            {connectionIndicator}
+            <div className="hidden sm:block">{connectionIndicator}</div>
             {connectionState !== "connected" ? (
               <Button
                 variant="ghost"
@@ -101,7 +101,7 @@ export function ChatPanel({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.05),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.12),rgba(2,6,23,0.02))]">
+      <div className="min-h-0 flex-1">
         <MessageList
           messages={messages}
           currentUserId={currentUser.userID}

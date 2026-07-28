@@ -14,6 +14,10 @@
   --app-text: #f8fafc;
   --app-text-muted: rgba(215, 224, 237, 0.72);
   --app-shadow: 0 30px 90px rgba(3, 8, 20, 0.48);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * {
@@ -25,6 +29,7 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
@@ -71,6 +76,7 @@ textarea {
 
 button {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -84,7 +90,7 @@ a {
 
 .app-page {
   position: relative;
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -218,6 +224,44 @@ a {
   backdrop-filter: blur(26px);
 }
 
+.app-workspace-frame {
+  height: 100dvh;
+  padding: 0;
+}
+
+.app-workspace-shell {
+  border-radius: 0;
+}
+
+.messenger-sidebar {
+  background:
+    linear-gradient(180deg, rgba(15, 27, 43, 0.78), rgba(6, 13, 24, 0.7)),
+    rgba(7, 16, 28, 0.7);
+}
+
+.messenger-chat {
+  background:
+    radial-gradient(
+      circle at 80% -10%,
+      rgba(34, 211, 238, 0.09),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 0% 105%,
+      rgba(59, 130, 246, 0.09),
+      transparent 34%
+    ),
+    linear-gradient(180deg, rgba(7, 17, 29, 0.92), rgba(5, 12, 21, 0.98));
+}
+
+.messenger-input {
+  padding-bottom: max(0.75rem, var(--safe-bottom));
+}
+
+.mobile-sheet-shadow {
+  box-shadow: 0 -18px 44px rgba(3, 8, 20, 0.22);
+}
+
 .app-kicker {
   display: inline-flex;
   align-items: center;
@@ -295,4 +339,35 @@ a {
   border-color: rgba(255, 255, 255, 0.12) !important;
   background: rgba(8, 13, 24, 0.86) !important;
   color: white !important;
+}
+
+@media (min-width: 640px) {
+  .app-workspace-frame {
+    height: calc(100dvh - 1.5rem);
+  }
+
+  .app-workspace-shell {
+    border-radius: 28px;
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    overscroll-behavior: none;
+  }
+
+  .app-page--workspace::after {
+    background: linear-gradient(180deg, transparent 60%, rgba(4, 9, 18, 0.2));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

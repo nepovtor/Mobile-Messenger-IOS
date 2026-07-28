@@ -317,11 +317,11 @@ export function AppShell({
       <div className="glass-orb left-[3%] top-[8%] h-40 w-40 bg-sky-400/18" />
       <div className="glass-orb right-[6%] top-[12%] h-52 w-52 bg-cyan-300/12" />
 
-      <div className="relative z-10 mx-auto h-screen max-w-[1600px] sm:h-[calc(100vh-1.5rem)]">
-        <div className="app-shell flex h-full overflow-hidden rounded-none border-white/8 sm:rounded-[28px]">
+      <div className="app-workspace-frame relative z-10 mx-auto max-w-[1600px]">
+        <div className="app-shell app-workspace-shell flex h-full overflow-hidden border-white/8">
           <div
             className={clsx(
-              "min-h-0 w-full flex-col md:flex md:w-[360px] md:shrink-0 md:border-r md:border-white/8",
+              "min-h-0 w-full flex-col md:flex md:w-[380px] md:shrink-0 md:border-r md:border-white/8",
               isSidebarOpen ? "flex" : "hidden md:flex",
             )}
           >
@@ -403,16 +403,16 @@ export function AppShell({
                 }}
               />
             ) : (
-              <div className="flex h-full flex-1 items-center justify-center px-6">
-                <div className="text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] border border-white/10 bg-white/[0.04] text-cyan-100 shadow-[0_18px_40px_rgba(5,12,24,0.24)]">
-                    <span className="text-xl">+</span>
+              <div className="messenger-chat flex h-full flex-1 items-center justify-center px-6">
+                <div className="max-w-xs text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-cyan-200/12 bg-cyan-300/[0.06] text-cyan-100 shadow-[0_18px_40px_rgba(5,12,24,0.24)]">
+                    <span className="text-2xl">✦</span>
                   </div>
-                  <h2 className="mt-4 text-lg font-semibold text-white">
+                  <h2 className="mt-5 text-lg font-semibold text-white">
                     Выберите чат
                   </h2>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Откройте диалог слева
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    Откройте существующий диалог или начните новый из контактов
                   </p>
                 </div>
               </div>

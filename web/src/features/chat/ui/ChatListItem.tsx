@@ -22,10 +22,10 @@ export function ChatListItem({
     <button
       type="button"
       className={clsx(
-        "w-full rounded-[18px] px-3 py-3 text-left transition duration-200",
+        "w-full rounded-[18px] px-3 py-3 text-left transition duration-200 active:scale-[0.99]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70",
         isActive
-          ? "bg-white/[0.09]"
+          ? "bg-[linear-gradient(135deg,rgba(34,211,238,0.13),rgba(59,130,246,0.12))] ring-1 ring-cyan-200/10"
           : "hover:bg-white/[0.05] active:bg-white/[0.06]",
       )}
       onClick={onClick}
@@ -39,12 +39,12 @@ export function ChatListItem({
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">
+              <p className="truncate text-[15px] font-semibold text-white">
                 {chat.title}
               </p>
               <p
                 className={clsx(
-                  "mt-1 truncate text-sm",
+                  "mt-1 truncate text-[13px] leading-5",
                   chat.typingParticipants.length > 0
                     ? "text-cyan-200"
                     : "text-slate-400",
