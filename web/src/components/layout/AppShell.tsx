@@ -317,11 +317,11 @@ export function AppShell({
       <div className="glass-orb left-[3%] top-[8%] h-40 w-40 bg-sky-400/18" />
       <div className="glass-orb right-[6%] top-[12%] h-52 w-52 bg-cyan-300/12" />
 
-      <div className="app-workspace-frame relative z-10 mx-auto max-w-[1600px]">
+      <div className="app-workspace-frame relative z-10 mx-auto max-w-400">
         <div className="app-shell app-workspace-shell flex h-full overflow-hidden border-white/8">
           <div
             className={clsx(
-              "min-h-0 w-full flex-col md:flex md:w-[380px] md:shrink-0 md:border-r md:border-white/8",
+              "min-h-0 w-full flex-col md:flex md:w-95 md:shrink-0 md:border-r md:border-white/8",
               isSidebarOpen ? "flex" : "hidden md:flex",
             )}
           >
@@ -405,7 +405,7 @@ export function AppShell({
             ) : (
               <div className="messenger-chat flex h-full flex-1 items-center justify-center px-6">
                 <div className="max-w-xs text-center">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-cyan-200/12 bg-cyan-300/[0.06] text-cyan-100 shadow-[0_18px_40px_rgba(5,12,24,0.24)]">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-cyan-200/12 bg-cyan-300/6 text-cyan-100 shadow-[0_18px_40px_rgba(5,12,24,0.24)]">
                     <span className="text-2xl">✦</span>
                   </div>
                   <h2 className="mt-5 text-lg font-semibold text-white">
