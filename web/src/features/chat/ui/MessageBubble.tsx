@@ -146,7 +146,10 @@ export function MessageBubble({
             aria-label="Действия"
             className={clsx(
               "absolute top-2 z-10 rounded-full border border-white/10 bg-slate-950/92 p-1.5 text-slate-300 shadow-[0_12px_30px_rgba(3,8,20,0.28)] transition hover:bg-slate-900 hover:text-white",
-              "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+              // Mobile messages stay visually whole: the edit menu is a
+              // desktop hover affordance, not a separate control beside each
+              // bubble.
+              "hidden sm:inline-flex sm:opacity-0 sm:group-hover:opacity-100",
               isOwn ? "-left-10" : "-right-10",
             )}
             onClick={() => setMenuOpen((value) => !value)}

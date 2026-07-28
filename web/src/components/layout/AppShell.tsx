@@ -365,7 +365,9 @@ export function AppShell({
           <div
             className={clsx(
               "mobile-chat-screen min-h-0 flex-1 flex-col md:flex",
-              selectedChat ? "flex" : "hidden md:flex",
+              // Keep the selected chat in state for desktop, but on phones the
+              // chat must disappear completely when the user returns to list.
+              !isSidebarOpen && selectedChat ? "flex" : "hidden md:flex",
             )}
           >
             {selectedChat ? (

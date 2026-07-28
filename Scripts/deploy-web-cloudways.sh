@@ -64,8 +64,10 @@ rsync -rz --no-times --omit-dir-times --delete --exclude=index.html \
   "$WEB_DIR/dist/" "$REMOTE:$DEPLOY_TARGET/"
 
 # Publish index.html last so it never points at JavaScript files that have not
-# been uploaded yet.
-scp "${SSH_OPTIONS[@]}" \
+# been uploaded yet. Use rsync rather than scp: this Cloudways account accepts
+# rsync over SSH but restricts SFTP/scp writes in this directory.
+rsync -rz --no-times --omit-dir-times \
+  -e "ssh ${SSH_OPTIONS[*]}" \
   "$WEB_DIR/dist/index.html" "$REMOTE:$DEPLOY_TARGET/index.html"
 
 echo "Verifying the public page..."
