@@ -22,21 +22,23 @@ struct MobileMessengerIOSApp: App {
         UIView.appearance().tintColor = AppTheme.primaryUIColor
 
         let navigationAppearance = UINavigationBarAppearance()
-        navigationAppearance.configureWithOpaqueBackground()
-        navigationAppearance.backgroundColor = AppTheme.lightChromeUIColor
-        navigationAppearance.shadowColor = AppTheme.lightShadowUIColor
+        navigationAppearance.configureWithDefaultBackground()
+        navigationAppearance.shadowColor = .clear
         navigationAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
         navigationAppearance.titleTextAttributes = [.foregroundColor: UIColor.label]
 
+        let navigationScrollEdgeAppearance = UINavigationBarAppearance()
+        navigationScrollEdgeAppearance.configureWithTransparentBackground()
+        navigationScrollEdgeAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
+        navigationScrollEdgeAppearance.titleTextAttributes = [.foregroundColor: UIColor.label]
+
         UINavigationBar.appearance().standardAppearance = navigationAppearance
         UINavigationBar.appearance().compactAppearance = navigationAppearance
-        UINavigationBar.appearance().scrollEdgeAppearance = navigationAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navigationScrollEdgeAppearance
         UINavigationBar.appearance().tintColor = AppTheme.primaryUIColor
 
         let tabBarAppearance = UITabBarAppearance()
-        tabBarAppearance.configureWithOpaqueBackground()
-        tabBarAppearance.backgroundColor = AppTheme.lightChromeUIColor
-        tabBarAppearance.shadowColor = AppTheme.lightShadowUIColor
+        tabBarAppearance.configureWithDefaultBackground()
 
         let selectedAppearance = tabBarAppearance.stackedLayoutAppearance.selected
         selectedAppearance.iconColor = AppTheme.primaryUIColor

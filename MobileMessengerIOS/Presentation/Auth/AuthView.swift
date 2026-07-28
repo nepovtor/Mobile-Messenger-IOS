@@ -21,20 +21,17 @@ struct AuthView: View {
 
     var body: some View {
         ZStack {
-            LiquidGlassBackground(
-                accent: AppTheme.primary,
-                secondaryAccent: AppTheme.aqua,
-                tertiaryAccent: AppTheme.coral
-            )
+            AuthenticationBackdrop()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 24) {
                     heroSection
                     authCard
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 36)
+                .frame(maxWidth: 560, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
         }
         .preferredColorScheme(.dark)
@@ -49,31 +46,33 @@ struct AuthView: View {
     }
 
     private var heroSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .frame(width: 126, height: 126)
+        VStack(alignment: .leading, spacing: 14) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [AppTheme.primary, AppTheme.aqua],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 78, height: 78)
                 .overlay {
                     Image(systemName: "message.fill")
-                        .font(.system(size: 50, weight: .semibold))
+                        .font(.system(size: 31, weight: .bold))
                         .foregroundStyle(.white)
                 }
-                .liquidGlassCard(
-                    cornerRadius: 30,
-                    tint: AppTheme.primary,
-                    secondaryTint: AppTheme.coral,
-                    innerDarkness: 0.38
-                )
+                .shadow(color: AppTheme.primary.opacity(0.40), radius: 18, y: 8)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text("Mobile Messenger")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .font(.system(size: 33, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
 
-                Text("Fast access to secure chats and sync without extra friction.")
-                    .font(.system(size: 21, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                Text("Безопасные чаты, контакты и геолокация в одном приложении.")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.76))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -99,30 +98,25 @@ struct AuthView: View {
                 demoAccountsSection
             }
         }
-        .padding(20)
-        .liquidGlassCard(
-            cornerRadius: 34,
-            tint: AppTheme.primary,
-            secondaryTint: AppTheme.coral,
-            innerDarkness: 0.70
-        )
+        .padding(18)
+        .background(AuthenticationCardSurface(cornerRadius: 28))
     }
 
     private var contactField: some View {
         VStack(alignment: .leading, spacing: 12) {
-            fieldLabel("Phone number", systemImage: "iphone")
+            fieldLabel("Номер телефона", systemImage: "iphone")
             TextField("+7 (999) 000-00-00", text: $viewModel.contact)
                 .keyboardType(.phonePad)
                 .textContentType(.telephoneNumber)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.system(size: 20, weight: .medium, design: .rounded))
+                .font(.system(size: 18, weight: .medium, design: .rounded))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)
-                .frame(height: 76)
+                .frame(height: 58)
                 .background(fieldBackground)
 
-            Text("Format: +15551234567")
+            Text("Введите номер в международном формате, например +375291234567")
                 .font(.footnote)
                 .foregroundStyle(Color.white.opacity(0.55))
         }
@@ -130,23 +124,23 @@ struct AuthView: View {
 
     private var passwordSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            fieldLabel("Password", systemImage: "lock.fill")
-            SecureField("Enter password", text: $viewModel.password)
+            fieldLabel("Пароль", systemImage: "lock.fill")
+            SecureField("Введите пароль", text: $viewModel.password)
                 .textContentType(.password)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(size: 20, weight: .medium, design: .rounded))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)
-                .frame(height: 76)
+                .frame(height: 58)
                 .background(fieldBackground)
 
-            Text("For demo accounts, use a password from the list below")
+            Text("Для демо-аккаунтов используйте пароль из списка ниже")
                 .font(.footnote)
                 .foregroundStyle(Color.white.opacity(0.55))
 
             primaryButton(
-                title: "Sign in with password",
+                title: "Войти с паролем",
                 systemImage: "paperplane.fill",
                 isLoading: viewModel.isSigningInWithPassword,
                 isEnabled: viewModel.isContactValid && viewModel.isPasswordValid && !viewModel.isSigningInWithPassword,
@@ -157,21 +151,21 @@ struct AuthView: View {
 
     private var codeSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            fieldLabel("Telegram verification", systemImage: "paperplane.fill")
+            fieldLabel("Подтверждение в Telegram", systemImage: "paperplane.fill")
             telegramInstructionCard
             if viewModel.isCodeSent {
-                TextField("Enter code", text: $viewModel.code)
+                TextField("Введите код", text: $viewModel.code)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
                     .font(.system(size: 20, weight: .medium, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
-                    .frame(height: 76)
+                    .frame(height: 58)
                     .background(fieldBackground)
             }
 
             if let seconds = viewModel.codeExpirationSeconds {
-                Text("Code expires in \(seconds) seconds")
+                Text("Код действует ещё \(seconds) сек.")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
             } else if let pairingHint = viewModel.telegramPairingHintText {
@@ -180,14 +174,14 @@ struct AuthView: View {
                     .foregroundStyle(Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("Enter a real phone number in international format to receive a one-time Telegram code.")
+                Text("Введите реальный номер в международном формате, чтобы получить одноразовый код в Telegram.")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             primaryButton(
-                title: viewModel.isCodeSent ? "Send code again" : "Get code",
+                title: viewModel.isCodeSent ? "Отправить код повторно" : "Получить код",
                 systemImage: "paperplane.fill",
                 isLoading: viewModel.isRequestingCode,
                 isEnabled: viewModel.isContactValid && !viewModel.isRequestingCode,
@@ -196,7 +190,7 @@ struct AuthView: View {
 
             if viewModel.isCodeSent {
                 primaryButton(
-                    title: "Verify and continue",
+                    title: "Подтвердить и продолжить",
                     systemImage: "checkmark.circle.fill",
                     isLoading: viewModel.isVerifyingCode,
                     isEnabled: viewModel.isCodeValid && !viewModel.isVerifyingCode,
@@ -223,14 +217,14 @@ struct AuthView: View {
                     }
                     Text("Привязать Telegram")
                 }
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .frame(height: 52)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .frame(height: 50)
             }
             .buttonStyle(
                 LiquidGlassProminentButtonStyle(
                     tint: AppTheme.primary,
                     secondaryTint: AppTheme.aqua,
-                    height: 52
+                    height: 50
                 )
             )
             .disabled(!viewModel.isContactValid || viewModel.isLinkingTelegram)
@@ -241,19 +235,14 @@ struct AuthView: View {
                     .foregroundStyle(Color.white.opacity(0.55))
             }
         }
-        .padding(16)
-        .liquidGlassCard(
-            cornerRadius: 22,
-            tint: AppTheme.primary,
-            secondaryTint: AppTheme.aqua,
-            innerDarkness: 0.38
-        )
+        .padding(15)
+        .background(AuthenticationCardSurface(cornerRadius: 20, fill: Color(red: 0.08, green: 0.16, blue: 0.29)))
     }
 
     private var demoAccountsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("Demo accounts")
+                Text("Демо-аккаунты")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
@@ -366,20 +355,20 @@ struct AuthView: View {
     }
 
     private var fieldBackground: some View {
-        LiquidGlassRoundedSurface(
-            cornerRadius: 24,
-            tint: Color.white,
-            secondaryTint: AppTheme.aqua,
-            innerDarkness: 0.54
-        )
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Color.white.opacity(0.10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+            }
     }
 
     private func fieldLabel(_ title: String, systemImage: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
             Text(title)
-                .font(.system(size: 21, weight: .bold, design: .rounded))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
         }
         .foregroundStyle(.white)
     }
@@ -404,13 +393,13 @@ struct AuthView: View {
                 Text(title)
                     .font(.system(size: 18, weight: .bold, design: .rounded))
             }
-            .frame(height: 70)
+            .frame(height: 58)
         }
         .buttonStyle(
             LiquidGlassProminentButtonStyle(
                 tint: AppTheme.primary,
                 secondaryTint: AppTheme.coral,
-                height: 70
+                height: 58
             )
         )
         .disabled(!isEnabled)
@@ -503,6 +492,69 @@ struct AuthView: View {
 
 }
 
+private struct AuthenticationBackdrop: View {
+    var body: some View {
+        ZStack {
+            Color(red: 0.025, green: 0.055, blue: 0.12)
+
+            LinearGradient(
+                colors: [
+                    Color(red: 0.04, green: 0.12, blue: 0.25),
+                    Color(red: 0.025, green: 0.055, blue: 0.12),
+                    Color(red: 0.06, green: 0.08, blue: 0.18)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(AppTheme.primary.opacity(0.25))
+                .frame(width: 360, height: 360)
+                .blur(radius: 55)
+                .offset(x: 150, y: -300)
+
+            Circle()
+                .fill(AppTheme.aqua.opacity(0.17))
+                .frame(width: 280, height: 280)
+                .blur(radius: 65)
+                .offset(x: -155, y: 240)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct AuthenticationCardSurface: View {
+    let cornerRadius: CGFloat
+    var fill = Color(red: 0.055, green: 0.105, blue: 0.20)
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(fill)
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.10), .clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.22), AppTheme.aqua.opacity(0.20), Color.white.opacity(0.07)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
+    }
+}
+
 private struct CompactActionButtonStyleModifier: ViewModifier {
     let prominent: Bool
 
@@ -553,7 +605,7 @@ private struct DemoAccountCard: View {
                         Text(account.contact)
                             .font(.system(size: 16, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.65))
-                        Text("Password:  \(account.password)")
+                        Text("Пароль:  \(account.password)")
                             .font(.system(size: 15, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.white.opacity(0.55))
                     }

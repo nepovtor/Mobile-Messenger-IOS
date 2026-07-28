@@ -33,7 +33,7 @@ struct ProfileView: View {
             }
             .scrollIndicators(.hidden)
             .background(backgroundView)
-            .navigationTitle("Profile")
+            .navigationTitle("Профиль")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable {
                 syncViewModel()
@@ -61,7 +61,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ProfileStatusBadge(
                         title: viewModel.accountBadgeTitle,
-                        tone: viewModel.accountBadgeTitle == "Demo account" ? .warning : .neutral
+                        tone: viewModel.accountBadgeTitle == "Демо-аккаунт" ? .warning : .neutral
                     )
 
                     Text(viewModel.displayName)
@@ -125,13 +125,13 @@ struct ProfileView: View {
     }
 
     private var accountSection: some View {
-        ProfileSectionCard(title: "Account") {
+        ProfileSectionCard(title: "Аккаунт") {
             if container.showPhoneNumberInProfile {
                 ProfileInfoRow(
                     systemImage: "phone.fill",
-                    title: "Phone",
+                    title: "Телефон",
                     value: viewModel.phone,
-                    detail: "Current account contact from the authenticated profile.",
+                    detail: "Контакт из профиля текущего аккаунта.",
                     tint: .blue
                 )
 
@@ -141,7 +141,7 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 14) {
                 ProfileInfoRow(
                     systemImage: "person.text.rectangle.fill",
-                    title: "Display name",
+                    title: "Имя в приложении",
                     value: viewModel.displayName,
                     detail: viewModel.accountBadgeDetail,
                     tint: .green
@@ -170,7 +170,7 @@ struct ProfileView: View {
                         }
 
                         HStack(spacing: 12) {
-                            Button("Cancel") {
+                            Button("Отмена") {
                                 viewModel.cancelEditingDisplayName()
                             }
                             .buttonStyle(
@@ -189,7 +189,7 @@ struct ProfileView: View {
                                     ProgressView()
                                         .tint(.white)
                                 } else {
-                                    Text("Save")
+                                    Text("Сохранить")
                                 }
                             }
                             .buttonStyle(
@@ -226,9 +226,9 @@ struct ProfileView: View {
 
                 ProfileInfoRow(
                     systemImage: "number.square.fill",
-                    title: "User ID",
+                    title: "ID пользователя",
                     value: viewModel.userIDText,
-                    detail: "Used to scope chat ownership and session identity.",
+                    detail: "Используется для привязки чатов и сессии к аккаунту.",
                     tint: .indigo,
                     monospaced: true
                 )
@@ -247,10 +247,10 @@ struct ProfileView: View {
     }
 
     private var realtimeSection: some View {
-        ProfileSectionCard(title: "Realtime") {
+        ProfileSectionCard(title: "Соединение") {
             ProfileInfoRow(
                 systemImage: realtimeSystemImage,
-                title: "Connection status",
+                title: "Статус соединения",
                 value: viewModel.realtimeStatus.title,
                 detail: viewModel.realtimeStatus.detail,
                 tint: realtimeAccent
@@ -259,14 +259,14 @@ struct ProfileView: View {
     }
 
     private var securitySection: some View {
-        ProfileSectionCard(title: "Security") {
+        ProfileSectionCard(title: "Безопасность") {
             ProfileInfoRow(
                 systemImage: "key.fill",
-                title: "Token stored in Keychain",
+                title: "Токен в Keychain",
                 value: viewModel.hasStoredToken
-                    ? "Protected on this device"
-                    : "No active token",
-                detail: "The token value is never shown on the profile screen.",
+                    ? "Защищён на этом устройстве"
+                    : "Нет активного токена",
+                detail: "Значение токена никогда не отображается в профиле.",
                 tint: .purple
             )
 
@@ -274,26 +274,26 @@ struct ProfileView: View {
 
             ProfileInfoRow(
                 systemImage: "shield.lefthalf.filled",
-                title: "Session cleanup on logout",
-                value: "Chats, messages, session, and realtime are cleared",
-                detail: "Logout reuses the existing secure cleanup flow.",
+                title: "Очистка при выходе",
+                value: "Чаты, сообщения, сессия и соединение очищаются",
+                detail: "При выходе используется безопасная процедура очистки.",
                 tint: .red
             )
         }
     }
 
     private var appearanceSection: some View {
-        ProfileSectionCard(title: "Appearance") {
+        ProfileSectionCard(title: "Оформление") {
             VStack(alignment: .leading, spacing: 16) {
                 ProfileInfoRow(
                     systemImage: container.appearanceMode.systemImage,
-                    title: "Theme",
+                    title: "Тема",
                     value: container.appearanceMode.title,
-                    detail: "Follows the existing app appearance setting.",
+                    detail: "Определяет внешний вид всего приложения.",
                     tint: .teal
                 )
 
-                Picker("Theme", selection: appearanceBinding) {
+                Picker("Тема", selection: appearanceBinding) {
                     ForEach(AppContainer.AppearanceMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -306,11 +306,11 @@ struct ProfileView: View {
     }
 
     private var preferencesSection: some View {
-        ProfileSectionCard(title: "Preferences") {
+        ProfileSectionCard(title: "Настройки") {
             settingsToggleRow(
                 systemImage: "circle.lefthalf.filled",
-                title: "High contrast dark mode",
-                detail: "Makes cards and text easier to read when the app is in dark appearance.",
+                title: "Высокая контрастность",
+                detail: "Делает карточки и текст заметнее в тёмной теме.",
                 tint: .indigo,
                 isOn: highContrastDarkModeBinding
             )
@@ -319,8 +319,8 @@ struct ProfileView: View {
 
             settingsToggleRow(
                 systemImage: "phone.circle.fill",
-                title: "Show phone number",
-                detail: "Displays your phone in the profile header and account details.",
+                title: "Показывать телефон",
+                detail: "Отображает номер в шапке и сведениях об аккаунте.",
                 tint: .blue,
                 isOn: showPhoneNumberBinding
             )
@@ -329,8 +329,8 @@ struct ProfileView: View {
 
             settingsToggleRow(
                 systemImage: "gearshape.2.fill",
-                title: "Show technical details",
-                detail: "Shows realtime, security, environment, and user ID blocks in the profile.",
+                title: "Технические сведения",
+                detail: "Показывает соединение, безопасность, среду и ID пользователя.",
                 tint: .orange,
                 isOn: showTechnicalDetailsBinding
             )
@@ -338,10 +338,10 @@ struct ProfileView: View {
     }
 
     private var notificationsSection: some View {
-        ProfileSectionCard(title: "Push notifications") {
+        ProfileSectionCard(title: "Push-уведомления") {
             ProfileInfoRow(
                 systemImage: "bell.badge.fill",
-                title: "Remote notifications",
+                title: "Удалённые уведомления",
                 value: notificationManager.statusTitle,
                 detail: notificationManager.statusDetail,
                 tint: notificationAccent
@@ -353,9 +353,9 @@ struct ProfileView: View {
 
                 ProfileInfoRow(
                     systemImage: "number.square.fill",
-                    title: "APNs token",
+                    title: "Токен APNs",
                     value: tokenPreview,
-                    detail: "Latest device token seen on this device.",
+                    detail: "Последний токен устройства, полученный на этом iPhone.",
                     tint: .indigo,
                     monospaced: true
                 )
@@ -397,7 +397,7 @@ struct ProfileView: View {
                 }
 
                 if notificationManager.canOpenSettings {
-                    Button("Открыть Settings") {
+                    Button("Открыть настройки") {
                         notificationManager.openApplicationSettings()
                     }
                     .buttonStyle(
@@ -416,7 +416,7 @@ struct ProfileView: View {
     }
 
     private var actionsSection: some View {
-        ProfileSectionCard(title: "Actions") {
+        ProfileSectionCard(title: "Действия") {
             if !viewModel.isEditingDisplayName,
                let message = viewModel.inlineMessage {
                 HStack {
@@ -439,8 +439,8 @@ struct ProfileView: View {
             } label: {
                 actionRow(
                     systemImage: "arrow.clockwise",
-                    title: "Refresh profile",
-                    detail: "Reload account contact and status details.",
+                    title: "Обновить профиль",
+                    detail: "Загрузить актуальные контактные данные и статус.",
                     tint: .blue
                 )
             }
@@ -454,8 +454,8 @@ struct ProfileView: View {
             } label: {
                 actionRow(
                     systemImage: "rectangle.portrait.and.arrow.right",
-                    title: "Logout",
-                    detail: "End the current session safely.",
+                    title: "Выйти из аккаунта",
+                    detail: "Безопасно завершить текущую сессию.",
                     tint: .red,
                     isDestructive: true
                 )

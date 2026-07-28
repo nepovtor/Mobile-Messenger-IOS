@@ -4,6 +4,7 @@ struct ContactsView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @StateObject private var viewModel: ContactsViewModel
     @State private var openedChat: ChatListItem?
+    @State private var isShowingAddContact = false
 
     @MainActor
     init(container: AppContainer) {
@@ -17,8 +18,26 @@ struct ContactsView: View {
             .scrollContentBackground(.hidden)
             .background(backgroundView)
             .navigationTitle("Контакты")
+            .navigationBarTitleDisplayMode(.large)
             .searchable(text: $viewModel.searchQuery, prompt: "Поиск контактов")
             .refreshable { await viewModel.refresh() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingAddContact = true
+                    } label: {
+                        Label("Добавить контакт", systemImage: "person.badge.plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $isShowingAddContact) {
+                AddContactSheet(
+                    isPresented: $isShowingAddContact,
+                    viewModel: viewModel
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
             .navigationDestination(item: $openedChat) { chat in
                 DialogueView(chat: chat)
             }
@@ -52,14 +71,11 @@ struct ContactsView: View {
 
     @ViewBuilder
     private var contentSections: some View {
-        Section {
-            addContactSection
-        }
-
         if viewModel.isLoading && viewModel.contacts.isEmpty {
             Section {
                 ForEach(0..<5, id: \.self) { _ in
                     ContactRowSkeleton()
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
@@ -69,79 +85,34 @@ struct ContactsView: View {
                 ContentUnavailableView(
                     "Контактов пока нет",
                     systemImage: "person.2.slash",
-                    description: Text("Добавьте пользователя по номеру телефона, чтобы быстро открыть direct chat.")
+                    description: Text("Нажмите кнопку добавления сверху и введите номер телефона.")
                 )
+                .listRowBackground(Color.clear)
             }
         } else {
             Section {
                 ForEach(viewModel.filteredContacts) { contact in
                     contactButton(for: contact)
                 }
+            } header: {
+                Text(contactsSectionTitle)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
             }
         }
     }
 
-    private var addContactSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Добавить контакт")
-                .font(.headline)
-
-            TextField("+375291234567", text: $viewModel.addPhone)
-                .keyboardType(.phonePad)
-                .textContentType(.telephoneNumber)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .padding(.horizontal, 16)
-                .frame(height: 58)
-                .background(
-                    LiquidGlassRoundedSurface(
-                        cornerRadius: 20,
-                        tint: .white,
-                        secondaryTint: AppTheme.aqua,
-                        innerDarkness: 0.24
-                    )
-                )
-
-            Button {
-                Task {
-                    await viewModel.addContact()
-                }
-            } label: {
-                HStack {
-                    if viewModel.isAdding {
-                        ProgressView()
-                            .tint(.white)
-                    }
-                    Text("Добавить контакт")
-                }
-            }
-            .buttonStyle(
-                LiquidGlassProminentButtonStyle(
-                    tint: AppTheme.primary,
-                    secondaryTint: AppTheme.aqua
-                )
-            )
-            .disabled(viewModel.isAdding)
-
-            Text("Введите номер в международном формате, например `+375291234567`.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    private var contactsSectionTitle: String {
+        if viewModel.searchQuery.isEmpty {
+            return "Все контакты · \(viewModel.filteredContacts.count)"
         }
-        .padding(16)
-        .liquidGlassCard(
-            cornerRadius: 24,
-            tint: AppTheme.primary,
-            secondaryTint: AppTheme.aqua,
-            innerDarkness: 0.10
-        )
+        return "Результаты поиска · \(viewModel.filteredContacts.count)"
     }
 
     private var backgroundView: some View {
-        LiquidGlassBackground(
-            accent: AppTheme.primary,
-            secondaryAccent: AppTheme.aqua,
-            tertiaryAccent: AppTheme.mint
-        )
+        Color(uiColor: .systemGroupedBackground)
+            .ignoresSafeArea()
     }
 
     private func contactButton(for contact: Contact) -> some View {
@@ -176,5 +147,95 @@ struct ContactsView: View {
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         .listRowBackground(Color.clear)
+    }
+}
+
+private struct AddContactSheet: View {
+    @Binding var isPresented: Bool
+    @ObservedObject var viewModel: ContactsViewModel
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Номер телефона")
+                        .font(.headline)
+
+                    Text("Найдём пользователя и добавим его в список контактов.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                TextField("+375 29 123-45-67", text: $viewModel.addPhone)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .font(.body.weight(.medium))
+                    .padding(.horizontal, 16)
+                    .frame(height: 56)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(uiColor: .separator).opacity(0.22), lineWidth: 1)
+                    }
+
+                if let validationMessage = viewModel.addContactValidationMessage,
+                   !viewModel.addPhone.isEmpty {
+                    Label(validationMessage, systemImage: "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("Используйте международный формат, начиная с «+».")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    Task {
+                        await viewModel.addContact()
+                        if viewModel.errorMessage == nil {
+                            isPresented = false
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        if viewModel.isAdding {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "person.badge.plus")
+                        }
+                        Text("Добавить контакт")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(
+                    LiquidGlassProminentButtonStyle(
+                        tint: AppTheme.primary,
+                        secondaryTint: AppTheme.aqua,
+                        height: 56
+                    )
+                )
+                .disabled(viewModel.isAdding || viewModel.addContactValidationMessage != nil)
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("Новый контакт")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") {
+                        isPresented = false
+                    }
+                }
+            }
+            .interactiveDismissDisabled(viewModel.isAdding)
+        }
     }
 }

@@ -91,7 +91,10 @@ struct MapView: View {
                             ProgressView()
                                 .tint(.white)
                         }
-                        Text(viewModel.myLocationShare.sharingEnabled ? "Update my location" : "Share my location")
+                        Label(
+                            viewModel.myLocationShare.sharingEnabled ? "Обновить" : "Поделиться",
+                            systemImage: "location.fill"
+                        )
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -103,7 +106,7 @@ struct MapView: View {
                 )
                 .disabled(viewModel.isSharing)
 
-                Button("Stop sharing") {
+                Button("Остановить") {
                     Task {
                         await viewModel.stopSharing(using: permissionManager)
                     }
@@ -164,7 +167,7 @@ struct MapView: View {
 
                 if viewModel.contactLocations.isEmpty && !viewModel.isLoading {
                     ContentUnavailableView(
-                        "Location not shared",
+                        "Геолокация не передаётся",
                         systemImage: "mappin.slash",
                         description: Text(viewModel.emptyStateMessage)
                     )
@@ -188,7 +191,7 @@ struct MapView: View {
 
     static func formattedTimestamp(_ value: String) -> String {
         guard let date = ISO8601DateFormatter.flexible.date(from: value) else {
-            return "Updated recently"
+            return "Обновлено недавно"
         }
 
         let formatter = RelativeDateTimeFormatter()

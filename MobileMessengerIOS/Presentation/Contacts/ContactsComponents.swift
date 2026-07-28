@@ -12,31 +12,14 @@ struct ContactRow: View, Equatable {
         HStack(spacing: 14) {
             avatar
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(contact.displayName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    if contact.directChatID != nil {
-                        Label("Direct", systemImage: "bolt.horizontal.circle.fill")
-                            .font(.caption2.weight(.semibold))
-                            .labelStyle(.titleAndIcon)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(directBadgeBackground, in: Capsule())
-                    }
-                }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(contact.displayName)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
                 Text(contact.phone)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Text(contact.directChatID == nil ? "Чат будет открыт автоматически" : "Нажмите, чтобы открыть direct chat")
-                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -47,10 +30,13 @@ struct ContactRow: View, Equatable {
                 ProgressView()
             } else {
                 Image(systemName: "message.fill")
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.primary)
+                    .frame(width: 38, height: 38)
+                    .background(AppTheme.primary.opacity(0.11), in: Circle())
             }
         }
-        .padding(16)
+        .padding(14)
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -73,8 +59,8 @@ struct ContactRow: View, Equatable {
     private var rowBackground: LinearGradient {
         LinearGradient(
             colors: [
-                Color(uiColor: .systemBackground).opacity(0.86),
-                AppTheme.lightSurfaceTint.opacity(0.56)
+                Color(uiColor: .secondarySystemGroupedBackground),
+                Color(uiColor: .secondarySystemGroupedBackground)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -84,8 +70,8 @@ struct ContactRow: View, Equatable {
     private var rowBorder: LinearGradient {
         LinearGradient(
             colors: [
-                Color.white.opacity(0.62),
-                AppTheme.aqua.opacity(0.20)
+                Color(uiColor: .separator).opacity(0.16),
+                Color(uiColor: .separator).opacity(0.08)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -93,17 +79,6 @@ struct ContactRow: View, Equatable {
     }
 
     private var avatarBackground: LinearGradient {
-        LinearGradient(
-            colors: [
-                AppTheme.primary,
-                AppTheme.aqua
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var directBadgeBackground: LinearGradient {
         LinearGradient(
             colors: [
                 AppTheme.primary,
@@ -133,7 +108,11 @@ struct ContactRowSkeleton: View {
                     .frame(height: 12)
             }
         }
-        .padding(.vertical, 8)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
     }
 }
 

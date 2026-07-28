@@ -125,24 +125,24 @@ public final class AppContainer: ObservableObject {
 
         if host == "localhost" || host == "127.0.0.1" {
             return ProfileEnvironmentInfo(
-                badgeTitle: "Local backend",
-                title: "Local environment",
-                detail: "Connected to a localhost backend configuration."
+                badgeTitle: "Локальный сервер",
+                title: "Локальная среда",
+                detail: "Подключено к серверу, запущенному на этом компьютере."
             )
         }
 
         if configService.hasCustomRESTBaseURL {
             return ProfileEnvironmentInfo(
-                badgeTitle: "Custom backend",
-                title: "Custom environment",
-                detail: "Using a custom backend selected in app configuration."
+                badgeTitle: "Свой сервер",
+                title: "Настроенная среда",
+                detail: "Используется сервер, выбранный в настройках приложения."
             )
         }
 
         return ProfileEnvironmentInfo(
-            badgeTitle: "Configured backend",
-            title: "Default environment",
-            detail: "Using the default backend bundled with the app."
+            badgeTitle: "Основной сервер",
+            title: "Рабочая среда",
+            detail: "Используется сервер приложения по умолчанию."
         )
     }
 

@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct ChatListView: View {
-    @EnvironmentObject private var sessionStore: SessionStore
     @StateObject private var viewModel: ChatListViewModel
     @State private var isShowingCreateSheet = false
-    @State private var isShowingProfile = false
     @State private var createdChat: ChatListItem?
     @State private var pendingDeleteChat: ChatListItem?
     private let container: AppContainer
@@ -66,33 +64,13 @@ struct ChatListView: View {
                 }
                 .searchable(text: $viewModel.searchQuery, prompt: "Поиск чатов")
                 .navigationTitle("Чаты")
+                .navigationBarTitleDisplayMode(.large)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: { isShowingProfile = true }) {
-                            HStack(spacing: 10) {
-                                Circle()
-                                    .fill(AppTheme.primary.opacity(0.16))
-                                    .frame(width: 32, height: 32)
-                                    .overlay {
-                                        Text(profileInitials)
-                                            .font(.caption.weight(.bold))
-                                            .foregroundStyle(AppTheme.primary)
-                                    }
-
-                                Text("Profile")
-                                    .font(.subheadline.weight(.semibold))
-                            }
-                        }
-                    }
-
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button(action: { isShowingCreateSheet = true }) {
-                            Image(systemName: "person.3.sequence.fill")
+                            Label("Новая группа", systemImage: "square.and.pencil")
                         }
                     }
-                }
-                .sheet(isPresented: $isShowingProfile) {
-                    ProfileView(container: container)
                 }
                 .sheet(isPresented: $isShowingCreateSheet) {
                     CreateGroupChatSheet(
@@ -149,11 +127,6 @@ struct ChatListView: View {
                 }
             }
         }
-    }
-
-    private var profileInitials: String {
-        let displayName = sessionStore.currentDisplayName ?? SessionStore.Constants.currentUserDisplayName
-        return ProfileViewModel.makeInitials(from: displayName)
     }
 
     private func openPendingPushChatIfPossible() {
@@ -235,12 +208,15 @@ private struct ChatRowView: View {
             }
         }
         .padding(16)
-        .liquidGlassCard(
-            cornerRadius: 24,
-            tint: AppTheme.primary,
-            secondaryTint: AppTheme.aqua,
-            innerDarkness: isHighContrastDarkActive ? 0.10 : 0.04
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color(uiColor: .separator).opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.10 : 0.04), radius: 8, y: 3)
     }
 
     private var avatar: some View {
@@ -579,14 +555,8 @@ private struct SelectedContactChip: View {
 }
 
 private struct ChatListBackdrop: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var container: AppContainer
-
     var body: some View {
-        LiquidGlassBackground(
-            accent: AppTheme.primary,
-            secondaryAccent: AppTheme.aqua,
-            tertiaryAccent: AppTheme.coral
-        )
+        Color(uiColor: .systemGroupedBackground)
+            .ignoresSafeArea()
     }
 }

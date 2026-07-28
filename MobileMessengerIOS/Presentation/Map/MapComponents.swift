@@ -3,15 +3,15 @@ import SwiftUI
 struct MapPrivacyCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Privacy", systemImage: "lock.shield.fill")
+            Label("Приватность", systemImage: "lock.shield.fill")
                 .font(.headline)
                 .foregroundStyle(AppTheme.primary)
 
-            Text("Your location is shared only with your contacts while sharing is enabled.")
+            Text("Геолокация доступна только вашим контактам, пока передача включена.")
                 .font(.subheadline)
                 .foregroundStyle(.primary)
 
-            Text("Background tracking is off by default. Only the latest point is stored.")
+            Text("Фоновое отслеживание выключено. Сохраняется только последняя точка.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -51,7 +51,7 @@ struct MapMarkerBadge: View {
             }
 
             if isOutdated {
-                Text("Outdated")
+                Text("Неактуально")
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -79,7 +79,7 @@ struct MapLocationDetailCard: View {
                 }
                 Spacer()
                 if marker.isOutdated {
-                    Text("Location outdated")
+                    Text("Геолокация устарела")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                 }
@@ -92,7 +92,7 @@ struct MapLocationDetailCard: View {
             }
 
             if let accuracy = marker.accuracy {
-                Label("Accuracy ~\(Int(accuracy)) m", systemImage: "scope")
+                Label("Точность ~\(Int(accuracy)) м", systemImage: "scope")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -104,7 +104,7 @@ struct MapLocationDetailCard: View {
                             ProgressView()
                                 .tint(.white)
                         }
-                        Text(isOpeningChat ? "Opening..." : "Open chat")
+                        Text(isOpeningChat ? "Открываем…" : "Открыть чат")
                     }
                     .frame(maxWidth: .infinity)
                 }

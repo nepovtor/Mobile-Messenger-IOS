@@ -6,9 +6,9 @@ struct ProfileEnvironmentInfo: Equatable {
     let detail: String
 
     static let unknown = ProfileEnvironmentInfo(
-        badgeTitle: "App",
-        title: "Configured environment",
-        detail: "Using the current in-app backend configuration."
+        badgeTitle: "Приложение",
+        title: "Среда подключения",
+        detail: "Используется текущая настройка сервера приложения."
     )
 }
 
@@ -37,43 +37,43 @@ enum ProfileRealtimeStatus: Equatable {
     var title: String {
         switch self {
         case .connected:
-            return "Connected"
+            return "Подключено"
         case .connecting:
-            return "Connecting"
+            return "Подключение"
         case .reconnecting:
-            return "Reconnecting"
+            return "Переподключение"
         case .disconnected:
-            return "Disconnected"
+            return "Нет подключения"
         case .failed:
-            return "Connection issue"
+            return "Проблема соединения"
         }
     }
 
     var detail: String {
         switch self {
         case .connected:
-            return "Realtime delivery is active."
+            return "Сообщения доставляются в реальном времени."
         case .connecting:
-            return "Establishing a secure realtime session."
+            return "Устанавливаем защищённое соединение."
         case .reconnecting:
-            return "Trying to restore chat updates."
+            return "Восстанавливаем обновления чатов."
         case .disconnected:
-            return "Realtime is currently offline."
+            return "Обновления в реальном времени сейчас недоступны."
         case .failed:
-            return "The app will reconnect when possible."
+            return "Приложение подключится снова при первой возможности."
         }
     }
 }
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
-    @Published private(set) var displayName = "Unknown user"
-    @Published private(set) var phone = "Unknown phone"
-    @Published private(set) var userIDText = "User ID unavailable"
+    @Published private(set) var displayName = "Неизвестный пользователь"
+    @Published private(set) var phone = "Номер недоступен"
+    @Published private(set) var userIDText = "ID пользователя недоступен"
     @Published private(set) var userIDFootnote: String?
     @Published private(set) var initials = "?"
-    @Published private(set) var accountBadgeTitle = "Account info"
-    @Published private(set) var accountBadgeDetail = "Signed in user details"
+    @Published private(set) var accountBadgeTitle = "Данные аккаунта"
+    @Published private(set) var accountBadgeDetail = "Данные текущего пользователя"
     @Published private(set) var realtimeStatus: ProfileRealtimeStatus = .disconnected
     @Published private(set) var environmentInfo: ProfileEnvironmentInfo = .unknown
     @Published private(set) var isLoadingProfile = false
@@ -114,35 +114,35 @@ final class ProfileViewModel: ObservableObject {
         switch sessionState {
         case let .authenticated(token, userID, displayName):
             if currentUserID != userID {
-                phone = "Unknown phone"
+                phone = "Номер недоступен"
                 lastLoadedUserID = nil
             }
             currentUserID = userID
-            self.displayName = displayName.isEmpty ? "Unknown user" : displayName
+            self.displayName = displayName.isEmpty ? "Неизвестный пользователь" : displayName
             if !isEditingDisplayName {
                 editedDisplayName = self.displayName
             }
             userIDText = userID.uuidString
-            userIDFootnote = "User ID"
+            userIDFootnote = "ID пользователя"
             initials = Self.makeInitials(from: self.displayName)
             hasStoredToken = !token.isEmpty
 
             if Self.isDemoAccount(displayName: self.displayName) {
-                accountBadgeTitle = "Demo account"
-                accountBadgeDetail = "Good for seeded chats and predictable demo flow."
+                accountBadgeTitle = "Демо-аккаунт"
+                accountBadgeDetail = "Подходит для демонстрации чатов и сценариев приложения."
             } else {
-                accountBadgeTitle = "Account info"
-                accountBadgeDetail = "Authenticated with the current backend session."
+                accountBadgeTitle = "Данные аккаунта"
+                accountBadgeDetail = "Выполнен вход через текущую сессию сервера."
             }
         case .unauthenticated:
             currentUserID = nil
-            displayName = "Unknown user"
-            userIDText = "User ID unavailable"
+            displayName = "Неизвестный пользователь"
+            userIDText = "ID пользователя недоступен"
             userIDFootnote = nil
             initials = "?"
-            phone = "Unknown phone"
-            accountBadgeTitle = "Account info"
-            accountBadgeDetail = "No active account session."
+            phone = "Номер недоступен"
+            accountBadgeTitle = "Данные аккаунта"
+            accountBadgeDetail = "Нет активной сессии аккаунта."
             hasStoredToken = false
             lastLoadedUserID = nil
             editedDisplayName = ""
@@ -159,7 +159,7 @@ final class ProfileViewModel: ObservableObject {
 
     func refreshProfile() async {
         guard let userID = currentUserID else {
-            phone = "Unknown phone"
+            phone = "Номер недоступен"
             return
         }
         guard !isLoadingProfile else { return }
@@ -174,7 +174,7 @@ final class ProfileViewModel: ObservableObject {
             initials = Self.makeInitials(from: displayName)
             lastLoadedUserID = userID
         } catch {
-            phone = "Unknown phone"
+            phone = "Номер недоступен"
         }
     }
 
@@ -262,12 +262,12 @@ final class ProfileViewModel: ObservableObject {
 
     static func phoneText(from contact: String?) -> String {
         guard let contact else {
-            return "Unknown phone"
+            return "Номер недоступен"
         }
 
         let trimmed = contact.trimmingCharacters(in: .whitespacesAndNewlines)
         let digits = trimmed.filter(\.isNumber)
-        return digits.count >= 7 ? trimmed : "Unknown phone"
+        return digits.count >= 7 ? trimmed : "Номер недоступен"
     }
 
     static func isDemoAccount(displayName: String) -> Bool {

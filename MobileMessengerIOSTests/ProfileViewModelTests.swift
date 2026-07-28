@@ -66,7 +66,7 @@ final class ProfileViewModelTests: XCTestCase {
         viewModel.logout()
         await Task.yield()
 
-        XCTAssertEqual(viewModel.phone, "Unknown phone")
+        XCTAssertEqual(viewModel.phone, "Номер недоступен")
     }
 
     func testRealtimeStatusMappingWorks() {
@@ -83,8 +83,8 @@ final class ProfileViewModelTests: XCTestCase {
     }
 
     func testPhoneFallbackReturnsUnknownForInvalidContact() {
-        XCTAssertEqual(ProfileViewModel.phoneText(from: nil), "Unknown phone")
-        XCTAssertEqual(ProfileViewModel.phoneText(from: "demo"), "Unknown phone")
+        XCTAssertEqual(ProfileViewModel.phoneText(from: nil), "Номер недоступен")
+        XCTAssertEqual(ProfileViewModel.phoneText(from: "demo"), "Номер недоступен")
     }
 
     func testDisplayNameValidationRejectsInvalidValues() {

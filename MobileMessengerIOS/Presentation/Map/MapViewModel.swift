@@ -87,7 +87,7 @@ final class MapViewModel: ObservableObject {
     }
 
     var emptyStateMessage: String {
-        "Location not shared. Здесь появятся только контакты, которые явно включили sharing."
+        "Здесь появятся только контакты, которые явно включили передачу геолокации."
     }
 
     func handleSessionChange(_ sessionState: SessionStore.State) {
@@ -155,7 +155,7 @@ final class MapViewModel: ObservableObject {
             try await stopLocationSharing()
             permissionManager.stopTracking()
             myLocationShare = .disabled
-            infoMessage = "Location sharing stopped."
+            infoMessage = "Передача геолокации остановлена."
             errorMessage = nil
             selectedMarker = nil
             contactLocations = try await loadContactLocations()

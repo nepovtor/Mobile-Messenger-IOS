@@ -33,15 +33,6 @@ struct MainTabView: View {
                     Label("Профиль", systemImage: "person.crop.circle")
                 }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack {
-                Spacer()
-                ConnectionStatusBadge(status: container.connectionStatus)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
-        }
     }
 
     private var selectedTabBinding: Binding<AppContainer.MainTab> {
@@ -49,55 +40,5 @@ struct MainTabView: View {
             get: { container.selectedTab },
             set: { container.selectedTab = $0 }
         )
-    }
-}
-
-private struct ConnectionStatusBadge: View {
-    let status: AppContainer.ConnectionStatus
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(accentColor)
-                .frame(width: 8, height: 8)
-
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .foregroundStyle(.white)
-        .liquidGlassCapsule(
-            tint: accentColor,
-            secondaryTint: .white,
-            innerDarkness: 0.62
-        )
-    }
-
-    private var accentColor: Color {
-        switch status {
-        case .online:
-            return AppTheme.mint
-        case .connecting:
-            return AppTheme.primary
-        case .reconnecting:
-            return AppTheme.amber
-        case .offline:
-            return AppTheme.coral
-        }
-    }
-
-    private var label: String {
-        switch status {
-        case .online:
-            return "Онлайн"
-        case .connecting:
-            return "Подключение"
-        case .reconnecting:
-            return "Переподключение"
-        case .offline:
-            return "Оффлайн"
-        }
     }
 }
