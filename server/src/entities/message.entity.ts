@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -9,6 +8,7 @@ import {
   PrimaryColumn,
 } from "typeorm";
 import { ChatEntity } from "./chat.entity";
+import { createEntityId } from "./entity-id";
 import { MediaEntity } from "./media.entity";
 import { UserEntity } from "./user.entity";
 
@@ -28,7 +28,7 @@ export enum MessageKind {
 @Entity({ name: "messages" })
 export class MessageEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ name: "chat_id", type: "uuid" })
   chatId!: string;
@@ -40,7 +40,9 @@ export class MessageEntity {
   @Column({ name: "author_id", type: "uuid" })
   authorId!: string;
 
-  @ManyToOne(() => UserEntity, (user) => user.messages, { onDelete: "CASCADE" })
+  @ManyToOne(() => UserEntity, (user) => user.messages, {
+    onDelete: "RESTRICT",
+  })
   @JoinColumn({ name: "author_id" })
   author!: UserEntity;
 

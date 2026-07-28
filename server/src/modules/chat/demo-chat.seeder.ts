@@ -123,7 +123,7 @@ export class DemoChatSeeder implements OnModuleInit {
           id: seed.id as ChatEntity["id"],
           title: seed.title,
           lastActivity: new Date("2026-04-24T12:00:00.000Z"),
-          lastMessagePreview: null,
+          lastMessageId: null,
         });
         chat = await this.chatsRepository.save(seededChat);
       }
@@ -177,7 +177,7 @@ export class DemoChatSeeder implements OnModuleInit {
         });
         await this.messagesRepository.save(seededMessage);
 
-        chat.lastMessagePreview = seedMessage.text;
+        chat.lastMessageId = seededMessage.id;
         chat.lastActivity = new Date("2026-04-24T12:00:00.000Z");
         await this.chatsRepository.save(chat);
       }

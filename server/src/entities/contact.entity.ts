@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -9,12 +8,13 @@ import {
   Unique,
 } from "typeorm";
 import { UserEntity } from "./user.entity";
+import { createEntityId } from "./entity-id";
 
 @Entity({ name: "contacts" })
 @Unique("uq_contacts_owner_contact", ["ownerUserId", "contactUserId"])
 export class ContactEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ name: "owner_user_id", type: "uuid" })
   ownerUserId!: string;

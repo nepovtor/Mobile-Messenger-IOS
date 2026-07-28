@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -6,13 +5,14 @@ import {
   Index,
   PrimaryColumn,
 } from "typeorm";
+import { createEntityId } from "./entity-id";
 
 @Entity({ name: "telegram_pairing_tokens" })
 @Index(["phone", "createdAt"])
 @Index(["chatId", "telegramUserId", "createdAt"])
 export class TelegramPairingTokenEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ name: "token_hash", type: "varchar", unique: true })
   tokenHash!: string;

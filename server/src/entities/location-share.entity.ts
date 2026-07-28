@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -9,11 +8,12 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { UserEntity } from "./user.entity";
+import { createEntityId } from "./entity-id";
 
 @Entity({ name: "location_shares" })
 export class LocationShareEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ name: "user_id", type: "uuid", unique: true })
   userId!: string;

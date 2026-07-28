@@ -16,7 +16,10 @@ import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Repository } from "typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
-import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
+import {
+  TelegramLinkEntity,
+  TelegramLinkState,
+} from "../../entities/telegram-link.entity";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import {
   buildDisplayName,
@@ -282,6 +285,12 @@ export class AuthService implements OnModuleInit {
       this.findDemoAccount(AuthMethod.PHONE, phone)?.displayName,
       telegramLink ?? undefined,
     );
+
+    if (telegramLink && telegramLink.userId !== user.id) {
+      telegramLink.userId = user.id;
+      telegramLink.state = TelegramLinkState.LINKED;
+      await this.telegramLinksRepository.save(telegramLink);
+    }
 
     return this.buildAuthResult(user);
   }

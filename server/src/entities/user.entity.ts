@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -12,6 +11,7 @@ import { ContactEntity } from "./contact.entity";
 import { MediaEntity } from "./media.entity";
 import { MessageEntity } from "./message.entity";
 import { PushSubscriptionEntity } from "./push-subscription.entity";
+import { createEntityId } from "./entity-id";
 
 export enum AuthMethod {
   PHONE = "phone",
@@ -21,7 +21,7 @@ export enum AuthMethod {
 @Entity({ name: "users" })
 export class UserEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ type: "simple-enum", enum: AuthMethod })
   method!: AuthMethod;

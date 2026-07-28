@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
+  Check,
   CreateDateColumn,
   Entity,
   Index,
@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { UserEntity } from "./user.entity";
+import { createEntityId } from "./entity-id";
 
 export enum PushPlatform {
   WEB = "web",
@@ -23,9 +24,17 @@ export enum PushEnvironment {
 
 @Entity({ name: "push_subscriptions" })
 @Index("idx_push_subscriptions_user_platform", ["userId", "platform"])
+@Check(
+  "CHK_push_subscriptions_payload",
+  `(
+    (platform = 'web' AND endpoint IS NOT NULL AND p256dh IS NOT NULL AND auth IS NOT NULL AND device_token IS NULL AND environment IS NULL AND bundle_id IS NULL)
+    OR
+    (platform = 'ios' AND endpoint IS NULL AND p256dh IS NULL AND auth IS NULL AND device_token IS NOT NULL AND environment IS NOT NULL AND bundle_id IS NOT NULL)
+  )`,
+)
 export class PushSubscriptionEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ name: "user_id", type: "uuid" })
   userId!: string;

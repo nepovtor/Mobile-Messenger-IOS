@@ -8,8 +8,12 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { createHash, randomBytes } from "node:crypto";
 import { IsNull, MoreThan, Repository } from "typeorm";
-import { TelegramLinkEntity } from "../../../entities/telegram-link.entity";
+import {
+  TelegramLinkEntity,
+  TelegramLinkState,
+} from "../../../entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../../../entities/telegram-pairing-token.entity";
+import { UserEntity } from "../../../entities/user.entity";
 import { normalizePhone } from "../../common/contact.utils";
 import { JsonValue } from "../../common/json.types";
 import {
@@ -90,6 +94,8 @@ export class TelegramBotService
   constructor(
     @InjectRepository(TelegramLinkEntity)
     private readonly telegramLinksRepository: Repository<TelegramLinkEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepository: Repository<UserEntity>,
     @InjectRepository(TelegramPairingTokenEntity)
     private readonly telegramPairingTokensRepository: Repository<TelegramPairingTokenEntity>,
     private readonly authRateLimitService: AuthRateLimitService,
@@ -536,6 +542,7 @@ export class TelegramBotService
     firstName: string | null;
     markVerifiedAt: Date | null;
   }): Promise<"linked" | "relink_blocked"> {
+    const user = await this.usersRepository.findOneBy({ phone: input.phone });
     const existingLink = await this.telegramLinksRepository.findOne({
       where: { phone: input.phone },
     });
@@ -543,6 +550,8 @@ export class TelegramBotService
     if (!existingLink) {
       await this.telegramLinksRepository.save(
         this.telegramLinksRepository.create({
+          userId: user?.id ?? null,
+          state: user ? TelegramLinkState.LINKED : TelegramLinkState.PENDING,
           phone: input.phone,
           chatId: input.chatId,
           telegramUserId: input.telegramUserId,
@@ -569,6 +578,10 @@ export class TelegramBotService
     existingLink.telegramUserId = input.telegramUserId;
     existingLink.username = input.username;
     existingLink.firstName = input.firstName;
+    if (user) {
+      existingLink.userId = user.id;
+      existingLink.state = TelegramLinkState.LINKED;
+    }
     existingLink.revokedAt = null;
     if (input.markVerifiedAt) {
       existingLink.lastVerifiedAt = input.markVerifiedAt;

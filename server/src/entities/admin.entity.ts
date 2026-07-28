@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -6,11 +5,12 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { createEntityId } from "./entity-id";
 
 @Entity({ name: "admins" })
 export class AdminEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ type: "varchar", unique: true })
   login!: string;

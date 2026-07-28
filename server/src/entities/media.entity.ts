@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -9,6 +8,7 @@ import {
   PrimaryColumn,
 } from "typeorm";
 import { MessageEntity } from "./message.entity";
+import { createEntityId } from "./entity-id";
 import { UserEntity } from "./user.entity";
 
 export enum MediaStatus {
@@ -19,7 +19,7 @@ export enum MediaStatus {
 @Entity({ name: "media" })
 export class MediaEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ name: "object_key", type: "varchar", unique: true })
   objectKey!: string;
@@ -40,7 +40,7 @@ export class MediaEntity {
   uploadedById!: string;
 
   @ManyToOne(() => UserEntity, (user) => user.uploadedMedia, {
-    onDelete: "CASCADE",
+    onDelete: "RESTRICT",
   })
   @JoinColumn({ name: "uploaded_by_id" })
   uploadedBy!: UserEntity;

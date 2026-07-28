@@ -102,6 +102,7 @@ export class SystemService {
         take: 6,
       }),
       this.chatsRepository.find({
+        relations: { lastMessage: true },
         order: { lastActivity: "DESC" },
         take: 6,
       }),
@@ -178,7 +179,12 @@ export class SystemService {
         recentChats: recentChats.map((chat) => ({
           id: chat.id,
           title: chat.title,
-          lastMessagePreview: chat.lastMessagePreview,
+          lastMessagePreview:
+            chat.lastMessage?.deletedAt != null
+              ? "Message deleted"
+              : chat.lastMessage?.kind === "image"
+                ? "Photo"
+                : (chat.lastMessage?.text ?? null),
           lastActivity: chat.lastActivity.toISOString(),
           createdAt: chat.createdAt.toISOString(),
         })),

@@ -134,7 +134,7 @@ export class PushService {
     device.platform = PushPlatform.IOS;
     device.deviceToken = normalizedToken;
     device.environment = dto.environment ?? PushEnvironment.SANDBOX;
-    device.bundleId = dto.bundleId ?? null;
+    device.bundleId = dto.bundleId.trim();
     device.endpoint = null;
     device.p256dh = null;
     device.auth = null;

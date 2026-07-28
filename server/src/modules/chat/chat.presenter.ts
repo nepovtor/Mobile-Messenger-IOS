@@ -47,11 +47,17 @@ export class ChatPresenter {
       participants.length === 2
         ? (otherParticipants[0]?.user.displayName ?? chat.title)
         : chat.title;
+    const lastMessage =
+      chat.lastMessage ??
+      (chat.lastMessageId
+        ? await this.messagesRepository.findOneBy({ id: chat.lastMessageId })
+        : null);
+
     return {
       summary: {
         id: chat.id,
         title: displayTitle,
-        lastMessagePreview: chat.lastMessagePreview,
+        lastMessagePreview: this.messagePreview(lastMessage),
         lastActivity: chat.lastActivity,
         unreadCount,
         typingParticipants: this.chatEvents.getTypingParticipants(
@@ -89,5 +95,18 @@ export class ChatPresenter {
       editedAt: message.editedAt,
       deletedAt: message.deletedAt,
     };
+  }
+
+  private messagePreview(message: MessageEntity | null): string | null {
+    if (!message) {
+      return null;
+    }
+    if (message.deletedAt) {
+      return "Сообщение удалено";
+    }
+    if (message.kind === "image") {
+      return "Фото";
+    }
+    return message.text?.trim() || null;
   }
 }

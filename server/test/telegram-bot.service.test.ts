@@ -65,6 +65,7 @@ test("Telegram polling stops cleanly after a getUpdates 409 conflict", async () 
           {} as never,
           {} as never,
           {} as never,
+          {} as never,
         );
         const serviceState = service as object as TelegramServiceProbe;
 

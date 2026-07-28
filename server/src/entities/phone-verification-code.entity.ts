@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   Column,
   CreateDateColumn,
@@ -6,12 +5,13 @@ import {
   Index,
   PrimaryColumn,
 } from "typeorm";
+import { createEntityId } from "./entity-id";
 
 @Entity({ name: "phone_verification_codes" })
 @Index(["phone", "createdAt"])
 export class PhoneVerificationCodeEntity {
   @PrimaryColumn("uuid")
-  id = randomUUID();
+  id = createEntityId();
 
   @Column({ type: "varchar" })
   phone!: string;

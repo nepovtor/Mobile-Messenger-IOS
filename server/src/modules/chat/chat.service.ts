@@ -124,7 +124,7 @@ export class ChatService {
     const chat = await this.chatsRepository.save(
       this.chatsRepository.create({
         title,
-        lastMessagePreview: null,
+        lastMessageId: null,
         lastActivity: new Date(),
       }),
     );
@@ -152,7 +152,7 @@ export class ChatService {
   async listChats(userID: string, search?: string): Promise<ChatSummary[]> {
     const participants = await this.participantsRepository.find({
       where: { userId: userID },
-      relations: { chat: true },
+      relations: { chat: { lastMessage: true } },
       order: { chat: { lastActivity: "DESC" } },
     });
 
@@ -382,8 +382,7 @@ export class ChatService {
     if (!chat) {
       throw new NotFoundException("Chat not found");
     }
-    chat.lastMessagePreview =
-      dto.kind === MessageKind.IMAGE ? "Фото" : trimmedText || null;
+    chat.lastMessageId = message.id;
     chat.lastActivity = message.createdAt;
     await this.chatsRepository.save(chat);
 
@@ -701,7 +700,7 @@ export class ChatService {
   ): Promise<ChatParticipantEntity> {
     const participant = await this.participantsRepository.findOne({
       where: { chatId: chatID, userId: userID },
-      relations: { chat: true },
+      relations: { chat: { lastMessage: true } },
     });
     if (!participant) {
       throw new NotFoundException("Chat not found for current user");
@@ -782,20 +781,8 @@ export class ChatService {
     });
 
     chat.lastActivity = latestMessage?.createdAt ?? chat.lastActivity;
-    chat.lastMessagePreview = latestMessage
-      ? this.messagePreview(latestMessage)
-      : null;
+    chat.lastMessageId = latestMessage?.id ?? null;
     await this.chatsRepository.save(chat);
-  }
-
-  private messagePreview(message: MessageEntity): string | null {
-    if (message.deletedAt) {
-      return "Сообщение удалено";
-    }
-    if (message.kind === MessageKind.IMAGE) {
-      return "Фото";
-    }
-    return message.text?.trim() || null;
   }
 
   private async findExistingDirectChat(

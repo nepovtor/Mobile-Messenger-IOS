@@ -1,4 +1,10 @@
-import { IsEnum, IsOptional, IsString, Matches } from "class-validator";
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from "class-validator";
 import { PushEnvironment } from "../../../entities/push-subscription.entity";
 
 export class RegisterIosPushDeviceDto {
@@ -12,7 +18,7 @@ export class RegisterIosPushDeviceDto {
   @IsEnum(PushEnvironment)
   environment?: PushEnvironment;
 
-  @IsOptional()
   @IsString()
-  bundleId?: string;
+  @IsNotEmpty()
+  bundleId!: string;
 }
