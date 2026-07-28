@@ -57,7 +57,9 @@ ssh "${SSH_OPTIONS[@]}" "$REMOTE" \
   "test -d '$DEPLOY_TARGET' && test -w '$DEPLOY_TARGET'"
 
 echo "Uploading assets..."
-rsync -az --delete --exclude=index.html \
+# Cloudways allows this account to replace files but not to change directory
+# timestamps. Do not preserve metadata; only static file contents matter here.
+rsync -rz --no-times --omit-dir-times --delete --exclude=index.html \
   -e "ssh ${SSH_OPTIONS[*]}" \
   "$WEB_DIR/dist/" "$REMOTE:$DEPLOY_TARGET/"
 
