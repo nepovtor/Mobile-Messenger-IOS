@@ -39,8 +39,11 @@ public final class AppSessionCoordinator {
         self.detachNotifications = detachNotifications
     }
 
-    public func logout() async {
+    public func logout(
+        beforeClearing: @MainActor () async -> Void = {}
+    ) async {
         await detachNotifications?()
+        await beforeClearing()
         sessionStore.logout()
     }
 

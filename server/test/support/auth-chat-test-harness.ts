@@ -118,6 +118,7 @@ export type TestAppOptions = {
   telegramLinkResendCooldownSeconds?: number;
   telegramAllowRelink?: boolean;
   webAppUrl?: string | null;
+  e2eeRequired?: boolean;
   beforeInit?: (app: INestApplication) => Promise<void> | void;
 };
 
@@ -128,6 +129,12 @@ export async function createTestApp(
   process.env["JWT_SECRET"] = "test-jwt-secret";
   process.env["JWT_EXPIRES_IN"] = "7d";
   process.env["DB_SYNCHRONIZE"] = "true";
+  process.env["E2EE_ENABLED"] = options.e2eeRequired ? "true" : "false";
+  process.env["E2EE_REQUIRED"] = options.e2eeRequired ? "true" : "false";
+  process.env["LEGACY_MESSAGES_READ_ENABLED"] = options.e2eeRequired
+    ? "false"
+    : "true";
+  process.env["REALTIME_SESSION_REVALIDATION_INTERVAL_MS"] = "50";
   process.env["AUTH_ENABLE_DEMO_ACCOUNTS"] =
     options.enableDemoAccounts === false ? "false" : "true";
   process.env["AUTH_ALLOW_PASSWORD_LOGIN"] = options.allowPasswordLogin
@@ -186,6 +193,7 @@ export async function createTestApp(
       TypeOrmModule.forRootAsync({
         useFactory: async () => ({
           type: "postgres",
+          autoLoadEntities: true,
           entities: [
             UserEntity,
             ContactEntity,

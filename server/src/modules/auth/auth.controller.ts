@@ -1,12 +1,38 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
-import type { Request } from "express";
-import { normalizePhone } from "../common/contact.utils";
-import { CurrentUser } from "./decorators/current-user.decorator";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+} from "@nestjs/common";
+import type { Request, Response } from "express";
+import {
+  SessionPlatform,
+  SessionPrincipalType,
+} from "../../entities/auth-session.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
+import {
+  clearSessionCookies,
+  setSessionCookies,
+  USER_REFRESH_COOKIE,
+} from "../sessions/session-cookies";
+import {
+  buildSessionRequestContext,
+  getRefreshTokenFromRequest,
+} from "../sessions/session-request";
+import { RefreshSessionDto } from "../sessions/dto/refresh-session.dto";
 import { AuthGuard } from "./auth.guard";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
+import { AuthResult, AuthService } from "./auth.service";
+import { CurrentUser } from "./decorators/current-user.decorator";
 import { Public } from "./decorators/public.decorator";
-import { AuthService } from "./auth.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { RequestAuthDto } from "./dto/request-auth.dto";
 import { RequestTelegramPairingDto } from "./dto/request-telegram-pairing.dto";
@@ -24,43 +50,82 @@ export class AuthController {
   @Post("request")
   @Public()
   requestCode(@Req() request: Request, @Body() dto: RequestAuthDto) {
-    this.authRateLimitService.consume(`${this.getRequestIP(request)}:request`, {
-      message: "Too many auth requests",
-    });
-    return this.authService.requestCode(dto, {
-      requestIP: this.getRequestIP(request),
-      userAgent: this.getUserAgent(request),
-    });
+    const context = buildSessionRequestContext(request);
+    this.authRateLimitService.consume(
+      `request:${context.ipAddress ?? "unknown"}`,
+      {
+        message: "Too many auth requests",
+      },
+    );
+    return this.authService.requestCode(dto, context);
   }
 
   @Post("verify")
   @Public()
-  verifyCode(@Req() request: Request, @Body() dto: VerifyAuthDto) {
-    const phoneOrContact = dto.phone ?? dto.contact;
-    if (phoneOrContact) {
-      try {
-        const normalizedPhone = normalizePhone(phoneOrContact);
-        this.authRateLimitService.consume(
-          `${this.getRequestIP(request)}:verify:${normalizedPhone}`,
-          {
-            maxRequests: 10,
-            message: "Too many auth attempts",
-          },
-        );
-      } catch {
-        this.authRateLimitService.consume(
-          `${this.getRequestIP(request)}:verify`,
-        );
-      }
-    }
-    return this.authService.verifyCode(dto);
+  async verifyCode(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body() dto: VerifyAuthDto,
+  ) {
+    const context = buildSessionRequestContext(request);
+    this.authRateLimitService.consume(`verify:${context.deviceUuid}`, {
+      maxRequests: 10,
+      message: "Too many auth attempts",
+    });
+    const result = await this.authService.verifyCode(dto, context);
+    return this.presentAuthResult(response, context.platform, result);
   }
 
   @Post("login")
   @Public()
-  login(@Req() request: Request, @Body() dto: LoginAuthDto) {
-    this.authRateLimitService.consume(`${this.getRequestIP(request)}:login`);
-    return this.authService.login(dto);
+  async login(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body() dto: LoginAuthDto,
+  ) {
+    const context = buildSessionRequestContext(request);
+    this.authRateLimitService.consume(`login:${context.deviceUuid}`);
+    const result = await this.authService.login(dto, context);
+    return this.presentAuthResult(response, context.platform, result);
+  }
+
+  @Post("refresh")
+  @Public()
+  @HttpCode(200)
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body() dto?: RefreshSessionDto,
+  ) {
+    const context = buildSessionRequestContext(request);
+    const refreshToken = getRefreshTokenFromRequest(
+      request,
+      USER_REFRESH_COOKIE,
+      dto?.refreshToken,
+    );
+    if (!refreshToken) {
+      clearSessionCookies(response, SessionPrincipalType.USER);
+      throw new UnauthorizedException("Missing refresh token");
+    }
+    const result = await this.authService.refreshSession(refreshToken, context);
+    return this.presentAuthResult(response, context.platform, result);
+  }
+
+  @Post("logout")
+  @Public()
+  @HttpCode(204)
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body() dto?: RefreshSessionDto,
+  ): Promise<void> {
+    const refreshToken = getRefreshTokenFromRequest(
+      request,
+      USER_REFRESH_COOKIE,
+      dto?.refreshToken,
+    );
+    await this.authService.logoutWithRefreshToken(refreshToken);
+    clearSessionCookies(response, SessionPrincipalType.USER);
   }
 
   @Post("telegram/pairing")
@@ -69,9 +134,10 @@ export class AuthController {
     @Req() request: Request,
     @Body() dto: RequestTelegramPairingDto,
   ) {
+    const context = buildSessionRequestContext(request);
     return this.telegramBotService.createPairingLink(dto.phone, {
-      requestIP: this.getRequestIP(request),
-      userAgent: this.getUserAgent(request),
+      requestIP: context.ipAddress,
+      userAgent: context.userAgent,
     });
   }
 
@@ -81,18 +147,55 @@ export class AuthController {
     return this.authService.getMe(user.sub);
   }
 
-  private getRequestIP(request: Request): string {
-    const forwardedFor = request.headers["x-forwarded-for"];
-    if (typeof forwardedFor === "string") {
-      const firstForwardedFor = forwardedFor.split(",")[0];
-      return firstForwardedFor ? firstForwardedFor.trim() : "unknown";
-    }
-
-    return request.ip || "unknown";
+  @Get("sessions")
+  @UseGuards(AuthGuard)
+  listSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.listSessions(user);
   }
 
-  private getUserAgent(request: Request): string | null {
-    const userAgent = request.headers["user-agent"];
-    return typeof userAgent === "string" ? userAgent : null;
+  @Delete("sessions/:sessionId")
+  @UseGuards(AuthGuard)
+  revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("sessionId", new ParseUUIDPipe()) sessionId: string,
+  ) {
+    return this.authService.revokeSession(user, sessionId);
+  }
+
+  private presentAuthResult(
+    response: Response,
+    platform: SessionPlatform,
+    result: AuthResult,
+  ) {
+    const {
+      token,
+      refreshToken,
+      accessExpiresIn,
+      refreshExpiresAt,
+      sessionId,
+      deviceUuid,
+      ...profile
+    } = result;
+    if (platform === SessionPlatform.WEB) {
+      setSessionCookies(response, SessionPrincipalType.USER, {
+        accessToken: token,
+        refreshToken,
+        accessExpiresIn,
+        refreshExpiresAt,
+        sessionId,
+        deviceUuid,
+      });
+      return profile;
+    }
+
+    response.setHeader("Cache-Control", "no-store");
+    return {
+      ...profile,
+      token,
+      refreshToken,
+      expiresIn: accessExpiresIn,
+      refreshExpiresAt,
+      sessionId,
+    };
   }
 }

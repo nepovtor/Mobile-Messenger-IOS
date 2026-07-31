@@ -7,14 +7,15 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import request from "supertest";
 import { Repository } from "typeorm";
 import { WebSocket } from "ws";
+import { SessionPrincipalType } from "../src/entities/auth-session.entity";
 import { UserEntity } from "../src/entities/user.entity";
+import { SessionService } from "../src/modules/sessions/session.service";
 import {
   authenticateByCode,
   createTestApp,
   openRealtimeSocket,
   realtimeURL,
   sendRealtimeEvent,
-  type SocketEvent,
 } from "./support/auth-chat-test-harness";
 
 test("auth, direct-chat dedupe, search and media flow work end-to-end", async (t) => {
@@ -213,7 +214,7 @@ test("valid JWT returns 403 when the user no longer exists in the database", asy
   await request(app.getHttpServer())
     .get("/api/auth/me")
     .set("Authorization", `Bearer ${loginResponse.body.token}`)
-    .expect(403);
+    .expect(401);
 });
 
 test("verification codes are single-use and auth/me returns the current user", async (t) => {
@@ -456,7 +457,7 @@ test("valid token can connect to realtime websocket", async (t) => {
   assert.equal(ready.data.userID, anna.userID);
 });
 
-test("valid token can connect to realtime websocket via query token", async (t) => {
+test("realtime websocket rejects JWT passed through the query string", async (t) => {
   const app = await createTestApp({ allowPasswordLogin: true });
   t.after(async () => {
     await app.close();
@@ -464,7 +465,7 @@ test("valid token can connect to realtime websocket via query token", async (t) 
 
   const anna = await authenticateByCode(app, "+15551230011");
 
-  const ready = await new Promise<{ userID: string }>((resolve, reject) => {
+  const closeCode = await new Promise<number>((resolve, reject) => {
     const url = new URL(realtimeURL(app));
     url.searchParams.set("token", anna.token);
 
@@ -474,22 +475,78 @@ test("valid token can connect to realtime websocket via query token", async (t) 
     });
 
     const timeout = setTimeout(
-      () => reject(new Error("Timed out waiting for connection.ready")),
+      () => reject(new Error("Socket stayed open")),
       2000,
     );
-
-    socket.once("message", (raw: Buffer) => {
+    socket.once("close", (code) => {
       clearTimeout(timeout);
-      const event = JSON.parse(raw.toString()) as SocketEvent<{
-        userID: string;
-      }>;
-      resolve(event.data);
+      resolve(code);
     });
-
-    socket.once("error", reject);
+    socket.once("error", () => {
+      // The close frame is the security assertion source.
+    });
   });
 
-  assert.equal(ready.userID, anna.userID);
+  assert.equal(closeCode, 4001);
+});
+
+test("realtime websocket rejects a non-allowlisted Origin", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => app.close());
+  const anna = await authenticateByCode(app, "+15551230011");
+
+  const closeCode = await new Promise<number>((resolve, reject) => {
+    const socket = new WebSocket(realtimeURL(app), {
+      headers: {
+        Authorization: `Bearer ${anna.token}`,
+        Origin: "https://attacker.example",
+      },
+    });
+    const timeout = setTimeout(
+      () => reject(new Error("Socket stayed open")),
+      2000,
+    );
+    socket.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code);
+    });
+    socket.once("error", () => {
+      // The close frame is the security assertion source.
+    });
+  });
+  assert.equal(closeCode, 4001);
+});
+
+test("realtime websocket closes after its server session is revoked", async (t) => {
+  const app = await createTestApp({ allowPasswordLogin: true });
+  t.after(async () => app.close());
+  const anna = await authenticateByCode(app, "+15551230011");
+  const client = await openRealtimeSocket(app, anna.token);
+  await client.nextEvent("connection.ready");
+  const payload = JSON.parse(
+    Buffer.from(anna.token.split(".")[1] ?? "", "base64url").toString("utf8"),
+  ) as { sid: string };
+
+  const closed = new Promise<number>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Revoked socket stayed open")),
+      2000,
+    );
+    client.socket.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code);
+    });
+  });
+  await app
+    .get(SessionService)
+    .revokeSession(
+      SessionPrincipalType.USER,
+      anna.userID,
+      payload.sid,
+      "security_test",
+    );
+
+  assert.equal(await closed, 4001);
 });
 
 test("invalid token is rejected by realtime websocket", async (t) => {

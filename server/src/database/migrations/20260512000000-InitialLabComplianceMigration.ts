@@ -1,4 +1,3 @@
-import { hashSync } from "bcryptjs";
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class InitialLabComplianceMigration20260512000000 implements MigrationInterface {
@@ -224,20 +223,6 @@ export class InitialLabComplianceMigration20260512000000 implements MigrationInt
       CREATE INDEX IF NOT EXISTS "idx_push_subscriptions_user_platform"
       ON "push_subscriptions" ("user_id", "platform")
     `);
-
-    await queryRunner.query(
-      `
-        INSERT INTO "admins" ("id", "login", "password_hash", "display_name")
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT ("login") DO NOTHING
-      `,
-      [
-        "00000000-0000-0000-0000-000000000001",
-        "admin",
-        hashSync("admin", 12),
-        "Administrator",
-      ],
-    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { ContactEntity } from "../../entities/contact.entity";
+import { ContactRequestEntity } from "../../entities/contact-request.entity";
+import { LocationPermissionEntity } from "../../entities/location-permission.entity";
 import { LocationShareEntity } from "../../entities/location-share.entity";
 import { UserEntity } from "../../entities/user.entity";
 import { AuthModule } from "../auth/auth.module";
@@ -9,7 +10,12 @@ import { LocationService } from "./location.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([LocationShareEntity, ContactEntity, UserEntity]),
+    TypeOrmModule.forFeature([
+      LocationShareEntity,
+      LocationPermissionEntity,
+      ContactRequestEntity,
+      UserEntity,
+    ]),
     AuthModule,
   ],
   controllers: [LocationController],

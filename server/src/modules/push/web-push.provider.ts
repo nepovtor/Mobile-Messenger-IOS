@@ -8,7 +8,7 @@ import {
   hasWebPushConfig,
 } from "../common/runtime-config";
 import type {
-  MessageCreatedPushPayload,
+  GenericPushPayload,
   PushDeliveryResult,
   WebPushTarget,
 } from "./push.types";
@@ -41,7 +41,7 @@ export class WebPushProvider {
 
   async send(
     target: WebPushTarget,
-    payload: MessageCreatedPushPayload,
+    payload: GenericPushPayload,
   ): Promise<PushDeliveryResult> {
     if (!this.configured) {
       this.logMissingConfig();

@@ -38,8 +38,16 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    public func authenticate(with token: String, userID: UUID, displayName: String) {
+    public func authenticate(
+        with token: String,
+        refreshToken: String? = nil,
+        userID: UUID,
+        displayName: String
+    ) {
         tokenStore.store(token: token)
+        if let refreshToken {
+            tokenStore.store(refreshToken: refreshToken)
+        }
         defaults.set(userID.uuidString, forKey: Constants.userIDKey)
         defaults.set(displayName, forKey: Constants.displayNameKey)
         updateCurrentUser(userID: userID, displayName: displayName)
@@ -79,6 +87,25 @@ public final class SessionStore: ObservableObject {
         return nil
     }
 
+    public var authRefreshToken: String? {
+        tokenStore.retrieveRefreshToken()
+    }
+
+    public func updateCredentials(accessToken: String, refreshToken: String?) {
+        guard case let .authenticated(_, userID, displayName) = state else {
+            return
+        }
+        tokenStore.store(token: accessToken)
+        if let refreshToken {
+            tokenStore.store(refreshToken: refreshToken)
+        }
+        state = .authenticated(
+            token: accessToken,
+            userID: userID,
+            displayName: displayName
+        )
+    }
+
     private func updateCurrentUser(userID: UUID, displayName: String) {
         Constants.currentUserID = userID
         Constants.currentUserDisplayName = displayName
@@ -93,5 +120,12 @@ public final class SessionStore: ObservableObject {
 public protocol TokenStore {
     func store(token: String)
     func retrieveToken() -> String?
+    func store(refreshToken: String)
+    func retrieveRefreshToken() -> String?
     func clear()
+}
+
+public extension TokenStore {
+    func store(refreshToken: String) {}
+    func retrieveRefreshToken() -> String? { nil }
 }

@@ -4,16 +4,19 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  MaxLength,
   ValidateNested,
 } from "class-validator";
 
 class WebPushSubscriptionKeysDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   p256dh!: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   auth!: string;
 }
 
@@ -22,6 +25,7 @@ export class RegisterWebPushSubscriptionDto {
     protocols: ["https"],
     require_protocol: true,
   })
+  @MaxLength(2048)
   endpoint!: string;
 
   @IsOptional()
@@ -33,5 +37,6 @@ export class RegisterWebPushSubscriptionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(512)
   userAgent?: string;
 }

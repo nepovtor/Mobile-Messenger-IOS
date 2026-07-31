@@ -30,7 +30,10 @@ public final class AppContainer: ObservableObject {
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
-    private let authTokenProvider: @Sendable () async -> String?
+    private lazy var authTokenProvider: @Sendable () async -> String? = { [weak self] in
+        await self?.validAuthToken()
+    }
+    private var refreshTask: Task<AuthVerifyResponse, Error>?
     private let chatStore: ChatLocalStore
     private var chatRepository: ChatRepository!
     private var chatService: ChatNetworking!
@@ -76,10 +79,6 @@ public final class AppContainer: ObservableObject {
             router: router,
             connectionCoordinator: connectionCoordinator
         )
-        authTokenProvider = { [sessionStore] in
-            await MainActor.run { sessionStore.authToken }
-        }
-
         chatStore = SwiftDataChatStore()
         notificationManager = PushNotificationManager.shared
         configureNetworkingServices()
@@ -366,7 +365,7 @@ public final class AppContainer: ObservableObject {
                     FileHandle.standardError.write(data)
                 }
             } catch {
-                let message = "[Backend] health check failed for \(restBaseURL.absoluteString): \(AppError.presentableMessage(for: error))\n"
+                let message = "[Backend] health check failed.\n"
                 if let data = message.data(using: .utf8) {
                     FileHandle.standardError.write(data)
                 }
@@ -388,7 +387,14 @@ public final class AppContainer: ObservableObject {
     }
 
     public func logout() async {
-        await sessionCoordinator.logout()
+        let refreshToken = sessionStore.authRefreshToken
+        let baseURL = configService.restBaseURL
+        await sessionCoordinator.logout {
+            if let refreshToken {
+                try? await RESTAuthService(baseURL: baseURL)
+                    .logout(refreshToken: refreshToken)
+            }
+        }
     }
 
     public func openChatFromPush(chatID: UUID?) {
@@ -405,5 +411,74 @@ public final class AppContainer: ObservableObject {
 
     private func handleUnauthorizedSessionReset() async {
         sessionCoordinator.handleUnauthorized()
+    }
+
+    private func validAuthToken() async -> String? {
+        guard let accessToken = sessionStore.authToken else {
+            return nil
+        }
+        guard Self.jwtNeedsRefresh(accessToken) else {
+            return accessToken
+        }
+        guard let refreshToken = sessionStore.authRefreshToken else {
+            sessionCoordinator.handleUnauthorized()
+            return nil
+        }
+
+        let task: Task<AuthVerifyResponse, Error>
+        if let refreshTask {
+            task = refreshTask
+        } else {
+            let service = RESTAuthService(baseURL: configService.restBaseURL)
+            let newTask = Task {
+                try await service.refresh(refreshToken: refreshToken)
+            }
+            refreshTask = newTask
+            task = newTask
+        }
+
+        do {
+            let response = try await task.value
+            refreshTask = nil
+            sessionStore.updateCredentials(
+                accessToken: response.token,
+                refreshToken: response.refreshToken
+            )
+            return response.token
+        } catch {
+            refreshTask = nil
+            if let expiration = Self.jwtExpiration(accessToken),
+               expiration > Date() {
+                return accessToken
+            }
+            sessionCoordinator.handleUnauthorized()
+            return nil
+        }
+    }
+
+    private static func jwtNeedsRefresh(_ token: String) -> Bool {
+        guard let expiration = jwtExpiration(token) else {
+            return true
+        }
+        return expiration.timeIntervalSinceNow <= 60
+    }
+
+    private static func jwtExpiration(_ token: String) -> Date? {
+        let components = token.split(separator: ".")
+        guard components.count == 3 else { return nil }
+        var encodedPayload = String(components[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = encodedPayload.count % 4
+        if remainder != 0 {
+            encodedPayload.append(String(repeating: "=", count: 4 - remainder))
+        }
+        guard let data = Data(base64Encoded: encodedPayload),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let payload = object as? [String: Any],
+              let expiration = payload["exp"] as? TimeInterval else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: expiration)
     }
 }

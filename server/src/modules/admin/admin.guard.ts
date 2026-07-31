@@ -1,77 +1,73 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AdminEntity } from "../../entities/admin.entity";
+import { SessionPrincipalType } from "../../entities/auth-session.entity";
 import { AuthenticatedAdmin } from "../common/authenticated-admin";
-import {
-  getAdminLogin,
-  getJwtSecret,
-  isAdminConsoleEnabled,
-} from "../common/runtime-config";
+import { ADMIN_ACCESS_COOKIE } from "../sessions/session-cookies";
+import { getAccessTokenFromRequest } from "../sessions/session-request";
+import { SessionService } from "../sessions/session.service";
 
 @Injectable()
 export class AdminGuard implements CanActivate {
   constructor(
-    private readonly jwtService: JwtService,
+    private readonly sessionService: SessionService,
     @InjectRepository(AdminEntity)
     private readonly adminsRepository: Repository<AdminEntity>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<{
-      headers: Record<string, string | string[] | undefined>;
-      admin?: AuthenticatedAdmin;
-    }>();
-
+    const request = context.switchToHttp().getRequest<
+      Parameters<typeof getAccessTokenFromRequest>[0] & {
+        admin?: AuthenticatedAdmin;
+      }
+    >();
     if (request.admin) {
       return true;
     }
 
-    const header = request.headers["authorization"];
-    const token = Array.isArray(header) ? header[0] : header;
-
-    if (!token?.startsWith("Bearer ")) {
-      throw new UnauthorizedException("Missing bearer token");
+    const token = getAccessTokenFromRequest(request, ADMIN_ACCESS_COOKIE);
+    if (!token) {
+      throw new UnauthorizedException("Missing admin access token");
     }
-
     try {
-      const admin = this.jwtService.verify<AuthenticatedAdmin>(token.slice(7), {
-        secret: getJwtSecret(),
+      const claims = await this.sessionService.verifyAccessToken(
+        token,
+        SessionPrincipalType.ADMIN,
+      );
+      const session = await this.sessionService.requireActiveSession(claims);
+      const admin = await this.adminsRepository.findOneBy({
+        id: claims.sub as AdminEntity["id"],
       });
-      if (admin.role !== "admin") {
-        throw new UnauthorizedException("Admin access required");
+      if (
+        !admin ||
+        !admin.isActive ||
+        admin.deactivatedAt ||
+        Number(admin.sessionVersion) !== claims.sv
+      ) {
+        throw new UnauthorizedException("Admin session is no longer valid");
       }
-
-      const databaseAdmin = await this.adminsRepository.findOneBy({
+      request.admin = {
+        sub: admin.id,
+        sid: claims.sid,
+        jti: claims.jti,
         login: admin.login,
-      });
-      const fallbackAllowed =
-        isAdminConsoleEnabled() &&
-        admin.login.trim().toLowerCase() ===
-          getAdminLogin().trim().toLowerCase();
-      if (!databaseAdmin && !fallbackAllowed) {
-        throw new ForbiddenException(
-          "Admin associated with token was not found",
-        );
-      }
-
-      request.admin = admin;
+        role: "admin",
+        displayName: admin.displayName,
+        sessionVersion: Number(admin.sessionVersion),
+        deviceUuid: session.deviceUuid,
+      };
       return true;
     } catch (error) {
-      if (
-        error instanceof UnauthorizedException ||
-        error instanceof ForbiddenException
-      ) {
+      if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException("Invalid bearer token");
+      throw new UnauthorizedException("Invalid admin access token");
     }
   }
 }

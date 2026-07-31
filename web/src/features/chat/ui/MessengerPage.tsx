@@ -9,14 +9,8 @@ import { logoutUserSession } from "@/app/sessionCoordinator";
 
 export function MessengerPage() {
   const navigate = useNavigate();
-  const {
-    currentUser,
-    token,
-    isAuthenticated,
-    error,
-    clearError,
-    updateDisplayName,
-  } = authStore();
+  const { currentUser, isAuthenticated, error, clearError, updateDisplayName } =
+    authStore();
   const {
     loadChats,
     upsertMessage,
@@ -28,13 +22,13 @@ export function MessengerPage() {
   } = chatStore();
 
   useEffect(() => {
-    if (!isAuthenticated || !token || !currentUser) {
+    if (!isAuthenticated || !currentUser) {
       navigate("/", { replace: true });
       return;
     }
 
     void loadChats();
-    realtimeStore.getState().connect(token, (event) => {
+    realtimeStore.getState().connect((event) => {
       if (event.event === "message.created") {
         const data = event.data as {
           chatID: string;
@@ -112,7 +106,6 @@ export function MessengerPage() {
     markMessageRead,
     navigate,
     removeMessage,
-    token,
     updateTyping,
     updateMessage,
     upsertMessage,

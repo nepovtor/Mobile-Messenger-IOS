@@ -18,6 +18,12 @@ export enum AuthMethod {
   EMAIL = "email",
 }
 
+export enum UserStatus {
+  ACTIVE = "active",
+  BLOCKED = "blocked",
+  DEACTIVATED = "deactivated",
+}
+
 @Entity({ name: "users" })
 export class UserEntity {
   @PrimaryColumn("uuid")
@@ -51,6 +57,19 @@ export class UserEntity {
 
   @Column({ name: "display_name", type: "varchar" })
   displayName!: string;
+
+  @Column({
+    type: "simple-enum",
+    enum: UserStatus,
+    default: UserStatus.ACTIVE,
+  })
+  status!: UserStatus;
+
+  @Column({ name: "session_version", type: "integer", default: 1 })
+  sessionVersion!: number;
+
+  @Column({ name: "last_login_at", type: "timestamptz", nullable: true })
+  lastLoginAt!: Date | null;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

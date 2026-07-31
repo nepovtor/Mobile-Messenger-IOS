@@ -7,12 +7,15 @@ import { AuthModule } from "./auth/auth.module";
 import { AuthGuard } from "./auth/auth.guard";
 import { ChatModule } from "./chat/chat.module";
 import { ContactsModule } from "./contacts/contacts.module";
+import { DevicesModule } from "./devices/devices.module";
 import { DocsModule } from "./docs/docs.module";
+import { EncryptedMessagesModule } from "./encrypted-messages/encrypted-messages.module";
 import { HealthModule } from "./health/health.module";
 import { MediaModule } from "./media/media.module";
 import { LocationModule } from "./location/location.module";
 import { PushModule } from "./push/push.module";
 import { RealtimeModule } from "./realtime/realtime.module";
+import { SecurityModule } from "./security/security.module";
 import { SystemModule } from "./system/system.module";
 import { UsersModule } from "./users/users.module";
 import { VersionModule } from "./version/version.module";
@@ -27,8 +30,11 @@ import { VersionModule } from "./version/version.module";
     AuthModule,
     UsersModule,
     ContactsModule,
+    DevicesModule,
+    EncryptedMessagesModule,
     LocationModule,
     RealtimeModule,
+    SecurityModule,
     PushModule,
     MediaModule,
     ChatModule,

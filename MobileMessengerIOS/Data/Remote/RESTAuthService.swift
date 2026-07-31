@@ -8,18 +8,31 @@ public protocol AuthNetworking: Sendable {
 }
 
 public struct RESTAuthService: AuthNetworking {
+    public static let clientPlatform = "ios"
+    public static let genericDeviceName = "Mobile Messenger iOS"
+
     private let baseURL: URL
     private let session: URLSession
+    private let deviceID: String
+    private let deviceName: String
 
-    public init(baseURL: URL, session: URLSession = .shared) {
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        deviceID: String = KeychainDeviceIdentifierStore.shared.retrieveOrCreateIdentifier(),
+        deviceName: String = RESTAuthService.genericDeviceName
+    ) {
         self.baseURL = baseURL
         self.session = session
+        self.deviceID = deviceID
+        self.deviceName = deviceName
     }
 
     public func requestTelegramPairing(phone: String) async throws -> TelegramPairingResponse {
-        try await sendRequest(endpoint: GeneratedAPIContract.path(.authTelegramPairing), payload: [
-            "phone": phone
-        ])
+        try await sendRequest(
+            endpoint: GeneratedAPIContract.path(.authTelegramPairing),
+            payload: ["phone": phone]
+        )
     }
 
     public func requestCode(method: AuthMethod, contact: String) async throws -> AuthCodeResponse {
@@ -45,14 +58,49 @@ public struct RESTAuthService: AuthNetworking {
         ])
     }
 
-    private func sendRequest<Response: Decodable>(endpoint: String, payload: [String: String]) async throws -> Response {
+    public func refresh(refreshToken: String) async throws -> AuthVerifyResponse {
+        try await sendRequest(
+            endpoint: "auth/refresh",
+            payload: ["refreshToken": refreshToken],
+            maxAttempts: 1
+        )
+    }
+
+    public func logout(refreshToken: String) async throws {
+        var request = URLRequest(url: baseURL.appendingAPIPath("auth/logout"))
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["refreshToken": refreshToken],
+            options: []
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.clientPlatform, forHTTPHeaderField: "X-Client-Platform")
+        request.setValue(deviceID, forHTTPHeaderField: "X-Device-ID")
+        request.setValue(deviceName, forHTTPHeaderField: "X-Device-Name")
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.userAuthenticationRequired)
+        }
+    }
+
+    private func sendRequest<Response: Decodable>(
+        endpoint: String,
+        payload: [String: String],
+        includesDeviceIdentity: Bool = true,
+        maxAttempts: Int = 3
+    ) async throws -> Response {
         var request = URLRequest(url: baseURL.appendingAPIPath(endpoint))
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if includesDeviceIdentity {
+            request.setValue(Self.clientPlatform, forHTTPHeaderField: "X-Client-Platform")
+            request.setValue(deviceID, forHTTPHeaderField: "X-Device-ID")
+            request.setValue(deviceName, forHTTPHeaderField: "X-Device-Name")
+        }
 
         var attempt = 0
-        let maxAttempts = 3
         var lastError: Error?
 
         repeat {
@@ -138,12 +186,14 @@ public struct TelegramPairingResponse: Codable, Sendable {
 
 public struct AuthVerifyResponse: Decodable {
     public let token: String
+    public let refreshToken: String?
     public let userID: UUID
     public let displayName: String
     public let phone: String?
 
     enum CodingKeys: String, CodingKey {
         case token
+        case refreshToken
         case userID
         case userId
         case displayName
@@ -151,8 +201,15 @@ public struct AuthVerifyResponse: Decodable {
         case contact
     }
 
-    public init(token: String, userID: UUID, displayName: String, phone: String? = nil) {
+    public init(
+        token: String,
+        refreshToken: String? = nil,
+        userID: UUID,
+        displayName: String,
+        phone: String? = nil
+    ) {
         self.token = token
+        self.refreshToken = refreshToken
         self.userID = userID
         self.displayName = displayName
         self.phone = phone
@@ -161,6 +218,7 @@ public struct AuthVerifyResponse: Decodable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         token = try container.decode(String.self, forKey: .token)
+        refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
         displayName = try container.decode(String.self, forKey: .displayName)
         phone =
             try container.decodeIfPresent(String.self, forKey: .phone) ??

@@ -1,150 +1,155 @@
 # Cloudways PM2 Runbook
 
-Project path on Cloudways:
+Use this only when the container deployment in
+[SECURITY_DEPLOYMENT.md](./SECURITY_DEPLOYMENT.md) is unavailable. The same
+release, secret, migration, firewall, TLS, and rollback gates still apply.
 
-```bash
-/home/master/Mobile-Messenger-IOS/server
+Project:
+
+```text
+/home/master/Mobile-Messenger-IOS
 ```
 
-## 1. Update code
+Production env (outside Git):
+
+```text
+/secure/config/mobile-messenger.production.env
+```
+
+There are no `ADMIN_LOGIN`/`ADMIN_PASSWORD` environment credentials and no
+seeded administrator. Provision administrators only through the audited CLI.
+
+## 1. Deploy reviewed code
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS
-git pull
-cd /home/master/Mobile-Messenger-IOS/server
+git fetch --prune
+git checkout <reviewed-commit>
+Scripts/verify-production-security.sh
 ```
 
-## 2. Verify production env
+Do not deploy a moving branch head or use `git pull` without reviewing the
+resulting commit.
 
-Required values in `/home/master/Mobile-Messenger-IOS/server/.env`:
-
-- `NODE_ENV=production`
-- `PORT=3001`
-- `DATABASE_URL=<Supabase PostgreSQL URL>`
-- `DB_SYNCHRONIZE=false`
-- `JWT_SECRET_KEY`
-- `JWT_SECRET`
-- `JWT_EXPIRES_IN`
-- `ADMIN_LOGIN`
-- `ADMIN_PASSWORD`
-- `ADMIN_DISPLAY_NAME`
-- `ADMIN_JWT_EXPIRES_IN`
-
-Quick check:
+## 2. Install, test, and build
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS/server
-grep -E '^(NODE_ENV|PORT|DATABASE_URL|DB_SYNCHRONIZE|JWT_SECRET_KEY|JWT_SECRET|JWT_EXPIRES_IN|ADMIN_LOGIN|ADMIN_PASSWORD|ADMIN_DISPLAY_NAME|ADMIN_JWT_EXPIRES_IN)=' .env
-```
-
-Do not commit `.env` to GitHub.
-
-## 3. Install dependencies
-
-```bash
-cd /home/master/Mobile-Messenger-IOS/server
-npm install
-```
-
-## 4. Build backend
-
-```bash
-cd /home/master/Mobile-Messenger-IOS/server
+npm ci
+npm run format:check
+npm run lint
+npm test
 npm run build
+npm audit --omit=dev --audit-level=high
 ```
 
-## 5. Run migrations
+Do not use `npm install`, `npm audit fix --force`, or an uncommitted lockfile on
+the production host.
+
+## 3. Validate configuration without printing secrets
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS/server
-npm run migration:run
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  node --require dotenv/config \
+  --eval 'require("./dist/modules/common/runtime-config.js").validateRuntimeConfig()'
 ```
 
-## 6. Local process check
+Never `cat`, `grep`, or enable shell tracing on the production env. The
+validator reports missing variable names, not values.
+
+## 4. Backup and migrate
+
+Complete [BACKUP_RESTORE.md](./BACKUP_RESTORE.md), then:
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS/server
-npm start
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  npm run migration:show:dist
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  npm run migration:run:dist
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  npm run migration:show:dist
 ```
 
-If the app starts correctly, stop it with `Ctrl+C` and continue with PM2.
+Stop if the migration state is unexpected. Do not run `synchronize` in
+production.
 
-## 7. PM2 start or restart
+## 5. Create the first administrator
 
-Check current process:
-
-```bash
-pm2 status
-pm2 logs messenger-backend --lines 100
-```
-
-If `messenger-backend` already exists and must be recreated:
+Only when no active administrator exists:
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS/server
-pm2 delete messenger-backend
-pm2 start dist/main.js --name messenger-backend --update-env
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  npm run admin:create -- --login <login> --generate-password
+```
+
+The generated password is shown once. Transfer it through the approved
+credential channel; never add it to env or deployment scripts.
+
+## 6. Start or reload PM2
+
+The checked-in legacy PM2 ecosystem file may contain stale dotenv settings, so
+start the reviewed binary directly with the protected env path:
+
+```bash
+cd /home/master/Mobile-Messenger-IOS/server
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  NODE_ENV=production \
+  pm2 start dist/main.js \
+  --name messenger-backend \
+  --time \
+  --update-env
 pm2 save
 ```
 
-If you want to use the repo PM2 config instead:
+For a zero-downtime reload after the process exists:
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS/server
-pm2 delete messenger-backend
-pm2 start ecosystem.config.js --only messenger-backend --update-env
+DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
+  NODE_ENV=production \
+  pm2 reload messenger-backend --update-env
 pm2 save
 ```
 
-## 8. Check PM2 and port
+## 7. Verify
 
 ```bash
 pm2 status
-ss -ltnp | grep 3001
+ss -ltnp | grep '127.0.0.1:3001'
+curl --fail --silent http://127.0.0.1:3001/api/health
+curl --fail --silent https://phpstack-1634854-6489525.cloudwaysapps.com/api/health
 ```
 
-## 9. Check internal endpoints
+Also execute every post-deployment control in
+[SECURITY_DEPLOYMENT.md](./SECURITY_DEPLOYMENT.md), including rejected
+plaintext, unlisted Origin, query token, anonymous DB/S3, revoked session/device,
+generic push, and log-redaction checks.
 
-```bash
-curl -i http://127.0.0.1:3001/api/health
-curl -i http://127.0.0.1:3001/api/version
-```
+## 8. Logs
 
-## 10. Check public endpoints
-
-```bash
-curl -i https://phpstack-1634854-6489525.cloudwaysapps.com/api/health
-curl -i https://phpstack-1634854-6489525.cloudwaysapps.com/api/version
-```
-
-## 11. Check WebSocket proxy
-
-Basic handshake check:
-
-```bash
-curl --http1.1 -i -N \
-  -H 'Connection: Upgrade' \
-  -H 'Upgrade: websocket' \
-  -H 'Sec-WebSocket-Version: 13' \
-  -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-  https://phpstack-1634854-6489525.cloudwaysapps.com/realtime
-```
-
-Expected result: `HTTP/1.1 101 Switching Protocols`.
-
-## 12. Logs
+Use request IDs, status codes, event types, and pseudonymous principal/session
+IDs. Do not paste raw log files into tickets/chat:
 
 ```bash
 pm2 logs messenger-backend --lines 100
-tail -n 100 /home/master/Mobile-Messenger-IOS/server/logs/app.log
-tail -n 100 /home/master/Mobile-Messenger-IOS/server/logs/errors.log
 ```
 
-## 13. Restore after reboot
+For reviewed archive/retention cleanup, use the scoped command in
+[INCIDENT_RESPONSE.md](./INCIDENT_RESPONSE.md).
+
+## 9. Reboot and rollback
 
 ```bash
 pm2 startup
 pm2 save
 ```
 
-If `pm2 startup` requires elevated rights or Cloudways blocks system startup registration, do not force it. Ask Cloudways support to confirm how PM2 services should be restored after reboot on this stack.
+If Cloudways restricts startup registration, use its supported service manager;
+do not escalate around the platform controls.
+
+Rollback follows the database compatibility rules in
+[SECURITY_DEPLOYMENT.md](./SECURITY_DEPLOYMENT.md). Never restore plaintext
+writes or a default administrator to recover availability.

@@ -105,7 +105,7 @@ test("user entity stores phone and telegram auth fields", async (t) => {
   assert.ok(user.updatedAt instanceof Date);
 });
 
-test("/auth/request with telegram provider returns TELEGRAM_NOT_LINKED if no link exists", async (t) => {
+test("/auth/request does not disclose whether a Telegram link exists", async (t) => {
   const app = await createTestApp({ verificationProvider: "telegram" });
   t.after(async () => {
     await app.close();
@@ -124,10 +124,12 @@ test("/auth/request with telegram provider returns TELEGRAM_NOT_LINKED if no lin
   const response = await request(app.getHttpServer())
     .post("/api/auth/request")
     .send({ phone: "+375291234567" })
-    .expect(400);
+    .expect(201);
 
-  assert.equal(response.body.code, "TELEGRAM_NOT_LINKED");
-  assert.match(response.body.message, /Link Telegram in the app first/i);
+  assert.equal(response.body.status, "code_sent");
+  assert.equal(response.body.delivery, "telegram");
+  assert.equal("code" in response.body, false);
+  assert.equal("message" in response.body, false);
 });
 
 test("Telegram contact update creates TelegramLink with telegramUserId", async (t) => {

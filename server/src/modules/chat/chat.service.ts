@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -16,6 +17,11 @@ import {
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
 import { normalizeContact } from "../common/contact.utils";
+import {
+  isE2EEEnabled,
+  isE2EERequired,
+  isLegacyMessagesReadEnabled,
+} from "../common/runtime-config";
 import { ChatEventsService } from "../chat-events/chat-events.service";
 import { MediaService } from "../media/media.service";
 import { PushService } from "../push/push.service";
@@ -126,6 +132,8 @@ export class ChatService {
         title,
         lastMessageId: null,
         lastActivity: new Date(),
+        encryptionEpoch: 1,
+        e2eeRequired: isE2EEEnabled() || isE2EERequired(),
       }),
     );
 
@@ -150,6 +158,11 @@ export class ChatService {
   }
 
   async listChats(userID: string, search?: string): Promise<ChatSummary[]> {
+    if (search?.trim() && isE2EERequired()) {
+      throw new ForbiddenException(
+        "Server-side message search is disabled for E2EE",
+      );
+    }
     const participants = await this.participantsRepository.find({
       where: { userId: userID, hiddenAt: IsNull() },
       relations: { chat: { lastMessage: true } },
@@ -224,6 +237,7 @@ export class ChatService {
     limit = 100,
     before?: string,
   ): Promise<MessageResponse[]> {
+    this.requireLegacyMessageReads();
     await this.getParticipantOrFail(chatID, userID);
 
     let createdBefore: Date | undefined;
@@ -264,6 +278,7 @@ export class ChatService {
     dto: SendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
+    this.requirePlaintextMessages();
     return this.createMessage(
       chatID,
       {
@@ -281,6 +296,7 @@ export class ChatService {
     dto: RealtimeSendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
+    this.requirePlaintextMessages();
     return this.createMessage(chatID, dto, user);
   }
 
@@ -438,6 +454,7 @@ export class ChatService {
     messageID: string,
     user: AuthenticatedUser,
   ): Promise<{ ok: true }> {
+    this.requireLegacyMessageReads();
     const participant = await this.getParticipantOrFail(chatID, user.sub);
     const message = await this.messagesRepository.findOne({
       where: { id: messageID as MessageEntity["id"], chatId: chatID },
@@ -492,6 +509,7 @@ export class ChatService {
     dto: UpdateMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
+    this.requirePlaintextMessages();
     await this.getParticipantOrFail(chatID, user.sub);
     const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
 
@@ -532,6 +550,7 @@ export class ChatService {
     messageID: string,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
+    this.requirePlaintextMessages();
     await this.getParticipantOrFail(chatID, user.sub);
     const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
 
@@ -612,6 +631,22 @@ export class ChatService {
     secondUserID: string,
   ): Promise<ChatEntity | null> {
     return this.findExistingDirectChat([firstUserID, secondUserID].sort());
+  }
+
+  private requirePlaintextMessages(): void {
+    if (isE2EERequired()) {
+      throw new ForbiddenException(
+        "Plaintext messages are disabled; use encrypted-message envelopes",
+      );
+    }
+  }
+
+  private requireLegacyMessageReads(): void {
+    if (isE2EERequired() || !isLegacyMessagesReadEnabled()) {
+      throw new ForbiddenException(
+        "Legacy plaintext message reads are disabled",
+      );
+    }
   }
 
   async findExistingDirectChatIDsByUsers(
@@ -702,6 +737,11 @@ export class ChatService {
       },
       {
         sub: currentUser.id,
+        sid: "internal-contact-flow",
+        jti: "internal-contact-flow",
+        role: "user",
+        sessionVersion: currentUser.sessionVersion,
+        deviceUuid: "internal-contact-flow",
         login: currentUser.login ?? currentUser.contact,
         displayName: currentUser.displayName,
         contact: currentUser.contact,

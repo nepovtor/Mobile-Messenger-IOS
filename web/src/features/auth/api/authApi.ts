@@ -10,13 +10,16 @@ import { apiPath } from "@/shared/api/generated/apiContract";
 
 export const authApi = {
   requestTelegramPairing(phone: string) {
-    return httpRequest<TelegramPairingResponse>(apiPath("authTelegramPairing"), {
-      method: "POST",
-      authMode: "none",
-      body: JSON.stringify({
-        phone,
-      }),
-    });
+    return httpRequest<TelegramPairingResponse>(
+      apiPath("authTelegramPairing"),
+      {
+        method: "POST",
+        authMode: "none",
+        body: JSON.stringify({
+          phone,
+        }),
+      },
+    );
   },
   async requestCode(phone: string) {
     const payload = await httpRequest<Partial<AuthCodeResponse>>(
@@ -53,6 +56,12 @@ export const authApi = {
       method: "POST",
       authMode: "none",
       body: JSON.stringify(payload),
+    });
+  },
+  logout() {
+    return httpRequest<void>("/auth/logout", {
+      method: "POST",
+      authMode: "none",
     });
   },
   getMe() {

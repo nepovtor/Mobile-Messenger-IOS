@@ -2,11 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuthMethod, UserEntity } from "../../entities/user.entity";
 import { normalizePhone } from "../common/contact.utils";
+import { isProductionEnv } from "../common/runtime-config";
 import { AuthService } from "../auth/auth.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
@@ -27,6 +29,13 @@ export class UsersService {
     contact: string;
     phone: string | null;
   }> {
+    if (isProductionEnv()) {
+      // Production accounts must be created through a verified authentication
+      // flow. Hiding this legacy route also avoids exposing a registration
+      // oracle to unauthenticated callers.
+      throw new NotFoundException("Route not found");
+    }
+
     const login = this.authService.normalizeLogin(dto.login);
     const displayName = dto.displayName.trim();
     const displayNameLength = Array.from(displayName).length;

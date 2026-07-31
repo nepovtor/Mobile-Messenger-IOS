@@ -5,42 +5,68 @@ import {
   HttpException,
   HttpStatus,
 } from "@nestjs/common";
-import { Response } from "express";
-import { appLogger } from "./app-logger";
-import { JsonObject, Throwable } from "./json.types";
+import type { Request, Response } from "express";
+import { appLogger, getSafeRoutePath } from "./app-logger";
 
-type RequestLogContext = {
-  method?: string;
-  originalUrl?: string;
-  url?: string;
-  params?: Record<string, string>;
-  query?: Record<string, string | string[]>;
-  body?: JsonObject;
+type RequestWithLogContext = Request & {
+  requestId?: string;
 };
+
+type ErrorResponseBody = {
+  code?: unknown;
+  error?: unknown;
+};
+
+function normalizeErrorCode(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized && normalized.length <= 80 ? normalized : null;
+}
+
+export function getExceptionErrorCode(
+  exceptionResponse: unknown,
+  status: number,
+): string {
+  if (typeof exceptionResponse === "object" && exceptionResponse !== null) {
+    const body = exceptionResponse as ErrorResponseBody;
+    const explicitCode =
+      normalizeErrorCode(body.code) ?? normalizeErrorCode(body.error);
+    if (explicitCode) {
+      return explicitCode;
+    }
+  }
+  return `HTTP_${status}`;
+}
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  catch(exception: Throwable, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<RequestLogContext>() ?? {};
+    const request = ctx.getRequest<RequestWithLogContext>();
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
+      const errorCode = getExceptionErrorCode(exceptionResponse, status);
+      (response.locals as { errorCode?: string }).errorCode = errorCode;
 
       if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
         void appLogger.error("http", "Unhandled HTTP exception", exception, {
+          requestId: request.requestId ?? null,
           method: request.method,
-          url: request.originalUrl || request.url,
-          params: request.params,
-          query: request.query,
-          body: request.body,
+          route: getSafeRoutePath(request),
           statusCode: status,
+          errorCode,
         });
       }
 
-      // Ensure response is always JSON object
       if (typeof exceptionResponse === "object" && exceptionResponse !== null) {
         response.status(status).json(exceptionResponse);
       } else {
@@ -50,34 +76,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           error: HttpStatus[status],
         });
       }
-    } else if (exception instanceof Error) {
-      void appLogger.error("http", "Unhandled runtime error", exception, {
-        method: request.method,
-        url: request.originalUrl || request.url,
-        params: request.params,
-        query: request.query,
-        body: request.body,
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      });
-      response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: "Internal server error",
-        error: "Internal Server Error",
-      });
-    } else {
-      void appLogger.error("http", "Unknown runtime error", exception, {
-        method: request.method,
-        url: request.originalUrl || request.url,
-        params: request.params,
-        query: request.query,
-        body: request.body,
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      });
-      response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: "Internal server error",
-        error: "Internal Server Error",
-      });
+      return;
     }
+
+    const errorCode = "INTERNAL_SERVER_ERROR";
+    (response.locals as { errorCode?: string }).errorCode = errorCode;
+    void appLogger.error(
+      "http",
+      exception instanceof Error
+        ? "Unhandled runtime error"
+        : "Unknown runtime error",
+      exception,
+      {
+        requestId: request.requestId ?? null,
+        method: request.method,
+        route: getSafeRoutePath(request),
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        errorCode,
+      },
+    );
+    response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: "Internal server error",
+      error: "Internal Server Error",
+    });
   }
 }

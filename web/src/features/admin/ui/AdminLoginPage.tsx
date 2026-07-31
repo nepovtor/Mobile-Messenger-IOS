@@ -55,11 +55,11 @@ export function AdminLoginPage() {
                   <LockKeyhole className="h-5 w-5 text-amber-100" />
                 </div>
                 <h2 className="mt-5 text-lg font-semibold text-white">
-                  Config-based access
+                  Managed access
                 </h2>
                 <p className="mt-3 text-sm leading-7 text-slate-400">
-                  Используйте данные, заданные на сервере через `ADMIN_LOGIN` и
-                  `ADMIN_PASSWORD`.
+                  Используйте отдельную учётную запись, созданную безопасной
+                  серверной CLI-командой.
                 </p>
               </Card>
             </div>
@@ -74,8 +74,8 @@ export function AdminLoginPage() {
                 `system`-маршрутов.
               </p>
               <p className="mt-3 text-sm leading-7 text-slate-400">
-                Если вход ещё не настроен, сначала задайте переменные окружения
-                на backend-стороне и только потом возвращайтесь к этой форме.
+                Если вход ещё не настроен, администратор инфраструктуры должен
+                создать учётную запись через `npm run admin:create`.
               </p>
             </Card>
 
@@ -125,7 +125,7 @@ export function AdminLoginPage() {
                   aria-label="Admin login"
                   value={loginValue}
                   onChange={(event) => setLoginValue(event.target.value)}
-                  placeholder="ADMIN_LOGIN"
+                  placeholder="Admin login"
                 />
               </div>
 
@@ -142,7 +142,7 @@ export function AdminLoginPage() {
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="ADMIN_PASSWORD"
+                  placeholder="Admin password"
                 />
               </div>
 

@@ -1,25 +1,20 @@
 /* global self, URL */
 
 self.addEventListener("push", (event) => {
-  if (!event.data) {
-    return;
-  }
-
   let payload = {};
 
-  try {
-    payload = event.data.json();
-  } catch {
-    payload = {
-      title: "Mobile Messenger",
-      body: event.data.text(),
-      url: "/messenger",
-    };
+  if (event.data) {
+    try {
+      const decodedPayload = event.data.json();
+      if (typeof decodedPayload === "object" && decodedPayload !== null) {
+        payload = decodedPayload;
+      }
+    } catch {
+      payload = {};
+    }
   }
 
-  const title = payload.title || "Mobile Messenger";
   const options = {
-    body: payload.body || "У вас новое сообщение.",
     tag: payload.messageId || payload.chatId || "message-created",
     data: {
       url: payload.url || "/messenger",
@@ -29,34 +24,42 @@ self.addEventListener("push", (event) => {
     },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    self.registration.showNotification("Новое сообщение", options),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const destinationUrl = new URL(
+  const requestedUrl = new URL(
     event.notification.data?.url || "/messenger",
     self.location.origin,
   );
+  const destinationUrl =
+    requestedUrl.origin === self.location.origin
+      ? requestedUrl
+      : new URL("/messenger", self.location.origin);
   const destinationPath =
     destinationUrl.pathname + destinationUrl.search + destinationUrl.hash;
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const visibleClient = clients.find((client) => "focus" in client);
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        const visibleClient = clients.find((client) => "focus" in client);
 
-      if (visibleClient) {
-        return visibleClient.focus().then(() => {
-          visibleClient.postMessage({
-            type: "push.navigate",
-            url: destinationPath,
-            chatId: event.notification.data?.chatId || null,
+        if (visibleClient) {
+          return visibleClient.focus().then(() => {
+            visibleClient.postMessage({
+              type: "push.navigate",
+              url: destinationPath,
+              chatId: event.notification.data?.chatId || null,
+            });
           });
-        });
-      }
+        }
 
-      return self.clients.openWindow(destinationPath);
-    }),
+        return self.clients.openWindow(destinationPath);
+      }),
   );
 });

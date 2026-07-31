@@ -4,6 +4,10 @@ import UserNotifications
 
 @MainActor
 final class PushNotificationManager: NSObject, ObservableObject {
+    nonisolated static var genericNotificationTitle: String {
+        "Новое сообщение"
+    }
+
     enum AuthorizationState: Equatable {
         case unknown
         case notDetermined
@@ -247,9 +251,6 @@ final class PushNotificationManager: NSObject, ObservableObject {
 
         latestDeviceToken = normalizedToken
         lastErrorMessage = nil
-#if DEBUG
-        print("[Push] Registered with APNs token: \(normalizedToken)")
-#endif
         analytics.track(
             event: AppAnalyticsEvent(
                 kind: .pushRegistered,
@@ -265,9 +266,6 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func didFailToRegister(error: Error) {
-#if DEBUG
-        print("[Push] Failed to register for remote notifications: \(error.localizedDescription)")
-#endif
         syncState = .failed
         if let nsError = error as NSError? {
             lastErrorMessage = nsError.localizedDescription
@@ -356,6 +354,22 @@ final class PushNotificationManager: NSObject, ObservableObject {
         return UUID(uuidString: rawChatID)
     }
 
+    nonisolated static func genericNotificationContent(
+        preservingRoutingFrom content: UNNotificationContent
+    ) -> UNMutableNotificationContent {
+        let genericContent = UNMutableNotificationContent()
+        genericContent.title = genericNotificationTitle
+        genericContent.body = ""
+        genericContent.sound = .default
+        genericContent.badge = content.badge
+
+        if let chatID = content.userInfo["chatId"] as? String {
+            genericContent.userInfo = ["chatId": chatID]
+        }
+
+        return genericContent
+    }
+
     nonisolated func handleRemoteNotification(
         userInfo: [AnyHashable: Any],
         completion: (() -> Void)? = nil
@@ -374,7 +388,21 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound, .badge])
+        guard notification.request.trigger is UNPushNotificationTrigger else {
+            completionHandler([.banner, .sound, .badge])
+            return
+        }
+
+        let content = Self.genericNotificationContent(
+            preservingRoutingFrom: notification.request.content
+        )
+        let request = UNNotificationRequest(
+            identifier: "\(notification.request.identifier).generic",
+            content: content,
+            trigger: nil
+        )
+        center.add(request)
+        completionHandler([])
     }
 
     nonisolated func userNotificationCenter(

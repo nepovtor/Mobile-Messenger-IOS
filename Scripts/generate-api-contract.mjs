@@ -85,10 +85,16 @@ function clientPath(route) {
 
 function renderTypeScript(items) {
   const entries = items
-    .map(
-      ({ operationId, route }) =>
-        `  ${JSON.stringify(operationId)}: ${JSON.stringify(clientPath(route))},`,
-    )
+    .map(({ operationId, route }) => {
+      const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(operationId)
+        ? operationId
+        : JSON.stringify(operationId);
+      const value = JSON.stringify(clientPath(route));
+      const singleLine = `  ${key}: ${value},`;
+      return singleLine.length <= 80
+        ? singleLine
+        : `  ${key}:\n    ${value},`;
+    })
     .join("\n");
   return `// Generated from contracts/openapi.json. Do not edit manually.
 export const apiOperations = {
@@ -101,10 +107,8 @@ export function apiPath(
   operation: APIOperation,
   parameters: Record<string, string> = {},
 ): string {
-  return apiOperations[operation].replace(
-    /\\{([^}]+)\\}/g,
-    (_, name: string) =>
-      encodeURIComponent(parameters[name] ?? "{" + name + "}"),
+  return apiOperations[operation].replace(/\\{([^}]+)\\}/g, (_, name: string) =>
+    encodeURIComponent(parameters[name] ?? "{" + name + "}"),
   );
 }
 `;

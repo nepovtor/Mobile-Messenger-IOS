@@ -4,10 +4,12 @@ import { chatStore } from "@/features/chat/model/chatStore";
 import { realtimeStore } from "@/features/chat/model/realtimeStore";
 import { locationStore } from "@/features/location/model/locationStore";
 import { pushStore } from "@/features/push/model/pushStore";
+import { purgeLegacyAuthStorage } from "@/utils/legacyAuthStorage";
 
 let isInitialized = false;
 
 export function initializeSessionCoordinator() {
+  purgeLegacyAuthStorage();
   if (isInitialized) {
     return;
   }
@@ -18,7 +20,7 @@ export function initializeSessionCoordinator() {
 export async function logoutUserSession() {
   await pushStore.getState().detachFromCurrentSession();
   clearFeatureState();
-  authStore.getState().logout();
+  await authStore.getState().logout();
 }
 
 export function handleUnauthorizedSession(message: string) {
