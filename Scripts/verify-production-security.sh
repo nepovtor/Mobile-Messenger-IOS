@@ -36,16 +36,16 @@ if git grep -n -I -E 'ADMIN_(LOGIN|PASSWORD)' \
   fail "administrator credentials must be provisioned through the CLI, not env"
 fi
 
-if rg -q '^[[:space:]]+(postgres|pgadmin|minio):[[:space:]]*$' \
+if grep -Eq '^[[:space:]]+(postgres|pgadmin|minio):[[:space:]]*$' \
   server/docker-compose.yml; then
   fail "production Compose must use managed Postgres/S3 and must not expose admin infrastructure"
 fi
 
-rg -q '127\.0\.0\.1:\$\{PORT' server/docker-compose.yml ||
+grep -Eq '127\.0\.0\.1:\$\{PORT' server/docker-compose.yml ||
   fail "backend port must bind to loopback for the host reverse proxy"
-rg -q 'read_only:[[:space:]]+true' server/docker-compose.yml ||
+grep -Eq 'read_only:[[:space:]]+true' server/docker-compose.yml ||
   fail "production backend filesystem must be read-only"
-rg -q 'no-new-privileges:true' server/docker-compose.yml ||
+grep -Eq 'no-new-privileges:true' server/docker-compose.yml ||
   fail "production backend must set no-new-privileges"
 
 required_production_variables=(
@@ -74,23 +74,23 @@ required_production_variables=(
 )
 
 for variable_name in "${required_production_variables[@]}"; do
-  if ! rg -q "^${variable_name}=" server/production.env.example; then
+  if ! grep -Eq "^${variable_name}=" server/production.env.example; then
     fail "${variable_name} is absent from server/production.env.example"
   fi
 done
 
-rg -q '^E2EE_REQUIRED=true$' server/production.env.example ||
+grep -Eq '^E2EE_REQUIRED=true$' server/production.env.example ||
   fail "production must reject plaintext messages"
-rg -q '^DB_SYNCHRONIZE=false$' server/production.env.example ||
+grep -Eq '^DB_SYNCHRONIZE=false$' server/production.env.example ||
   fail "production must use migrations"
-rg -q '^AUTH_ENABLE_DEMO_ACCOUNTS=false$' server/production.env.example ||
+grep -Eq '^AUTH_ENABLE_DEMO_ACCOUNTS=false$' server/production.env.example ||
   fail "demo accounts must be disabled"
-rg -q '^AUTH_ALLOW_TEST_CODE=false$' server/production.env.example ||
+grep -Eq '^AUTH_ALLOW_TEST_CODE=false$' server/production.env.example ||
   fail "test OTP codes must be disabled"
-rg -q '^COOKIE_SECURE=true$' server/production.env.example ||
+grep -Eq '^COOKIE_SECURE=true$' server/production.env.example ||
   fail "production cookies must be Secure"
 
-if rg -n \
+if grep -En \
   '(^|[[:space:]])(plaintext|text|preview|fileName|file_name)[!?]?:' \
   server/src/entities/encrypted-message.entity.ts \
   server/src/entities/encrypted-message-envelope.entity.ts \
@@ -98,16 +98,16 @@ if rg -n \
   fail "opaque delivery entities contain a plaintext field"
 fi
 
-if rg -n -i '\bdecrypt[A-Za-z0-9_]*\b' \
+if grep -Enir '(^|[^[:alnum:]_])decrypt[A-Za-z0-9_]*([^[:alnum:]_]|$)' \
   server/src/entities/encrypted-message.entity.ts \
   server/src/entities/encrypted-message-envelope.entity.ts \
   server/src/modules/devices; then
   fail "backend opaque-delivery code must not contain decryption capability"
 fi
 
-rg -q 'GENERIC_ALERT_BODY' server/src/modules/push/apns-push.provider.ts ||
+grep -Eq 'GENERIC_ALERT_BODY' server/src/modules/push/apns-push.provider.ts ||
   fail "APNs must use a generic notification body"
-rg -q 'message.available' server/src/modules/push/push.service.ts ||
+grep -Eq 'message.available' server/src/modules/push/push.service.ts ||
   fail "push delivery must announce availability without plaintext"
 
 printf 'Production security invariants verified.\n'
