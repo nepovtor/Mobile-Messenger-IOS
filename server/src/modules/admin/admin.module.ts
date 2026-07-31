@@ -1,23 +1,21 @@
 import { Module } from "@nestjs/common";
-import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AdminEntity } from "../../entities/admin.entity";
-import { getJwtSecret } from "../common/runtime-config";
+import { SecurityModule } from "../security/security.module";
+import { SessionsModule } from "../sessions/sessions.module";
 import { AdminController } from "./admin.controller";
 import { AdminGuard } from "./admin.guard";
+import { AdminRateLimitService } from "./admin-rate-limit.service";
 import { AdminService } from "./admin.service";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([AdminEntity]),
-    JwtModule.registerAsync({
-      useFactory: async () => ({
-        secret: getJwtSecret(),
-      }),
-    }),
+    SecurityModule,
+    SessionsModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, AdminGuard],
-  exports: [AdminGuard, JwtModule, TypeOrmModule],
+  providers: [AdminService, AdminGuard, AdminRateLimitService],
+  exports: [AdminGuard, SessionsModule, TypeOrmModule],
 })
 export class AdminModule {}

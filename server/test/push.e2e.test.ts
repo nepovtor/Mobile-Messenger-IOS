@@ -34,7 +34,7 @@ import { HealthModule } from "../src/modules/health/health.module";
 import { MediaModule } from "../src/modules/media/media.module";
 import { MediaService } from "../src/modules/media/media.service";
 import { ApnsPushProvider } from "../src/modules/push/apns-push.provider";
-import type { MessageCreatedPushPayload } from "../src/modules/push/push.types";
+import type { GenericPushPayload } from "../src/modules/push/push.types";
 import { UsersModule } from "../src/modules/users/users.module";
 import { WebPushProvider } from "../src/modules/push/web-push.provider";
 import { RealtimeModule } from "../src/modules/realtime/realtime.module";
@@ -110,7 +110,7 @@ class FakeMediaService {
 class FakeWebPushProvider {
   deliveries: Array<{
     endpoint: string;
-    payload: MessageCreatedPushPayload;
+    payload: GenericPushPayload;
   }> = [];
   configured = true;
   resultsByEndpoint = new Map<
@@ -134,7 +134,7 @@ class FakeWebPushProvider {
     return this.configured ? "test-vapid-public-key" : null;
   }
 
-  async send(target: { endpoint: string }, payload: MessageCreatedPushPayload) {
+  async send(target: { endpoint: string }, payload: GenericPushPayload) {
     this.deliveries.push({
       endpoint: target.endpoint,
       payload,
@@ -147,7 +147,7 @@ class FakeWebPushProvider {
 class FakeApnsPushProvider {
   deliveries: Array<{
     deviceToken: string;
-    payload: MessageCreatedPushPayload;
+    payload: GenericPushPayload;
   }> = [];
   configured = true;
 
@@ -155,10 +155,7 @@ class FakeApnsPushProvider {
     return this.configured;
   }
 
-  async send(
-    target: { deviceToken: string },
-    payload: MessageCreatedPushPayload,
-  ) {
+  async send(target: { deviceToken: string }, payload: GenericPushPayload) {
     this.deliveries.push({
       deviceToken: target.deviceToken,
       payload,
@@ -233,6 +230,7 @@ async function createTestApp() {
       TypeOrmModule.forRootAsync({
         useFactory: async () => ({
           type: "postgres",
+          autoLoadEntities: true,
           entities: [
             UserEntity,
             ContactEntity,
@@ -446,7 +444,7 @@ test("push: deletes web push subscriptions without removing historical rows", as
   assert.ok(subscription.disabledAt instanceof Date);
 });
 
-test("push: message.created notifications do not notify the author", async (t) => {
+test("push: notifications exclude the author and contain only a generic event", async (t) => {
   const { app, fakeWebPushProvider } = await createTestApp();
   t.after(async () => {
     await app.close();
@@ -497,7 +495,44 @@ test("push: message.created notifications do not notify the author", async (t) =
     firstWebPushDelivery.endpoint,
     "https://push.example.test/subscriptions/recipient",
   );
-  assert.equal(firstWebPushDelivery.payload.chatId, chatID);
+  assert.deepEqual(firstWebPushDelivery.payload, {
+    type: "message.available",
+  });
+});
+
+test("push: APNs receives no message, sender, chat, or message identifiers", async (t) => {
+  const { app, fakeApnsPushProvider } = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const author = await authenticateUser(app, "+15553670013", "Author");
+  const recipient = await authenticateUser(app, "+15553670014", "Recipient");
+  const authorApi = authedRequest(app, author.token);
+  const recipientApi = authedRequest(app, recipient.token);
+  await recipientApi.post("/api/push/devices").send({
+    token: "aabbccddeeff0011",
+    environment: "sandbox",
+    bundleId: "com.example.MobileMessenger",
+  });
+
+  const createChatResponse = await authorApi.post("/api/chats").send({
+    title: "Sensitive conversation title",
+    participantIDs: [recipient.userID],
+  });
+  const chatID = createChatResponse.body.id as string;
+  await authorApi.post(`/api/chats/${chatID}/messages`).send({
+    messageID: randomUUID(),
+    kind: "text",
+    text: "Sensitive plaintext preview",
+  });
+
+  await waitFor(() => fakeApnsPushProvider.deliveries.length === 1);
+  const delivery = fakeApnsPushProvider.deliveries[0];
+  assert.ok(delivery);
+  assert.deepEqual(delivery.payload, {
+    type: "message.available",
+  });
 });
 
 test("push: invalid subscriptions are disabled after upstream rejection", async (t) => {
@@ -669,22 +704,19 @@ test("push: telegram notifications are preferred for linked recipients", async (
     firstTelegramDelivery.text,
     /Новое сообщение в Mobile Messenger/,
   );
-  assert.match(firstTelegramDelivery.text, /Author/);
+  assert.doesNotMatch(firstTelegramDelivery.text, /Author/);
   assert.doesNotMatch(
     firstTelegramDelivery.text,
     /Telegram should receive this notification/,
   );
   assert.match(
     firstTelegramDelivery.text,
-    /href="https:\/\/web\.example\.test\/messenger\?chatId=/,
+    /href="https:\/\/web\.example\.test\/messenger"/,
   );
   assert.equal(firstTelegramDelivery.parseMode, "HTML");
   assert.equal(firstTelegramDelivery.disableWebPagePreview, true);
   assert.equal(firstTelegramDelivery.inlineButtonText, "Открыть чат");
-  assert.match(
-    String(firstTelegramDelivery.inlineButtonUrl),
-    /\/messenger\?chatId=/,
-  );
+  assert.match(String(firstTelegramDelivery.inlineButtonUrl), /\/messenger$/);
 });
 
 test("push: web push is used when recipient has no Telegram link", async (t) => {

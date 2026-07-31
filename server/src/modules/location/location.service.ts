@@ -1,12 +1,27 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
-import { ContactEntity } from "../../entities/contact.entity";
+import { In, MoreThan, Repository } from "typeorm";
+import {
+  ContactRequestEntity,
+  ContactRequestStatus,
+} from "../../entities/contact-request.entity";
+import {
+  LocationPermissionEntity,
+  LocationPermissionStatus,
+} from "../../entities/location-permission.entity";
 import { LocationShareEntity } from "../../entities/location-share.entity";
 import { UserEntity } from "../../entities/user.entity";
+import { isE2EERequired } from "../common/runtime-config";
+import { GrantLocationPermissionDto } from "./dto/grant-location-permission.dto";
 import { UpdateLocationDto } from "./dto/update-location.dto";
 
 const OUTDATED_LOCATION_THRESHOLD_MS = 10 * 60 * 1000;
+const MAX_PERMISSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
 type MyLocationResponse = {
   sharingEnabled: boolean;
@@ -25,6 +40,16 @@ type ContactLocationResponse = {
   accuracy: number | null;
   updatedAt: Date;
   isOutdated: boolean;
+  permissionExpiresAt: Date;
+};
+
+type LocationPermissionResponse = {
+  granteeUserID: string;
+  displayName: string;
+  status: LocationPermissionStatus;
+  grantedAt: Date;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
 };
 
 @Injectable()
@@ -32,13 +57,16 @@ export class LocationService {
   constructor(
     @InjectRepository(LocationShareEntity)
     private readonly locationSharesRepository: Repository<LocationShareEntity>,
-    @InjectRepository(ContactEntity)
-    private readonly contactsRepository: Repository<ContactEntity>,
+    @InjectRepository(LocationPermissionEntity)
+    private readonly locationPermissionsRepository: Repository<LocationPermissionEntity>,
+    @InjectRepository(ContactRequestEntity)
+    private readonly contactRequestsRepository: Repository<ContactRequestEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
   ) {}
 
   async getMyLocation(userId: string): Promise<MyLocationResponse> {
+    this.assertLegacyCoordinatesAllowed();
     const share = await this.locationSharesRepository.findOneBy({ userId });
     if (!share) {
       return {
@@ -57,6 +85,7 @@ export class LocationService {
     userId: string,
     dto: UpdateLocationDto,
   ): Promise<MyLocationResponse> {
+    this.assertLegacyCoordinatesAllowed();
     await this.requireUser(userId);
 
     const existing = await this.locationSharesRepository.findOneBy({ userId });
@@ -95,36 +124,138 @@ export class LocationService {
     return { ok: true };
   }
 
+  async grantPermission(
+    ownerUserID: string,
+    granteeUserID: string,
+    dto: GrantLocationPermissionDto,
+  ): Promise<LocationPermissionResponse> {
+    if (ownerUserID === granteeUserID) {
+      throw new BadRequestException(
+        "A location permission must target another user",
+      );
+    }
+
+    const contactRequest = await this.requireAcceptedContact(
+      ownerUserID,
+      granteeUserID,
+    );
+    const expiresAt = new Date(dto.expiresAt);
+    const now = new Date();
+    if (
+      Number.isNaN(expiresAt.getTime()) ||
+      expiresAt.getTime() <= now.getTime()
+    ) {
+      throw new BadRequestException("Permission expiry must be in the future");
+    }
+    if (expiresAt.getTime() - now.getTime() > MAX_PERMISSION_LIFETIME_MS) {
+      throw new BadRequestException(
+        "Location permission cannot exceed 30 days",
+      );
+    }
+
+    const existing = await this.locationPermissionsRepository.findOneBy({
+      ownerUserId: ownerUserID,
+      granteeUserId: granteeUserID,
+    });
+    const permission =
+      existing ??
+      this.locationPermissionsRepository.create({
+        ownerUserId: ownerUserID,
+        granteeUserId: granteeUserID,
+      });
+    permission.contactRequestId = contactRequest.id;
+    permission.status = LocationPermissionStatus.ACTIVE;
+    permission.grantedAt = now;
+    permission.expiresAt = expiresAt;
+    permission.revokedAt = null;
+
+    const saved = await this.locationPermissionsRepository.save(permission);
+    const grantee = await this.requireUser(granteeUserID);
+    return this.mapPermission(saved, grantee);
+  }
+
+  async listPermissions(
+    ownerUserID: string,
+  ): Promise<LocationPermissionResponse[]> {
+    const permissions = await this.locationPermissionsRepository.find({
+      where: { ownerUserId: ownerUserID },
+      relations: { granteeUser: true, contactRequest: true },
+      order: { updatedAt: "DESC" },
+    });
+
+    return permissions
+      .filter(
+        (permission) =>
+          permission.contactRequest.status === ContactRequestStatus.ACCEPTED,
+      )
+      .map((permission) =>
+        this.mapPermission(permission, permission.granteeUser),
+      );
+  }
+
+  async revokePermission(
+    ownerUserID: string,
+    granteeUserID: string,
+  ): Promise<{ ok: true }> {
+    const permission = await this.locationPermissionsRepository.findOneBy({
+      ownerUserId: ownerUserID,
+      granteeUserId: granteeUserID,
+    });
+    if (!permission) {
+      throw new NotFoundException("Location permission not found");
+    }
+
+    permission.status = LocationPermissionStatus.REVOKED;
+    permission.revokedAt = new Date();
+    await this.locationPermissionsRepository.save(permission);
+    return { ok: true };
+  }
+
   async getContactLocations(
     userId: string,
   ): Promise<ContactLocationResponse[]> {
-    const contacts = await this.contactsRepository.find({
-      where: { ownerUserId: userId },
-      relations: { contactUser: true },
-      order: { createdAt: "ASC" },
+    this.assertLegacyCoordinatesAllowed();
+    const now = new Date();
+    const permissions = await this.locationPermissionsRepository.find({
+      where: {
+        granteeUserId: userId,
+        status: LocationPermissionStatus.ACTIVE,
+        expiresAt: MoreThan(now),
+      },
+      relations: {
+        ownerUser: true,
+        contactRequest: true,
+      },
+      order: { grantedAt: "ASC" },
     });
-
-    if (contacts.length === 0) {
+    const authorized = permissions.filter((permission) =>
+      isAcceptedRelationship(
+        permission.contactRequest,
+        permission.ownerUserId,
+        userId,
+      ),
+    );
+    if (authorized.length === 0) {
       return [];
     }
 
     const shares = await this.locationSharesRepository.findBy({
-      userId: In(contacts.map((contact) => contact.contactUserId)),
+      userId: In(authorized.map((permission) => permission.ownerUserId)),
       sharingEnabled: true,
     });
     const shareByUserId = new Map(shares.map((share) => [share.userId, share]));
 
-    return contacts.flatMap((contact) => {
-      const share = shareByUserId.get(contact.contactUserId);
+    return authorized.flatMap((permission) => {
+      const share = shareByUserId.get(permission.ownerUserId);
       if (!share || share.latitude == null || share.longitude == null) {
         return [];
       }
 
       return [
         {
-          userID: contact.contactUser.id,
-          displayName: contact.contactUser.displayName,
-          phone: contact.contactUser.phone ?? contact.contactUser.contact,
+          userID: permission.ownerUser.id,
+          displayName: permission.ownerUser.displayName,
+          phone: permission.ownerUser.phone ?? permission.ownerUser.contact,
           latitude: share.latitude,
           longitude: share.longitude,
           accuracy: share.accuracy,
@@ -132,9 +263,35 @@ export class LocationService {
           isOutdated:
             Date.now() - share.updatedAt.getTime() >
             OUTDATED_LOCATION_THRESHOLD_MS,
+          permissionExpiresAt: permission.expiresAt as Date,
         },
       ];
     });
+  }
+
+  private async requireAcceptedContact(
+    firstUserID: string,
+    secondUserID: string,
+  ): Promise<ContactRequestEntity> {
+    const pairKey = [firstUserID, secondUserID].sort().join(":");
+    const request = await this.contactRequestsRepository.findOneBy({
+      pairKey,
+      status: ContactRequestStatus.ACCEPTED,
+    });
+    if (!request) {
+      throw new ForbiddenException(
+        "Location can only be shared with an accepted contact",
+      );
+    }
+    return request;
+  }
+
+  private assertLegacyCoordinatesAllowed(): void {
+    if (isE2EERequired()) {
+      throw new ForbiddenException(
+        "Plaintext location endpoints are disabled while E2EE is required",
+      );
+    }
   }
 
   private mapMyLocation(share: LocationShareEntity): MyLocationResponse {
@@ -147,12 +304,41 @@ export class LocationService {
     };
   }
 
-  private async requireUser(userId: string): Promise<void> {
+  private mapPermission(
+    permission: LocationPermissionEntity,
+    grantee: UserEntity,
+  ): LocationPermissionResponse {
+    return {
+      granteeUserID: grantee.id,
+      displayName: grantee.displayName,
+      status: permission.status,
+      grantedAt: permission.grantedAt,
+      expiresAt: permission.expiresAt,
+      revokedAt: permission.revokedAt,
+    };
+  }
+
+  private async requireUser(userId: string): Promise<UserEntity> {
     const user = await this.usersRepository.findOneBy({
       id: userId as UserEntity["id"],
     });
     if (!user) {
       throw new BadRequestException("User not found");
     }
+    return user;
   }
+}
+
+function isAcceptedRelationship(
+  request: ContactRequestEntity,
+  firstUserID: string,
+  secondUserID: string,
+): boolean {
+  return (
+    request.status === ContactRequestStatus.ACCEPTED &&
+    ((request.requesterUserId === firstUserID &&
+      request.recipientUserId === secondUserID) ||
+      (request.requesterUserId === secondUserID &&
+        request.recipientUserId === firstUserID))
+  );
 }

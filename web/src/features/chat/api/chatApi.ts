@@ -35,8 +35,8 @@ export const chatApi = {
     return httpRequest<Message>(
       apiPath("updateMessage", { chatID: chatId, messageID: messageId }),
       {
-      method: "PATCH",
-      body: JSON.stringify({ text }),
+        method: "PATCH",
+        body: JSON.stringify({ text }),
       },
     );
   },

@@ -1,25 +1,26 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Reflector } from "@nestjs/core";
 import { Repository } from "typeorm";
-import { UserEntity } from "../../entities/user.entity";
+import { SessionPrincipalType } from "../../entities/auth-session.entity";
+import { UserEntity, UserStatus } from "../../entities/user.entity";
 import { AuthenticatedUser } from "../common/authenticated-user";
-import { getJwtSecret } from "../common/runtime-config";
+import { SessionService } from "../sessions/session.service";
+import { getAccessTokenFromRequest } from "../sessions/session-request";
+import { USER_ACCESS_COOKIE } from "../sessions/session-cookies";
 import { IS_PUBLIC_ROUTE } from "./decorators/public.decorator";
 import { SKIP_USER_AUTH } from "./decorators/skip-user-auth.decorator";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
-    private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
+    private readonly sessionService: SessionService,
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
   ) {}
@@ -38,40 +39,45 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<{
-      headers: Record<string, string | string[] | undefined>;
-      user?: AuthenticatedUser;
-    }>();
+    const request = context.switchToHttp().getRequest<
+      Parameters<typeof getAccessTokenFromRequest>[0] & {
+        user?: AuthenticatedUser;
+      }
+    >();
 
     if (request.user) {
       return true;
     }
 
-    const header = request.headers["authorization"];
-    const token = Array.isArray(header) ? header[0] : header;
-
-    if (!token?.startsWith("Bearer ")) {
-      throw new UnauthorizedException("Missing bearer token");
+    const token = getAccessTokenFromRequest(request, USER_ACCESS_COOKIE);
+    if (!token) {
+      throw new UnauthorizedException("Missing access token");
     }
 
     try {
-      const payload = this.jwtService.verify<AuthenticatedUser>(
-        token.slice(7),
-        {
-          secret: getJwtSecret(),
-        },
+      const claims = await this.sessionService.verifyAccessToken(
+        token,
+        SessionPrincipalType.USER,
       );
+      const session = await this.sessionService.requireActiveSession(claims);
       const user = await this.usersRepository.findOneBy({
-        id: payload.sub as UserEntity["id"],
+        id: claims.sub as UserEntity["id"],
       });
-      if (!user) {
-        throw new ForbiddenException(
-          "User associated with token was not found",
-        );
+      if (
+        !user ||
+        user.status !== UserStatus.ACTIVE ||
+        Number(user.sessionVersion) !== claims.sv
+      ) {
+        throw new UnauthorizedException("Session is no longer valid");
       }
 
       request.user = {
         sub: user.id,
+        sid: claims.sid,
+        jti: claims.jti,
+        role: "user",
+        sessionVersion: Number(user.sessionVersion),
+        deviceUuid: session.deviceUuid,
         login: user.login ?? user.contact,
         displayName: user.displayName,
         contact: user.contact,
@@ -80,10 +86,10 @@ export class AuthGuard implements CanActivate {
       };
       return true;
     } catch (error) {
-      if (error instanceof ForbiddenException) {
+      if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException("Invalid bearer token");
+      throw new UnauthorizedException("Invalid access token");
     }
   }
 }

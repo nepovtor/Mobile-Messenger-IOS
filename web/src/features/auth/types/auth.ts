@@ -7,7 +7,6 @@ export type LoginPayload = {
 };
 
 export type AuthResponse = {
-  token: string;
   userID: string;
   displayName: string;
   phone: string;

@@ -55,7 +55,7 @@ test("heartbeat closes dead connections", () => {
 
   const service = new RealtimeService();
   const socket = createFakeSocket() as WebSocket & FakeSocket;
-  service.registerConnection("user-1", socket);
+  service.registerConnection("user-1", "device-1", socket);
 
   const serviceProbe = service as object as RealtimeServiceProbe;
   const meta = serviceProbe.connectionMeta.get(socket) as
@@ -76,11 +76,53 @@ test("heartbeat pings healthy connections", () => {
 
   const service = new RealtimeService();
   const socket = createFakeSocket() as WebSocket & FakeSocket;
-  service.registerConnection("user-1", socket);
+  service.registerConnection("user-1", "device-1", socket);
 
   const serviceProbe = service as object as RealtimeServiceProbe;
   serviceProbe.flushHeartbeat();
 
   assert.equal(socket.pingCount, 1);
   assert.equal(socket.terminated, false);
+});
+
+test("realtime enforces a per-IP connection ceiling", () => {
+  const service = new RealtimeService();
+  for (let index = 0; index < 24; index += 1) {
+    const socket = createFakeSocket() as WebSocket & FakeSocket;
+    assert.equal(
+      service.registerConnection(
+        `user-${index}`,
+        `device-${index}`,
+        socket,
+        "ip-key",
+      ),
+      true,
+    );
+  }
+
+  const rejectedSocket = createFakeSocket() as WebSocket & FakeSocket;
+  assert.equal(
+    service.registerConnection(
+      "user-rejected",
+      "device-rejected",
+      rejectedSocket,
+      "ip-key",
+    ),
+    false,
+  );
+});
+
+test("realtime rate limits each event type per connection", () => {
+  const service = new RealtimeService();
+  const socket = createFakeSocket() as WebSocket & FakeSocket;
+  assert.equal(
+    service.registerConnection("user-1", "device-1", socket, "ip-key"),
+    true,
+  );
+
+  for (let index = 0; index < 60; index += 1) {
+    assert.equal(service.consumeEventQuota(socket, "typing.started"), true);
+  }
+  assert.equal(service.consumeEventQuota(socket, "typing.started"), false);
+  assert.equal(service.consumeEventQuota(socket, "message.read"), true);
 });

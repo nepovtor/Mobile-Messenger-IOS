@@ -40,9 +40,221 @@
     },
     {
       "name": "realtime"
+    },
+    {
+      "name": "devices"
+    },
+    {
+      "name": "encrypted-messages"
     }
   ],
   "paths": {
+    "/api/admin/refresh": {
+      "post": {
+        "operationId": "refreshAdminSession",
+        "tags": ["admin"],
+        "responses": { "200": { "description": "Administrative session rotated" } }
+      }
+    },
+    "/api/admin/logout": {
+      "post": {
+        "operationId": "logoutAdminSession",
+        "tags": ["admin"],
+        "responses": { "200": { "description": "Administrative session revoked" } }
+      }
+    },
+    "/api/admin/sessions": {
+      "get": {
+        "operationId": "listAdminSessions",
+        "tags": ["admin"],
+        "responses": { "200": { "description": "Active administrative sessions" } }
+      }
+    },
+    "/api/admin/sessions/{sessionId}": {
+      "delete": {
+        "operationId": "revokeAdminSession",
+        "tags": ["admin"],
+        "responses": { "200": { "description": "Administrative session revoked" } }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "operationId": "refreshAuthSession",
+        "tags": ["auth"],
+        "responses": { "200": { "description": "User session rotated" } }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "logoutAuthSession",
+        "tags": ["auth"],
+        "responses": { "200": { "description": "User session revoked" } }
+      }
+    },
+    "/api/auth/sessions": {
+      "get": {
+        "operationId": "listAuthSessions",
+        "tags": ["auth"],
+        "responses": { "200": { "description": "Active user sessions" } }
+      }
+    },
+    "/api/auth/sessions/{sessionId}": {
+      "delete": {
+        "operationId": "revokeAuthSession",
+        "tags": ["auth"],
+        "responses": { "200": { "description": "User session revoked" } }
+      }
+    },
+    "/api/contacts/requests": {
+      "get": {
+        "operationId": "listContactRequests",
+        "tags": ["contacts"],
+        "responses": { "200": { "description": "Pending contact requests" } }
+      }
+    },
+    "/api/contacts/requests/{requestID}/accept": {
+      "post": {
+        "operationId": "acceptContactRequest",
+        "tags": ["contacts"],
+        "responses": { "200": { "description": "Contact request accepted" } }
+      }
+    },
+    "/api/contacts/requests/{requestID}/reject": {
+      "post": {
+        "operationId": "rejectContactRequest",
+        "tags": ["contacts"],
+        "responses": { "200": { "description": "Contact request rejected" } }
+      }
+    },
+    "/api/contacts/{userID}/block": {
+      "post": {
+        "operationId": "blockContact",
+        "tags": ["contacts"],
+        "responses": { "200": { "description": "Contact blocked" } }
+      }
+    },
+    "/api/contacts/{userID}/unblock": {
+      "post": {
+        "operationId": "unblockContact",
+        "tags": ["contacts"],
+        "responses": { "200": { "description": "Contact unblocked" } }
+      }
+    },
+    "/api/devices/register": {
+      "post": {
+        "operationId": "registerDevice",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "Device registered" } }
+      }
+    },
+    "/api/devices/current/keys": {
+      "post": {
+        "operationId": "updateDeviceKeys",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "Device keys updated" } }
+      }
+    },
+    "/api/devices": {
+      "get": {
+        "operationId": "listDevices",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "User devices" } }
+      }
+    },
+    "/api/devices/{deviceID}/revoke": {
+      "post": {
+        "operationId": "revokeDevice",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "Device revoked" } }
+      }
+    },
+    "/api/devices/current/prekeys": {
+      "post": {
+        "operationId": "publishOneTimePrekeys",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "One-time prekeys published" } }
+      },
+      "get": {
+        "operationId": "getOneTimePrekeyStatus",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "One-time prekey status" } }
+      }
+    },
+    "/api/devices/key-bundles/{userID}": {
+      "post": {
+        "operationId": "claimDeviceKeyBundles",
+        "tags": ["devices"],
+        "responses": { "200": { "description": "Authorized device key bundles" } }
+      }
+    },
+    "/api/encrypted-messages": {
+      "post": {
+        "operationId": "submitEncryptedMessage",
+        "tags": ["encrypted-messages"],
+        "responses": { "200": { "description": "Encrypted envelopes accepted" } }
+      }
+    },
+    "/api/encrypted-messages/inbox": {
+      "get": {
+        "operationId": "getEncryptedMessageInbox",
+        "tags": ["encrypted-messages"],
+        "responses": { "200": { "description": "Device encrypted-message inbox" } }
+      }
+    },
+    "/api/encrypted-messages/inbox/{envelopeID}/delivered": {
+      "post": {
+        "operationId": "markEncryptedEnvelopeDelivered",
+        "tags": ["encrypted-messages"],
+        "responses": { "200": { "description": "Envelope marked delivered" } }
+      }
+    },
+    "/api/encrypted-messages/inbox/{envelopeID}/read": {
+      "post": {
+        "operationId": "markEncryptedEnvelopeRead",
+        "tags": ["encrypted-messages"],
+        "responses": { "200": { "description": "Envelope marked read" } }
+      }
+    },
+    "/api/location/permissions": {
+      "get": {
+        "operationId": "listLocationPermissions",
+        "tags": ["location"],
+        "responses": { "200": { "description": "Location-sharing permissions" } }
+      }
+    },
+    "/api/location/permissions/{granteeUserID}": {
+      "post": {
+        "operationId": "grantLocationPermission",
+        "tags": ["location"],
+        "responses": { "200": { "description": "Location permission granted" } }
+      },
+      "delete": {
+        "operationId": "revokeLocationPermission",
+        "tags": ["location"],
+        "responses": { "200": { "description": "Location permission revoked" } }
+      }
+    },
+    "/api/media/encrypted/upload-url": {
+      "post": {
+        "operationId": "requestEncryptedMediaUpload",
+        "tags": ["media"],
+        "responses": { "200": { "description": "Encrypted upload URL issued" } }
+      }
+    },
+    "/api/media/encrypted/{attachmentID}/confirm": {
+      "post": {
+        "operationId": "confirmEncryptedMediaUpload",
+        "tags": ["media"],
+        "responses": { "200": { "description": "Encrypted upload confirmed" } }
+      }
+    },
+    "/api/media/encrypted/{attachmentID}/download-url": {
+      "get": {
+        "operationId": "getEncryptedMediaDownload",
+        "tags": ["media"],
+        "responses": { "200": { "description": "Encrypted download URL issued" } }
+      }
+    },
     "/api": {
       "get": {
         "operationId": "rootDocs",
@@ -1997,4 +2209,3 @@
     }
   }
 }
-

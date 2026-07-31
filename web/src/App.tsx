@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { initializeSessionCoordinator } from "@/app/sessionCoordinator";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
@@ -43,6 +43,8 @@ function RouteFallback() {
 
 export default function App() {
   const navigate = useNavigate();
+  const [sessionsRestored, setSessionsRestored] = useState(false);
+  const [pushInitialized, setPushInitialized] = useState(false);
   const { restoreSession, isAuthenticated: isUserAuthenticated } = authStore();
   const {
     restoreSession: restoreAdminSession,
@@ -50,31 +52,42 @@ export default function App() {
   } = adminStore();
 
   useEffect(() => {
-    void restoreSession();
-    void restoreAdminSession();
+    let isDisposed = false;
+
+    async function initializeSessions() {
+      await Promise.allSettled([restoreSession(), restoreAdminSession()]);
+      if (!isDisposed) {
+        setSessionsRestored(true);
+      }
+    }
+
+    void initializeSessions();
     void pushStore
       .getState()
       .initialize()
-      .then(() => {
-        if (authStore.getState().isAuthenticated) {
-          return pushStore.getState().syncForAuthenticatedUser();
+      .catch(() => undefined)
+      .finally(() => {
+        if (!isDisposed) {
+          setPushInitialized(true);
         }
-
-        return undefined;
       });
+
+    return () => {
+      isDisposed = true;
+    };
   }, [restoreAdminSession, restoreSession]);
 
   useEffect(() => {
-    if (!isUserAuthenticated) {
+    if (sessionsRestored && !isUserAuthenticated) {
       locationStore.getState().clear();
     }
-  }, [isUserAuthenticated]);
+  }, [isUserAuthenticated, sessionsRestored]);
 
   useEffect(() => {
-    if (isUserAuthenticated) {
+    if (sessionsRestored && pushInitialized && isUserAuthenticated) {
       void pushStore.getState().syncForAuthenticatedUser();
     }
-  }, [isUserAuthenticated]);
+  }, [isUserAuthenticated, pushInitialized, sessionsRestored]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) {
@@ -106,6 +119,10 @@ export default function App() {
       );
     };
   }, [navigate]);
+
+  if (!sessionsRestored) {
+    return <RouteFallback />;
+  }
 
   return (
     <Routes>

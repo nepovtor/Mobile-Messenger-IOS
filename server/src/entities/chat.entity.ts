@@ -38,6 +38,12 @@ export class ChatEntity {
   })
   lastActivity!: Date;
 
+  @Column({ name: "encryption_epoch", type: "integer", default: 1 })
+  encryptionEpoch!: number;
+
+  @Column({ name: "e2ee_required", type: "boolean", default: false })
+  e2eeRequired!: boolean;
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 

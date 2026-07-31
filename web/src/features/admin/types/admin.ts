@@ -10,7 +10,6 @@ export type CurrentAdmin = {
 };
 
 export type AdminAuthResponse = {
-  token: string;
   admin: CurrentAdmin;
   expiresIn: string;
 };

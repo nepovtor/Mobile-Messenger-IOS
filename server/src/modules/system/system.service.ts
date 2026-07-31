@@ -10,13 +10,10 @@ import { MessageEntity } from "../../entities/message.entity";
 import { UserEntity } from "../../entities/user.entity";
 import { appLogger } from "../common/app-logger";
 import {
-  getAdminLogin,
   areDemoAccountsEnabled,
-  isAdminConsoleEnabled,
   getJwtExpiresIn,
   getS3Bucket,
   getS3Endpoint,
-  getS3PublicEndpoint,
   getNodeEnv,
   isJwtConfigured,
   getSmsProvider,
@@ -82,39 +79,14 @@ export class SystemService {
     const repoRootDir = path.join(serverRootDir, "..");
     const packageJson = readJsonFile(path.join(serverRootDir, "package.json"));
     const tsconfig = readJsonFile(path.join(serverRootDir, "tsconfig.json"));
-    const [
-      users,
-      contacts,
-      chats,
-      messages,
-      sharedLocations,
-      recentUsers,
-      recentChats,
-      recentMessages,
-    ] = await Promise.all([
-      this.usersRepository.count(),
-      this.contactsRepository.count(),
-      this.chatsRepository.count(),
-      this.messagesRepository.count(),
-      this.locationSharesRepository.count(),
-      this.usersRepository.find({
-        order: { createdAt: "DESC" },
-        take: 6,
-      }),
-      this.chatsRepository.find({
-        relations: { lastMessage: true },
-        order: { lastActivity: "DESC" },
-        take: 6,
-      }),
-      this.messagesRepository.find({
-        relations: {
-          author: true,
-          chat: true,
-        },
-        order: { createdAt: "DESC" },
-        take: 8,
-      }),
-    ]);
+    const [users, contacts, chats, messages, sharedLocations] =
+      await Promise.all([
+        this.usersRepository.count(),
+        this.contactsRepository.count(),
+        this.chatsRepository.count(),
+        this.messagesRepository.count(),
+        this.locationSharesRepository.count(),
+      ]);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -158,9 +130,9 @@ export class SystemService {
         driver: "postgres",
         orm: "typeorm",
         connected: true,
-        host: process.env["DB_HOST"] || "localhost",
-        port: Number(process.env["DB_PORT"] || "5432"),
-        name: process.env["DB_NAME"] || "messenger",
+        host: "redacted",
+        port: 0,
+        name: "redacted",
         synchronize: isDatabaseSynchronizationEnabled(),
         counts: {
           users,
@@ -169,47 +141,16 @@ export class SystemService {
           messages,
           sharedLocations,
         },
-        recentUsers: recentUsers.map((user) => ({
-          id: user.id,
-          displayName: user.displayName,
-          contact: user.contact,
-          phone: user.phone,
-          createdAt: user.createdAt.toISOString(),
-        })),
-        recentChats: recentChats.map((chat) => ({
-          id: chat.id,
-          title: chat.title,
-          lastMessagePreview:
-            chat.lastMessage?.deletedAt != null
-              ? "Message deleted"
-              : chat.lastMessage?.kind === "image"
-                ? "Photo"
-                : (chat.lastMessage?.text ?? null),
-          lastActivity: chat.lastActivity.toISOString(),
-          createdAt: chat.createdAt.toISOString(),
-        })),
-        recentMessages: recentMessages.map((message) => ({
-          id: message.id,
-          chatID: message.chatId,
-          chatTitle: message.chat?.title ?? null,
-          authorName: message.author?.displayName ?? "Unknown",
-          kind: message.kind,
-          status: message.status,
-          preview:
-            message.deletedAt != null
-              ? "Message deleted"
-              : message.kind === "image"
-                ? "Photo"
-                : (message.text ?? ""),
-          createdAt: message.createdAt.toISOString(),
-        })),
+        recentUsers: [],
+        recentChats: [],
+        recentMessages: [],
       },
       authentication: {
         jwtConfigured: isJwtConfigured(),
         jwtExpiresIn: getJwtExpiresIn(),
         bearerScheme: "Bearer",
-        adminConsoleEnabled: isAdminConsoleEnabled(),
-        adminLogin: getAdminLogin(),
+        adminConsoleEnabled: true,
+        adminLogin: "database-managed",
         verificationProvider: getVerificationProvider(),
         smsProvider: getSmsProvider(),
         demoAccountsEnabled: areDemoAccountsEnabled(),
@@ -218,8 +159,6 @@ export class SystemService {
           "/api",
           "/api/health",
           "/api/version",
-          "/api/login",
-          "/api/users",
           "/api/auth/request",
           "/api/auth/verify",
           "/api/auth/login",
@@ -237,9 +176,9 @@ export class SystemService {
         ],
       },
       storage: {
-        endpoint: getS3Endpoint(),
-        publicEndpoint: getS3PublicEndpoint(),
-        bucket: getS3Bucket(),
+        endpoint: null,
+        publicEndpoint: null,
+        bucket: null,
         configured: Boolean(getS3Endpoint() && getS3Bucket().trim()),
       },
     };

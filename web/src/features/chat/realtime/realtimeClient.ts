@@ -20,7 +20,6 @@ type RealtimeHandlers = {
 
 export class RealtimeClient {
   private socket: WebSocket | null = null;
-  private token: string | null = null;
   private reconnectTimer: number | null = null;
   private shouldReconnect = false;
   private retryCount = 0;
@@ -30,8 +29,7 @@ export class RealtimeClient {
     this.handlers = handlers;
   }
 
-  connect(token: string) {
-    this.token = token;
+  connect() {
     this.shouldReconnect = true;
     this.openSocket();
   }
@@ -62,19 +60,12 @@ export class RealtimeClient {
   }
 
   private openSocket() {
-    if (!this.token) {
-      this.handlers.onConnectionStateChange?.(
-        "failed",
-        "Missing session token.",
-      );
-      return;
-    }
-
     const state = this.retryCount === 0 ? "connecting" : "reconnecting";
     this.handlers.onConnectionStateChange?.(state, undefined, this.retryCount);
 
     const url = new URL(appConfig.websocketUrl);
-    url.searchParams.set("token", this.token);
+    url.search = "";
+    url.hash = "";
 
     const socket = new WebSocket(url.toString());
     this.socket = socket;

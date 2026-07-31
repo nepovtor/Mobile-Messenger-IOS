@@ -1,16 +1,16 @@
 import { Logger, Module } from "@nestjs/common";
-import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
 import { TelegramLinkEntity } from "../../entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../../entities/telegram-pairing-token.entity";
 import { UserEntity } from "../../entities/user.entity";
 import {
-  getJwtSecret,
   getVerificationProvider,
   getSmsProvider,
   getTwilioConfig,
 } from "../common/runtime-config";
+import { SecurityModule } from "../security/security.module";
+import { SessionsModule } from "../sessions/sessions.module";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
@@ -31,11 +31,8 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
       TelegramLinkEntity,
       TelegramPairingTokenEntity,
     ]),
-    JwtModule.registerAsync({
-      useFactory: async () => ({
-        secret: getJwtSecret(),
-      }),
-    }),
+    SecurityModule,
+    SessionsModule,
   ],
   controllers: [AuthController, LoginController],
   providers: [
@@ -94,7 +91,7 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
     AuthGuard,
     AuthRateLimitService,
     TelegramBotService,
-    JwtModule,
+    SessionsModule,
     TypeOrmModule,
     SMS_SERVICE,
   ],

@@ -17,6 +17,7 @@ vi.mock("@/features/auth/api/authApi", () => ({
     requestCode: vi.fn(),
     verifyCode: vi.fn(),
     login: vi.fn(),
+    logout: vi.fn(),
     getMe: vi.fn(),
   },
 }));
@@ -27,29 +28,11 @@ vi.mock("@/features/profile/api/profileApi", () => ({
   },
 }));
 
-const storageMock = (() => {
-  const store = new Map<string, string>();
-  return {
-    clear: () => store.clear(),
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      store.set(key, value);
-    },
-    removeItem: (key: string) => {
-      store.delete(key);
-    },
-  };
-})();
-
-Object.defineProperty(window, "localStorage", {
-  value: storageMock,
-});
-
 describe("authStore", () => {
   beforeEach(() => {
-    storageMock.clear();
+    vi.resetAllMocks();
+    vi.mocked(authApi.logout).mockResolvedValue();
     authStore.setState({
-      token: "token",
       currentUser: {
         userID: "user-1",
         displayName: "Anna",
@@ -93,27 +76,27 @@ describe("authStore", () => {
     try {
       await logoutUserSession();
 
-      expect(authStore.getState().token).toBeNull();
       expect(authStore.getState().currentUser).toBeNull();
+      expect(authStore.getState()).not.toHaveProperty("token");
       expect(chatStore.getState().chats).toHaveLength(0);
       expect(chatStore.getState().selectedChatId).toBeNull();
       expect(clearSpy).toHaveBeenCalled();
       expect(detachSpy).toHaveBeenCalledTimes(1);
+      expect(authApi.logout).toHaveBeenCalledTimes(1);
     } finally {
       clearSpy.mockRestore();
       detachSpy.mockRestore();
     }
   });
 
-  it("stores the token before requesting current user during login", async () => {
+  it("establishes a cookie session before requesting the current user", async () => {
     vi.mocked(authApi.login).mockResolvedValue({
-      token: "fresh-token",
       userID: "user-2",
       displayName: "Boris",
       phone: "+15550002",
     });
     vi.mocked(authApi.getMe).mockImplementation(async () => {
-      expect(authStore.getState().token).toBe("fresh-token");
+      expect(authApi.login).toHaveBeenCalledTimes(1);
 
       return {
         userID: "user-2",
@@ -130,12 +113,11 @@ describe("authStore", () => {
     });
 
     expect(authStore.getState().currentUser?.displayName).toBe("Boris");
-    expect(authStore.getState().token).toBe("fresh-token");
+    expect(authStore.getState()).not.toHaveProperty("token");
   });
 
-  it("verifyCode stores session and current user", async () => {
+  it("verifyCode restores the cookie session current user", async () => {
     vi.mocked(authApi.verifyCode).mockResolvedValue({
-      token: "sms-token",
       userID: "user-3",
       displayName: "Vera",
       phone: "+15550003",
@@ -150,8 +132,28 @@ describe("authStore", () => {
 
     await authStore.getState().verifyCode("+15550003", "123456");
 
-    expect(authStore.getState().token).toBe("sms-token");
     expect(authStore.getState().currentUser?.contact).toBe("+15550003");
+  });
+
+  it("restores a session by requesting /me without local state", async () => {
+    authStore.setState({
+      currentUser: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+    });
+    vi.mocked(authApi.getMe).mockResolvedValue({
+      userID: "user-4",
+      displayName: "Nina",
+      contact: "+15550004",
+      method: "phone",
+    });
+
+    await authStore.getState().restoreSession();
+
+    expect(authApi.getMe).toHaveBeenCalledTimes(1);
+    expect(authStore.getState().isAuthenticated).toBe(true);
+    expect(authStore.getState().currentUser?.userID).toBe("user-4");
   });
 
   it("requestCode returns backend cooldown payload", async () => {
@@ -277,7 +279,6 @@ describe("authStore", () => {
     await authStore.getState().updateDisplayName("Anna Updated");
 
     expect(authStore.getState().currentUser?.displayName).toBe("Anna Updated");
-    expect(authStore.getState().token).toBe("token");
     expect(authStore.getState().isAuthenticated).toBe(true);
   });
 });

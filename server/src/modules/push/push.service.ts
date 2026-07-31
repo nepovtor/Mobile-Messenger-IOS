@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { isIP } from "node:net";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, IsNull, Repository } from "typeorm";
 import {
@@ -17,6 +18,7 @@ import { RegisterIosPushDeviceDto } from "./dto/register-ios-push-device.dto";
 import { RegisterWebPushSubscriptionDto } from "./dto/register-web-push-subscription.dto";
 import { ApnsPushProvider } from "./apns-push.provider";
 import type {
+  GenericPushPayload,
   MessageCreatedPushPayload,
   PushStatusResponse,
 } from "./push.types";
@@ -71,6 +73,7 @@ export class PushService {
     user: AuthenticatedUser,
     dto: RegisterWebPushSubscriptionDto,
   ): Promise<{ ok: true }> {
+    assertSafeWebPushEndpoint(dto.endpoint);
     const existing = await this.pushSubscriptionsRepository.findOne({
       where: {
         endpoint: dto.endpoint,
@@ -99,6 +102,7 @@ export class PushService {
     userId: string,
     dto: DeleteWebPushSubscriptionDto,
   ): Promise<{ ok: true }> {
+    assertSafeWebPushEndpoint(dto.endpoint);
     const subscription = await this.pushSubscriptionsRepository.findOne({
       where: {
         userId,
@@ -120,7 +124,7 @@ export class PushService {
     user: AuthenticatedUser,
     dto: RegisterIosPushDeviceDto,
   ): Promise<{ ok: true }> {
-    const normalizedToken = dto.token.trim().toLowerCase();
+    const normalizedToken = normalizeApnsToken(dto.token);
     const existing = await this.pushSubscriptionsRepository.findOne({
       where: {
         deviceToken: normalizedToken,
@@ -146,7 +150,7 @@ export class PushService {
   }
 
   async deleteIosDevice(userId: string, token: string): Promise<{ ok: true }> {
-    const normalizedToken = token.trim().toLowerCase();
+    const normalizedToken = normalizeApnsToken(token);
     const device = await this.pushSubscriptionsRepository.findOne({
       where: {
         userId,
@@ -165,18 +169,7 @@ export class PushService {
   }
 
   async sendTestNotification(user: AuthenticatedUser): Promise<{ ok: true }> {
-    await this.notifyMessageCreated({
-      authorUserId: "system",
-      participantUserIds: [user.sub],
-      payload: {
-        type: "message.created",
-        chatId: "test-chat",
-        messageId: "test-message",
-        title: "Push test",
-        body: "This is a test notification from Mobile Messenger.",
-        url: "/messenger?chatId=test-chat",
-      },
-    });
+    await this.deliverGenericNotification(null, [user.sub]);
     return { ok: true };
   }
 
@@ -185,12 +178,21 @@ export class PushService {
     participantUserIds: string[];
     payload: MessageCreatedPushPayload;
   }): Promise<void> {
+    await this.deliverGenericNotification(
+      input.authorUserId,
+      input.participantUserIds,
+      input.payload.badge,
+    );
+  }
+
+  private async deliverGenericNotification(
+    excludedUserID: string | null,
+    participantUserIDs: string[],
+    badge?: number,
+  ): Promise<void> {
+    const genericPayload = buildGenericPushPayload(badge);
     const recipientUserIds = Array.from(
-      new Set(
-        input.participantUserIds.filter(
-          (userId) => userId !== input.authorUserId,
-        ),
-      ),
+      new Set(participantUserIDs.filter((userID) => userID !== excludedUserID)),
     );
 
     if (recipientUserIds.length === 0) {
@@ -214,18 +216,18 @@ export class PushService {
 
     await Promise.allSettled(
       telegramRecipients.map((recipient) =>
-        this.deliverTelegramNotification(recipient.chatId, input.payload),
+        this.deliverTelegramNotification(recipient.chatId),
       ),
     );
 
     const deliveries = nonTelegramSubscriptions.map(async (subscription) => {
       if (subscription.platform === PushPlatform.WEB) {
-        await this.deliverWebPush(subscription, input.payload);
+        await this.deliverWebPush(subscription, genericPayload);
         return;
       }
 
       if (subscription.platform === PushPlatform.IOS) {
-        await this.deliverIosPush(subscription, input.payload);
+        await this.deliverIosPush(subscription, genericPayload);
       }
     });
 
@@ -234,7 +236,7 @@ export class PushService {
 
   private async deliverWebPush(
     subscription: PushSubscriptionEntity,
-    payload: MessageCreatedPushPayload,
+    payload: GenericPushPayload,
   ) {
     if (!subscription.endpoint || !subscription.p256dh || !subscription.auth) {
       return;
@@ -254,7 +256,7 @@ export class PushService {
     }
 
     if (result.invalidToken) {
-      await this.disableSubscription(subscription, result.reason);
+      await this.disableSubscription(subscription);
       return;
     }
 
@@ -265,10 +267,9 @@ export class PushService {
     void appLogger.error(
       "push.web",
       "Web Push delivery failed",
-      result.reason,
+      new Error("Push provider rejected delivery"),
       {
         subscriptionId: subscription.id,
-        endpoint: subscription.endpoint,
         statusCode: result.statusCode ?? null,
       },
     );
@@ -276,7 +277,7 @@ export class PushService {
 
   private async deliverIosPush(
     subscription: PushSubscriptionEntity,
-    payload: MessageCreatedPushPayload,
+    payload: GenericPushPayload,
   ) {
     if (
       !subscription.deviceToken ||
@@ -300,7 +301,7 @@ export class PushService {
     }
 
     if (result.invalidToken) {
-      await this.disableSubscription(subscription, result.reason);
+      await this.disableSubscription(subscription);
       return;
     }
 
@@ -308,10 +309,14 @@ export class PushService {
       return;
     }
 
-    void appLogger.error("push.apns", "APNs delivery failed", result.reason, {
-      subscriptionId: subscription.id,
-      deviceToken: subscription.deviceToken,
-    });
+    void appLogger.error(
+      "push.apns",
+      "APNs delivery failed",
+      new Error("Push provider rejected delivery"),
+      {
+        subscriptionId: subscription.id,
+      },
+    );
   }
 
   private async resolvePreferredTelegramRecipients(
@@ -363,16 +368,13 @@ export class PushService {
       );
   }
 
-  private async deliverTelegramNotification(
-    chatId: string,
-    payload: MessageCreatedPushPayload,
-  ): Promise<void> {
-    const buttonUrl = buildTelegramNotificationUrl(payload.url);
+  private async deliverTelegramNotification(chatId: string): Promise<void> {
+    const buttonUrl = buildTelegramNotificationUrl();
 
     try {
       await this.telegramBotService.sendMessage(
         chatId,
-        buildTelegramNotificationText(payload, buttonUrl),
+        buildTelegramNotificationText(buttonUrl),
         buttonUrl
           ? {
               parseMode: "HTML",
@@ -382,22 +384,16 @@ export class PushService {
             }
           : undefined,
       );
-    } catch (error) {
+    } catch {
       void appLogger.error(
         "push.telegram",
         "Telegram notification delivery failed",
-        error instanceof Error ? error.message : "Unknown Telegram error",
-        {
-          chatId,
-        },
+        new Error("Push provider rejected delivery"),
       );
     }
   }
 
-  private async disableSubscription(
-    subscription: PushSubscriptionEntity,
-    reason: string,
-  ) {
+  private async disableSubscription(subscription: PushSubscriptionEntity) {
     subscription.disabledAt = new Date();
     await this.pushSubscriptionsRepository.save(subscription);
     void appLogger.info(
@@ -406,19 +402,20 @@ export class PushService {
       {
         subscriptionId: subscription.id,
         platform: subscription.platform,
-        reason,
       },
     );
   }
 }
 
-function buildTelegramNotificationText(
-  payload: MessageCreatedPushPayload,
-  buttonUrl: string | null,
-): string {
-  const summary = ["Новое сообщение в Mobile Messenger", payload.title]
-    .filter(Boolean)
-    .join("\n");
+function buildGenericPushPayload(badge?: number): GenericPushPayload {
+  return {
+    type: "message.available",
+    ...(badge == null ? {} : { badge }),
+  };
+}
+
+function buildTelegramNotificationText(buttonUrl: string | null): string {
+  const summary = "Новое сообщение в Mobile Messenger";
 
   if (!buttonUrl) {
     return summary;
@@ -427,13 +424,13 @@ function buildTelegramNotificationText(
   return `<a href="${escapeTelegramHtml(buttonUrl)}">${escapeTelegramHtml(summary)}</a>`;
 }
 
-function buildTelegramNotificationUrl(relativeUrl: string): string | null {
+function buildTelegramNotificationUrl(): string | null {
   const webAppUrl = getWebAppUrl();
   if (!webAppUrl) {
     return null;
   }
 
-  return new URL(relativeUrl, `${webAppUrl}/`).toString();
+  return new URL("messenger", `${webAppUrl}/`).toString();
 }
 
 function escapeTelegramHtml(value: string): string {
@@ -442,4 +439,36 @@ function escapeTelegramHtml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function assertSafeWebPushEndpoint(value: string): void {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value);
+  } catch {
+    throw new BadRequestException("Invalid Web Push endpoint");
+  }
+
+  const hostname = endpoint.hostname.toLowerCase().replace(/\.$/, "");
+  if (
+    endpoint.protocol !== "https:" ||
+    Boolean(endpoint.username) ||
+    Boolean(endpoint.password) ||
+    (endpoint.port !== "" && endpoint.port !== "443") ||
+    isIP(hostname) !== 0 ||
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal")
+  ) {
+    throw new BadRequestException("Web Push endpoint is not allowed");
+  }
+}
+
+function normalizeApnsToken(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!/^[a-f0-9]{16,200}$/.test(normalized)) {
+    throw new BadRequestException("Invalid APNs device token");
+  }
+  return normalized;
 }

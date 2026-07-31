@@ -49,7 +49,7 @@ The project keeps the existing backend contract, Telegram verification flow, Clo
 - map page with Leaflet + OpenStreetMap
 - redesigned product-style landing, messenger workspace, map workspace, and admin entry
 - protected system dashboard for labs 7-11 overview
-- JWT session payload preview, backend status, and recent logs in the browser
+- security-minimized backend status for authorized administrators
 - opt-in location sharing with browser permission prompt
 - real Web Push via Service Worker + Push API + backend VAPID subscriptions
 - auth/chat cleanup on logout
@@ -63,7 +63,7 @@ The project keeps the existing backend contract, Telegram verification flow, Clo
 - Web Push delivery via `web-push` and VAPID
 - APNs delivery for iOS device tokens
 - request and error file logging with process-level error handlers
-- PostgreSQL-backed user/admin authentication with JWT bearer tokens
+- PostgreSQL-backed users, devices, revocable sessions, and rotating refresh tokens
 - contacts API
 - profile API
 - location API with latest-point storage only
@@ -129,6 +129,29 @@ Push-related endpoints:
 - `POST /api/push/devices`
 - `DELETE /api/push/devices/:token`
 
+## Security and E2EE Status
+
+This branch hardens the server/client boundary and adds opaque per-device
+delivery schema, but production E2EE is **not yet implemented**. Official
+libsignal v0.99.2 cannot currently be integrated safely across this Swift/Xcode
+and browser/Vite architecture without resolving unsupported integration paths
+and AGPL-3.0-only licensing. No custom cryptographic protocol is substituted.
+
+Production remains fail-closed with `E2EE_REQUIRED=true` until the decision and
+interoperability gates in
+[docs/E2EE_ARCHITECTURE.md](./docs/E2EE_ARCHITECTURE.md) are complete.
+
+Security documentation:
+
+- [security audit](./docs/SECURITY_AUDIT.md)
+- [threat model](./docs/THREAT_MODEL.md)
+- [E2EE architecture/decision gate](./docs/E2EE_ARCHITECTURE.md)
+- [key management](./docs/KEY_MANAGEMENT.md)
+- [deployment](./docs/SECURITY_DEPLOYMENT.md)
+- [incident response](./docs/INCIDENT_RESPONSE.md)
+- [legacy migration](./docs/MIGRATION_TO_E2EE.md)
+- [backup and restore](./docs/BACKUP_RESTORE.md)
+
 ## Privacy
 
 - location sharing is off by default
@@ -136,7 +159,9 @@ Push-related endpoints:
 - the user can stop sharing anytime
 - only the latest location point is stored
 - no location history is kept
-- contacts can see only locations that were explicitly shared with them
+- location visibility requires an accepted contact request and a separate,
+  revocable per-contact permission
+- exact location belongs in an E2EE payload after the protocol gate is complete
 
 ## Screenshots
 
@@ -168,7 +193,8 @@ If screenshots are not available yet, keep the placeholders above and add the re
 - Realtime endpoint: `wss://phpstack-1634854-6489525.cloudwaysapps.com/realtime`
 - legacy Railway config still lives in [railway.toml](./railway.toml)
 - backend Docker setup lives in [server/Dockerfile](./server/Dockerfile) and [Dockerfile](./Dockerfile)
-- backend keeps `process.env.PORT`, `JWT_SECRET_KEY` with `JWT_SECRET` fallback, `/api/health`, and Telegram provider safety checks intact
+- production uses the validated current/previous JWT KID configuration,
+  `/api/health`, and the security deployment gate
 
 ## Push Setup
 
@@ -181,10 +207,11 @@ Backend env:
 - `WEB_PUSH_VAPID_SUBJECT`
 - optional `PUSH_ALLOW_TEST_ENDPOINT=true` for non-production/manual testing
 
-Generate VAPID keys with:
+Generate VAPID keys from the locked backend dependency:
 
 ```bash
-npx web-push generate-vapid-keys
+cd server
+npm exec -- web-push generate-vapid-keys
 ```
 
 The web client registers `web/public/sw.js`, asks for permission only after a user action, creates a real `PushSubscription`, and sends it to the backend. If the VAPID env vars are missing, the backend does not fake delivery: it logs a warning and skips Web Push sending.
@@ -272,14 +299,16 @@ The backend writes logs into `server/logs/` through a single logger module:
 
 Request logs include:
 
+- `requestId`
 - `method`
-- `url`
-- `query`
-- `body`
+- route template without sensitive parameters
 - `statusCode`
 - `durationMs`
+- internal principal ID when available
 
-Sensitive fields such as passwords, secrets, tokens, and verification hashes are redacted before being written.
+Raw URL/query/body/headers and sensitive fields such as passwords, OTP,
+tokens/cookies, phones, messages, ciphertext, keys, coordinates, and presigned
+URLs are not written.
 
 Quick manual verification:
 
@@ -299,10 +328,11 @@ Then inspect `server/logs/requests.log` and confirm that the request entry conta
 
 ## Docker
 
-Production-like lab compose:
+Production compose (managed PostgreSQL/S3, protected env required):
 
 ```bash
-docker compose -f server/docker-compose.yml up --build
+PRODUCTION_ENV_FILE=/secure/config/mobile-messenger.production.env \
+  docker compose -f server/docker-compose.yml up --detach --build
 docker compose -f server/docker-compose.yml down
 ```
 
@@ -313,20 +343,10 @@ docker compose -f server/docker-compose.dev.yml up --build
 docker compose -f server/docker-compose.dev.yml down
 ```
 
-After `docker compose -f server/docker-compose.yml up --build`:
-
-- backend: `http://127.0.0.1:8080/api`
-- health check: `http://127.0.0.1:8080/api/health`
-- pgAdmin: `http://127.0.0.1:5050`
-- PostgreSQL from host: `postgresql://postgres:postgres@127.0.0.1:5432/messenger`
-
-pgAdmin connection values:
-
-- host: `postgres`
-- port: `5432`
-- username: `postgres`
-- password: `postgres`
-- database: `messenger`
+Production exposes only the backend on loopback for the host reverse proxy.
+PostgreSQL, pgAdmin, and MinIO are not published by production Compose.
+Development PostgreSQL/optional pgAdmin bind only to loopback and require
+explicit credentials from `server/.env`.
 
 Optional image scanning commands:
 
@@ -359,164 +379,27 @@ npm run migration:revert
 npm run migration:generate
 ```
 
-## Authentication & JWT
+## Authentication and Administration
 
-Create a user with a bcrypt-hashed password:
+Registration uses the OTP request/verify flow; arbitrary phone/password
+creation is unavailable in production. Access tokens are short-lived and bound
+to revocable database sessions. Refresh tokens rotate, are stored only as
+keyed hashes, and revoke their family on reuse.
 
-```bash
-curl -X POST http://127.0.0.1:8080/api/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "login": "student",
-    "password": "secret123",
-    "displayName": "Student User",
-    "phone": "+15550001111"
-  }'
-```
+The browser uses Secure/HttpOnly/SameSite cookies and a clean WebSocket URL.
+iOS stores session material in device-only Keychain and uses authorization
+headers.
 
-Login through the laboratory endpoint:
-
-```bash
-curl -X POST http://127.0.0.1:8080/api/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "login": "student",
-    "password": "secret123"
-  }'
-```
-
-Use the returned JWT as Bearer:
-
-```bash
-TOKEN="<jwt_token>"
-curl http://127.0.0.1:8080/api/contacts \
-  -H "Authorization: Bearer ${TOKEN}"
-```
-
-Public routes:
-
-- `/`
-- `/api`
-- `/api/health`
-- `/api/version`
-- `/api/login`
-- `/api/users`
-- `/api/auth/request`
-- `/api/auth/verify`
-- `/api/auth/login`
-- `/api/admin/login`
-- `/api/push/vapid-public-key`
-
-Protected user routes:
-
-- `/api/auth/me`
-- `/api/contacts/*`
-- `/api/chats/*`
-- `/api/location/*`
-- `/api/media/*`
-- `/api/push/status`
-- `/api/push/subscriptions`
-- `/api/push/devices`
-
-Admin-only routes:
-
-- `/api/admin/me`
-- `/api/system/*`
-
-How to check `401`:
-
-```bash
-curl http://127.0.0.1:8080/api/contacts
-```
-
-How to check `403`:
-
-1. Create a user and login to get a valid JWT.
-2. Delete that user from PostgreSQL through `psql` or pgAdmin.
-3. Repeat a protected request with the old token and confirm the backend returns `403`.
-
-## Laboratory Compliance
-
-### Lab 7 — TypeScript
-
-- `server/tsconfig.json` now targets `ES2022` and enables strict compiler checks including `strict`, `noImplicitAny`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noUncheckedIndexedAccess`, and `noPropertyAccessFromIndexSignature`.
-- `server/.eslintrc.json` stays active for `src/` and `test/`, and the backend codebase was adjusted to avoid direct `any`/`unknown` usage.
-- Verification commands:
+No administrator is seeded or loaded from environment credentials. Create one
+after migrations from a restricted terminal:
 
 ```bash
 cd server
-npm run lint
-npm run build
+npm run admin:create -- --login <login> --generate-password
 ```
 
-### Lab 8 — Logging & Error Handling
-
-- request logging middleware writes all incoming requests into `server/logs/requests.log`
-- errors are written into `server/logs/errors.log`
-- runtime `500` responses are normalized through the global exception filter
-- `uncaughtException` and `unhandledRejection` handlers remain active
-- all logging is centralized in `server/src/modules/common/app-logger.ts`
-
-How to verify:
-
-```bash
-cd server
-npm run start:dev
-curl http://127.0.0.1:8080/api/health
-tail -n 5 logs/requests.log
-```
-
-### Lab 9 — Docker Basics
-
-- added `server/docker-compose.yml` for backend + PostgreSQL + pgAdmin
-- kept `server/docker-compose.dev.yml` for hot reload with `npm run start:dev`
-- added named volumes for PostgreSQL, pgAdmin, and backend logs
-- added a dedicated bridge network `messenger_network`
-- PostgreSQL now has a healthcheck and backend startup waits for database readiness
-
-Run commands:
-
-```bash
-docker compose -f server/docker-compose.yml up --build
-docker compose -f server/docker-compose.yml down
-```
-
-### Lab 10 — PostgreSQL & TypeORM
-
-- added `server/src/database/data-source.ts`
-- added `server/src/database/migrations`
-- added an initial migration that creates the messenger schema and seeds a DB admin
-- `synchronize` remains available only for local dev, while the lab path uses migrations
-
-Migration commands:
-
-```bash
-cd server
-npm run migration:show
-npm run migration:run
-npm run migration:revert
-```
-
-### Lab 11 — Authentication & JWT
-
-- `users` now support nullable `login` and `passwordHash`
-- `POST /api/users` stores bcrypt password hashes
-- `POST /api/login` returns `{ "token": "..." }`
-- JWT payload includes user `id` and `login`
-- user auth is enforced with a global guard plus explicit public-route exclusions
-- `admins` are stored in PostgreSQL, with `admin/admin` seeded by migration and env fallback preserved
-
-Example curls:
-
-```bash
-curl -X POST http://127.0.0.1:8080/api/users \
-  -H "Content-Type: application/json" \
-  -d '{"login":"student","password":"secret123","displayName":"Student User"}'
-
-curl -X POST http://127.0.0.1:8080/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"student","password":"secret123"}'
-```
+See [docs/LABS_7_11_DETAILED.md](./docs/LABS_7_11_DETAILED.md) for the updated
+laboratory mapping and safe verification commands.
 
 ## Testing Commands
 

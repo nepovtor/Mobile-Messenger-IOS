@@ -10,7 +10,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError } from "@/shared/api/httpClient";
 import { systemApi } from "@/features/admin/api/systemApi";
@@ -28,18 +28,6 @@ import type {
 import { formatRelativeStatus } from "@/utils/date";
 
 type AdminTab = "overview" | "activity" | "infrastructure" | "logs";
-
-type DecodedJwt = {
-  sub?: string;
-  login?: string;
-  role?: string;
-  displayName?: string;
-  contact?: string;
-  method?: string;
-  phone?: string;
-  iat?: number;
-  exp?: number;
-};
 
 const adminTabs = [
   {
@@ -85,27 +73,6 @@ const repoFallback = {
   },
 } as const;
 
-function decodeJwtPayload(token: string | null): DecodedJwt | null {
-  if (!token) {
-    return null;
-  }
-
-  const parts = token.split(".");
-  if (parts.length < 2) {
-    return null;
-  }
-
-  try {
-    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = window.atob(
-      normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="),
-    );
-    return JSON.parse(decoded) as DecodedJwt;
-  } catch {
-    return null;
-  }
-}
-
 function formatDateTime(value?: string | number | null) {
   if (!value) {
     return "n/a";
@@ -141,10 +108,6 @@ function formatUptime(seconds: number | null) {
   }
 
   return `${remainingSeconds}s`;
-}
-
-function formatSessionExpiry(value?: number) {
-  return typeof value === "number" ? formatDateTime(value) : "n/a";
 }
 
 function isMissingSystemRoute(error: unknown) {
@@ -381,7 +344,6 @@ export function SystemPage() {
   const {
     currentAdmin,
     isAuthenticated,
-    token,
     error: adminError,
     clearError,
     logout,
@@ -399,8 +361,6 @@ export function SystemPage() {
   const [isRefreshing, setRefreshing] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [systemApiMissing, setSystemApiMissing] = useState(false);
-
-  const jwtPayload = useMemo(() => decodeJwtPayload(token), [token]);
 
   async function hydrateAdminData() {
     const [
@@ -551,13 +511,10 @@ export function SystemPage() {
     overview?.logging.requestFile ?? repoFallback.logging.requestFile;
   const displayedErrorLogFile =
     overview?.logging.errorFile ?? repoFallback.logging.errorFile;
-  const displayedJwtConfigured =
-    overview?.authentication.jwtConfigured ?? Boolean(token);
-  const displayedJwtExpiresIn =
-    overview?.authentication.jwtExpiresIn ??
-    formatSessionExpiry(jwtPayload?.exp);
-  const displayedBearerScheme =
-    overview?.authentication.bearerScheme ?? "Bearer";
+  const displayedSessionConfigured =
+    overview?.authentication.jwtConfigured ?? isAuthenticated;
+  const displayedSessionLifetime =
+    overview?.authentication.jwtExpiresIn ?? "Server-managed";
   const displayedAdminLogin =
     overview?.authentication.adminLogin ?? currentAdmin.login;
   const totalRows = overview
@@ -603,9 +560,11 @@ export function SystemPage() {
               />
               <MetricCard
                 label="Session"
-                value={displayedJwtConfigured ? "Bearer" : "No JWT"}
-                hint={displayedJwtExpiresIn}
-                tone={displayedJwtConfigured ? "success" : "warning"}
+                value={
+                  displayedSessionConfigured ? "HttpOnly cookie" : "Unavailable"
+                }
+                hint={displayedSessionLifetime}
+                tone={displayedSessionConfigured ? "success" : "warning"}
               />
               <MetricCard
                 label="Database"
@@ -665,7 +624,7 @@ export function SystemPage() {
                     <ArrowLeft className="h-4 w-4" />
                     User login
                   </Button>
-                  <Button variant="danger" onClick={logout}>
+                  <Button variant="danger" onClick={() => void logout()}>
                     <LogOut className="h-4 w-4" />
                     Logout
                   </Button>
@@ -705,15 +664,15 @@ export function SystemPage() {
                       Subject
                     </p>
                     <p className="mt-2 break-all font-medium text-white">
-                      {jwtPayload?.sub ?? `admin:${currentAdmin.login}`}
+                      admin:{currentAdmin.login}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                      Expires
+                      Lifetime policy
                     </p>
                     <p className="mt-2 font-medium text-white">
-                      {formatSessionExpiry(jwtPayload?.exp)}
+                      {displayedSessionLifetime}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
@@ -721,7 +680,7 @@ export function SystemPage() {
                       Role
                     </p>
                     <p className="mt-2 font-medium text-white">
-                      {jwtPayload?.role ?? currentAdmin.role}
+                      {currentAdmin.role}
                     </p>
                   </div>
                 </div>
@@ -806,20 +765,18 @@ export function SystemPage() {
                 <div className="grid gap-4 xl:grid-cols-2">
                   <SectionCard
                     title="Authentication"
-                    description="JWT state, login modes and provider configuration."
+                    description="Server signing, cookie sessions, login modes and provider configuration."
                   >
                     <div className="flex flex-wrap gap-2">
                       <Badge
-                        tone={displayedJwtConfigured ? "success" : "danger"}
+                        tone={displayedSessionConfigured ? "success" : "danger"}
                       >
-                        JWT secret{" "}
-                        {displayedJwtConfigured ? "configured" : "missing"}
+                        JWT signing{" "}
+                        {displayedSessionConfigured ? "configured" : "missing"}
                       </Badge>
+                      <Badge tone="neutral">Browser: HttpOnly cookie</Badge>
                       <Badge tone="neutral">
-                        Scheme: {displayedBearerScheme}
-                      </Badge>
-                      <Badge tone="neutral">
-                        Expires: {displayedJwtExpiresIn}
+                        Lifetime: {displayedSessionLifetime}
                       </Badge>
                       <Badge
                         tone={
@@ -1103,7 +1060,7 @@ export function SystemPage() {
 
                 <SectionCard
                   title="Protected routes"
-                  description="Routes that expect a valid Bearer session before allowing access."
+                  description="Routes that require a valid server-managed session before allowing access."
                 >
                   <div className="flex flex-wrap gap-2">
                     {(

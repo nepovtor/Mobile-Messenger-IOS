@@ -15,6 +15,13 @@ export const adminApi = {
     });
   },
 
+  logout() {
+    return httpRequest<void>("/admin/logout", {
+      method: "POST",
+      authMode: "none",
+    });
+  },
+
   getMe() {
     return httpRequest<CurrentAdmin>(apiPath("adminMe"), {
       authMode: "admin",

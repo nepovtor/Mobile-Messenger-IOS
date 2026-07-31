@@ -8,19 +8,17 @@ import { SmsProviderUnavailableError, SmsService } from "./sms.types";
 export class ConsoleSmsProvider implements SmsService {
   constructor(private readonly logger: Logger) {}
 
-  async sendVerificationCode(phone: string, code: string): Promise<void> {
+  async sendVerificationCode(): Promise<void> {
     if (!canUseConsoleSmsInCurrentEnv()) {
-      this.logger.error(
-        `Console SMS provider is disabled in production for ${phone}`,
-      );
+      this.logger.error("Console SMS provider is disabled in production");
       throw new SmsProviderUnavailableError("SMS provider unavailable");
     }
 
     if (isProductionEnv()) {
-      this.logger.warn(`Console SMS provider used for ${phone}`);
+      this.logger.warn("Console SMS provider was invoked");
       return;
     }
 
-    this.logger.log(`[sms:console] ${phone} verification code: ${code}`);
+    this.logger.log("[sms:console] Verification challenge generated");
   }
 }

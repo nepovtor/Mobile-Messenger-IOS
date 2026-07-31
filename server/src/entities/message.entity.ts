@@ -7,6 +7,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryColumn,
+  Unique,
 } from "typeorm";
 import { ChatEntity } from "./chat.entity";
 import { createEntityId } from "./entity-id";
@@ -28,6 +29,11 @@ export enum MessageKind {
 
 @Entity({ name: "messages" })
 @Index("idx_messages_chat_created_id", ["chatId", "createdAt", "id"])
+@Unique("uq_messages_legacy_idempotency", [
+  "chatId",
+  "authorId",
+  "clientMessageId",
+])
 export class MessageEntity {
   @PrimaryColumn("uuid")
   id = createEntityId();
@@ -79,6 +85,12 @@ export class MessageEntity {
 
   @Column({ name: "deleted_at", type: "timestamptz", nullable: true })
   deletedAt!: Date | null;
+
+  @Column({ name: "is_legacy", type: "boolean", default: true })
+  isLegacy!: boolean;
+
+  @Column({ name: "migrated_at", type: "timestamptz", nullable: true })
+  migratedAt!: Date | null;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

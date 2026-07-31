@@ -1,7 +1,17 @@
-import { Body, Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../common/authenticated-user";
+import { GrantLocationPermissionDto } from "./dto/grant-location-permission.dto";
 import { UpdateLocationDto } from "./dto/update-location.dto";
 import { LocationService } from "./location.service";
 
@@ -26,6 +36,28 @@ export class LocationController {
   @Delete("me")
   disableMyLocation(@CurrentUser() user: AuthenticatedUser) {
     return this.locationService.disableMyLocation(user.sub);
+  }
+
+  @Get("permissions")
+  listPermissions(@CurrentUser() user: AuthenticatedUser) {
+    return this.locationService.listPermissions(user.sub);
+  }
+
+  @Post("permissions/:granteeUserID")
+  grantPermission(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("granteeUserID", new ParseUUIDPipe()) granteeUserID: string,
+    @Body() dto: GrantLocationPermissionDto,
+  ) {
+    return this.locationService.grantPermission(user.sub, granteeUserID, dto);
+  }
+
+  @Delete("permissions/:granteeUserID")
+  revokePermission(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("granteeUserID", new ParseUUIDPipe()) granteeUserID: string,
+  ) {
+    return this.locationService.revokePermission(user.sub, granteeUserID);
   }
 
   @Get("contacts")

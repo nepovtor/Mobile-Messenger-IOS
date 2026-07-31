@@ -195,7 +195,12 @@ public final class AuthViewModel: ObservableObject {
 
         do {
             let response = try await authService.verifyCode(method: method, contact: sanitizedContact, code: sanitizedCode)
-            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
+            sessionStore.authenticate(
+                with: response.token,
+                refreshToken: response.refreshToken,
+                userID: response.userID,
+                displayName: response.displayName
+            )
         } catch {
             errorMessage = AppError.presentableMessage(for: error)
         }
@@ -217,7 +222,12 @@ public final class AuthViewModel: ObservableObject {
                 contact: sanitizedContact,
                 password: sanitizedPassword
             )
-            sessionStore.authenticate(with: response.token, userID: response.userID, displayName: response.displayName)
+            sessionStore.authenticate(
+                with: response.token,
+                refreshToken: response.refreshToken,
+                userID: response.userID,
+                displayName: response.displayName
+            )
         } catch {
             errorMessage = AppError.presentableMessage(for: error)
         }

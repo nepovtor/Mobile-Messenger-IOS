@@ -1,7 +1,159 @@
 @testable import MobileMessengerIOS
+import Foundation
+import UserNotifications
 import XCTest
 
 final class TransportDecodingTests: XCTestCase {
+    func testAPIErrorTechnicalDetailsDoNotContainResponseBodyOrRequestURL() async throws {
+        let secret = "sensitive-token-and-message"
+        RedactingURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 500,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            let body = Data(#"{"message":"\#(secret)"}"#.utf8)
+            return (response, body)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedactingURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            RedactingURLProtocol.requestHandler = nil
+        }
+
+        let url = try XCTUnwrap(
+            URL(string: "https://example.test/api/push/device/\(secret)")
+        )
+        let request = URLRequest(url: url)
+
+        do {
+            let _: SanitizedTestResponse = try await APIResponseParser.requestJSON(
+                request,
+                using: session
+            )
+            XCTFail("Expected the request to fail")
+        } catch let error as APIResponseParser.ParseError {
+            let details = try XCTUnwrap(error.technicalDetails)
+            XCTAssertEqual(
+                details,
+                "Reason: HTTP status was not successful, status: 500."
+            )
+            XCTAssertFalse(details.contains(secret))
+            XCTAssertFalse(details.localizedCaseInsensitiveContains("preview"))
+            XCTAssertFalse(details.localizedCaseInsensitiveContains("url"))
+        }
+    }
+
+    func testGenericPushContentDropsServerProvidedMessageText() {
+        let chatID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let serverContent = UNMutableNotificationContent()
+        serverContent.title = "Имя отправителя"
+        serverContent.subtitle = "Название чата"
+        serverContent.body = "Секретный текст сообщения"
+        serverContent.badge = 4
+        serverContent.userInfo = [
+            "chatId": chatID,
+            "messageId": "message-id",
+            "text": "Секретный текст сообщения"
+        ]
+
+        let genericContent = PushNotificationManager.genericNotificationContent(
+            preservingRoutingFrom: serverContent
+        )
+
+        XCTAssertEqual(genericContent.title, "Новое сообщение")
+        XCTAssertEqual(genericContent.body, "")
+        XCTAssertEqual(genericContent.badge, 4)
+        XCTAssertEqual(genericContent.userInfo["chatId"] as? String, chatID)
+        XCTAssertNil(genericContent.userInfo["messageId"])
+        XCTAssertNil(genericContent.userInfo["text"])
+    }
+
+    func testIOSAuthRequestsIncludeStableGenericDeviceHeaders() async throws {
+        let deviceID = "11111111-2222-3333-4444-555555555555"
+        let requestRecorder = URLRequestRecorder()
+
+        RedactingURLProtocol.requestHandler = { request in
+            requestRecorder.record(request)
+
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            let path = try XCTUnwrap(request.url?.path)
+            let body: Data
+            if path.hasSuffix("/auth/request") {
+                body = Data(
+                    #"{"status":"code_sent","delivery":"telegram","resendAfterSeconds":60,"expiresIn":300}"#.utf8
+                )
+            } else {
+                body = Data(
+                    #"{"token":"ios-access-token","refreshToken":"ios-refresh-token","userID":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","displayName":"Анна Demo","phone":"+15551230011"}"#.utf8
+                )
+            }
+            return (response, body)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedactingURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            RedactingURLProtocol.requestHandler = nil
+        }
+
+        let service = RESTAuthService(
+            baseURL: try XCTUnwrap(URL(string: "https://example.test/api")),
+            session: session,
+            deviceID: deviceID
+        )
+
+        _ = try await service.requestCode(method: .phone, contact: "+15551230011")
+        _ = try await service.verifyCode(
+            method: .phone,
+            contact: "+15551230011",
+            code: "123456"
+        )
+        _ = try await service.signIn(
+            method: .phone,
+            contact: "+15551230011",
+            password: "password"
+        )
+
+        let requests = requestRecorder.snapshot()
+
+        XCTAssertEqual(requests.count, 3)
+        XCTAssertEqual(
+            requests.compactMap(\.url?.path),
+            ["/api/auth/request", "/api/auth/verify", "/api/auth/login"]
+        )
+        for request in requests {
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "X-Client-Platform"),
+                "ios"
+            )
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "X-Device-ID"),
+                deviceID
+            )
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "X-Device-Name"),
+                "Mobile Messenger iOS"
+            )
+        }
+    }
+
     func testAuthVerifyResponseDecodesVerifyPayload() throws {
         let userID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
         let payload = """
@@ -244,3 +396,60 @@ final class TransportDecodingTests: XCTestCase {
     }
 }
 
+private struct SanitizedTestResponse: Decodable {
+    let ok: Bool
+}
+
+private final class URLRequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [URLRequest] = []
+
+    func record(_ request: URLRequest) {
+        lock.lock()
+        requests.append(request)
+        lock.unlock()
+    }
+
+    func snapshot() -> [URLRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests
+    }
+}
+
+private final class RedactingURLProtocol: URLProtocol {
+    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let requestHandler = Self.requestHandler else {
+            client?.urlProtocol(
+                self,
+                didFailWithError: URLError(.unknown)
+            )
+            return
+        }
+
+        do {
+            let (response, data) = try requestHandler(request)
+            client?.urlProtocol(
+                self,
+                didReceive: response,
+                cacheStoragePolicy: .notAllowed
+            )
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}

@@ -4,9 +4,10 @@ import test from "node:test";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import { DataType, newDb } from "pg-mem";
 import request from "supertest";
+import { Repository } from "typeorm";
 import { AdminEntity } from "../src/entities/admin.entity";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
@@ -16,10 +17,12 @@ import { MediaEntity } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
 import { PhoneVerificationCodeEntity } from "../src/entities/phone-verification-code.entity";
 import { PushSubscriptionEntity } from "../src/entities/push-subscription.entity";
+import { SecurityAuditEventEntity } from "../src/entities/security-audit-event.entity";
 import { TelegramLinkEntity } from "../src/entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../src/entities/telegram-pairing-token.entity";
 import { UserEntity } from "../src/entities/user.entity";
 import { AdminModule } from "../src/modules/admin/admin.module";
+import { hashAdministrativePassword } from "../src/modules/common/password";
 import { SystemModule } from "../src/modules/system/system.module";
 
 async function createTestApp(): Promise<INestApplication> {
@@ -27,7 +30,6 @@ async function createTestApp(): Promise<INestApplication> {
   process.env["JWT_SECRET"] = "test-jwt-secret";
   process.env["JWT_EXPIRES_IN"] = "7d";
   process.env["ADMIN_LOGIN"] = "control";
-  process.env["ADMIN_PASSWORD"] = "control123";
   process.env["ADMIN_DISPLAY_NAME"] = "Control Room";
   process.env["DB_SYNCHRONIZE"] = "true";
   process.env["AUTH_ENABLE_DEMO_ACCOUNTS"] = "false";
@@ -38,6 +40,7 @@ async function createTestApp(): Promise<INestApplication> {
       TypeOrmModule.forRootAsync({
         useFactory: async () => ({
           type: "postgres",
+          autoLoadEntities: true,
           entities: [
             AdminEntity,
             UserEntity,
@@ -80,6 +83,25 @@ async function createTestApp(): Promise<INestApplication> {
   }).compile();
 
   const app = moduleRef.createNestApplication();
+  const adminsRepository = app.get<Repository<AdminEntity>>(
+    getRepositoryToken(AdminEntity),
+  );
+  await adminsRepository.save(
+    adminsRepository.create({
+      login: "control",
+      passwordHash: await hashAdministrativePassword("Control-Room!2026"),
+      displayName: "Control Room",
+      isActive: true,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      lastLoginAt: null,
+      passwordChangedAt: new Date(),
+      deactivatedAt: null,
+      sessionVersion: 1,
+      mfaMethod: "none",
+      mfaEnrolledAt: null,
+    }),
+  );
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
     new ValidationPipe({
@@ -103,7 +125,7 @@ test("admin auth: separate admin login can open admin me and system routes", asy
     .post("/api/admin/login")
     .send({
       login: "control",
-      password: "control123",
+      password: "Control-Room!2026",
     });
 
   assert.equal(loginResponse.status, 201);
@@ -127,8 +149,13 @@ test("admin auth: separate admin login can open admin me and system routes", asy
     .set("Authorization", `Bearer ${token}`);
 
   assert.equal(overviewResponse.status, 200);
-  assert.equal(overviewResponse.body.authentication.adminLogin, "control");
+  assert.equal(
+    overviewResponse.body.authentication.adminLogin,
+    "database-managed",
+  );
   assert.equal(overviewResponse.body.authentication.adminConsoleEnabled, true);
+  assert.deepEqual(overviewResponse.body.database.recentMessages, []);
+  assert.deepEqual(overviewResponse.body.database.recentUsers, []);
 });
 
 test("admin auth: user jwt cannot access admin-only system routes", async (t) => {
@@ -155,4 +182,38 @@ test("admin auth: user jwt cannot access admin-only system routes", async (t) =>
     .set("Authorization", `Bearer ${userToken}`);
 
   assert.equal(overviewResponse.status, 401);
+});
+
+test("admin auth rate failures create a temporary lock and audit trail", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => app.close());
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await request(app.getHttpServer())
+      .post("/api/admin/login")
+      .send({
+        login: "control",
+        password: "Wrong-Password!2026",
+      })
+      .expect(401);
+  }
+  await request(app.getHttpServer())
+    .post("/api/admin/login")
+    .send({
+      login: "control",
+      password: "Control-Room!2026",
+    })
+    .expect(403);
+
+  const admins = app.get<Repository<AdminEntity>>(
+    getRepositoryToken(AdminEntity),
+  );
+  const lockedAdmin = await admins.findOneByOrFail({ login: "control" });
+  assert.equal(Number(lockedAdmin.failedLoginAttempts), 5);
+  assert.ok(lockedAdmin.lockedUntil);
+
+  const auditEvents = app.get<Repository<SecurityAuditEventEntity>>(
+    getRepositoryToken(SecurityAuditEventEntity),
+  );
+  assert.equal(await auditEvents.countBy({ eventType: "auth.admin.login" }), 6);
 });

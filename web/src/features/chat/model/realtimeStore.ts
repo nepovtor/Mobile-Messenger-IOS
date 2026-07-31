@@ -12,7 +12,7 @@ type RealtimeStore = {
   client: RealtimeClient | null;
   connectionState: ConnectionState;
   lastError: string | null;
-  connect: (token: string, onEvent: (event: RealtimeEnvelope) => void) => void;
+  connect: (onEvent: (event: RealtimeEnvelope) => void) => void;
   disconnect: () => void;
   reconnect: () => void;
   sendEvent: (event: string, data: unknown) => void;
@@ -23,7 +23,7 @@ export const realtimeStore = create<RealtimeStore>((set, get) => ({
   client: null,
   connectionState: "disconnected",
   lastError: null,
-  connect: (token, onEvent) => {
+  connect: (onEvent) => {
     get().client?.disconnect(true);
 
     const client = new RealtimeClient({
@@ -40,7 +40,7 @@ export const realtimeStore = create<RealtimeStore>((set, get) => ({
     });
 
     set({ client, lastError: null, connectionState: "connecting" });
-    client.connect(token);
+    client.connect();
   },
   disconnect: () => {
     get().client?.disconnect(true);

@@ -4,16 +4,13 @@ import { ApiError } from "@/shared/api/httpClient";
 import { profileApi } from "@/features/profile/api/profileApi";
 import type {
   AuthCodeResponse,
-  AuthResponse,
   CurrentUser,
   LoginPayload,
   TelegramPairingResponse,
 } from "@/features/auth/types/auth";
-import { storage } from "@/utils/storage";
 import { validateDisplayName } from "@/utils/displayName";
 
 type AuthStore = {
-  token: string | null;
   currentUser: CurrentUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -23,7 +20,7 @@ type AuthStore = {
   requestCode: (phone: string) => Promise<AuthCodeResponse>;
   verifyCode: (phone: string, code: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<void>;
   handleUnauthorized: (message: string) => void;
@@ -32,9 +29,8 @@ type AuthStore = {
 };
 
 export const authStore = create<AuthStore>((set, get) => ({
-  token: storage.getToken(),
-  currentUser: storage.getUser() as CurrentUser | null,
-  isAuthenticated: Boolean(storage.getToken()),
+  currentUser: null,
+  isAuthenticated: false,
   isLoading: false,
   error: null,
   telegramStartUrl: null,
@@ -69,8 +65,8 @@ export const authStore = create<AuthStore>((set, get) => ({
   async verifyCode(phone, code) {
     set({ isLoading: true, error: null });
     try {
-      const result = await authApi.verifyCode(phone, code);
-      await authenticateWithBackendResult(result, set);
+      await authApi.verifyCode(phone, code);
+      await authenticateWithSessionCookie(set);
     } catch (error) {
       const message = mapAuthErrorMessage(error);
       set({ isLoading: false, error: message });
@@ -80,8 +76,8 @@ export const authStore = create<AuthStore>((set, get) => ({
   async login(payload) {
     set({ isLoading: true, error: null });
     try {
-      const result = await authApi.login(payload);
-      await authenticateWithBackendResult(result, set);
+      await authApi.login(payload);
+      await authenticateWithSessionCookie(set);
     } catch (error) {
       set({
         error: mapAuthErrorMessage(
@@ -93,10 +89,9 @@ export const authStore = create<AuthStore>((set, get) => ({
       throw error;
     }
   },
-  logout() {
-    storage.clearAll();
+  async logout() {
+    await authApi.logout().catch(() => undefined);
     set({
-      token: null,
       currentUser: null,
       isAuthenticated: false,
       isLoading: false,
@@ -105,31 +100,21 @@ export const authStore = create<AuthStore>((set, get) => ({
     });
   },
   async restoreSession() {
-    const token = storage.getToken();
-    if (!token) {
-      set({ isAuthenticated: false, currentUser: null });
-      return;
-    }
-
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const currentUser = await authApi.getMe();
-      storage.setUser(currentUser);
       set({
-        token,
         currentUser,
         isAuthenticated: true,
         isLoading: false,
         error: null,
       });
     } catch {
-      storage.clearAll();
       set({
-        token: null,
         currentUser: null,
         isAuthenticated: false,
         isLoading: false,
-        error: "Session expired. Please sign in again.",
+        error: null,
       });
     }
   },
@@ -153,7 +138,6 @@ export const authStore = create<AuthStore>((set, get) => ({
         contact: result.phone ?? existingUser.contact,
         phone: result.phone ?? existingUser.phone ?? existingUser.contact,
       };
-      storage.setUser(currentUser);
       set({
         currentUser,
         isLoading: false,
@@ -169,9 +153,7 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   handleUnauthorized(message) {
-    storage.clearAll();
     set({
-      token: null,
       currentUser: null,
       isAuthenticated: false,
       isLoading: false,
@@ -187,30 +169,23 @@ export const authStore = create<AuthStore>((set, get) => ({
   },
 }));
 
-async function authenticateWithBackendResult(
-  result: AuthResponse,
+async function authenticateWithSessionCookie(
   set: (partial: Partial<AuthStore>) => void,
 ) {
-  storage.setToken(result.token);
   set({
-    token: result.token,
     currentUser: null,
     isAuthenticated: false,
   });
   try {
     const currentUser = await authApi.getMe();
-    storage.setUser(currentUser);
     set({
-      token: result.token,
       currentUser,
       isAuthenticated: true,
       isLoading: false,
       error: null,
     });
   } catch (error) {
-    storage.clearAll();
     set({
-      token: null,
       currentUser: null,
       isAuthenticated: false,
       isLoading: false,

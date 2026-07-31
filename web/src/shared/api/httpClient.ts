@@ -1,5 +1,4 @@
 import { appConfig } from "@/config/api";
-import { adminStorage, storage } from "@/utils/storage";
 
 export class ApiError extends Error {
   status: number;
@@ -20,11 +19,15 @@ export class ApiError extends Error {
 type RequestOptions = RequestInit & {
   timeoutMs?: number;
   authMode?: "user" | "admin" | "none";
+  skipAuthRefresh?: boolean;
 };
 
+type AuthScope = Exclude<RequestOptions["authMode"], "none" | undefined>;
+
 const unauthorizedHandlers: Partial<
-  Record<"user" | "admin", (message: string) => void>
+  Record<AuthScope, (message: string) => void>
 > = {};
+const refreshRequests: Partial<Record<AuthScope, Promise<boolean>>> = {};
 
 export function registerUnauthorizedHandler(
   scope: "user" | "admin",
@@ -85,29 +88,38 @@ export async function httpRequest<T>(
   const {
     timeoutMs = appConfig.requestTimeoutMs,
     authMode = "user",
+    skipAuthRefresh = false,
     headers,
     ...requestInit
   } = options;
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const requestHeaders = new Headers(headers);
+  if (!requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+  requestHeaders.set("X-Client-Platform", "web");
 
   try {
-    const token =
-      authMode === "admin"
-        ? adminStorage.getToken()
-        : authMode === "user"
-          ? storage.getToken()
-          : null;
     const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
       ...requestInit,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(headers ?? {}),
-      },
+      credentials: "include",
+      headers: requestHeaders,
       signal: controller.signal,
     });
 
     const payload = await parseJson(response);
+    if (
+      response.status === 401 &&
+      authMode !== "none" &&
+      !skipAuthRefresh &&
+      (await refreshSession(authMode))
+    ) {
+      return httpRequest<T>(path, {
+        ...options,
+        skipAuthRefresh: true,
+      });
+    }
+
     if (!response.ok) {
       const error = toApiError(response.status, payload);
       if (import.meta.env.DEV && response.status >= 500) {
@@ -137,4 +149,26 @@ export async function httpRequest<T>(
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+function refreshSession(scope: AuthScope): Promise<boolean> {
+  const existingRequest = refreshRequests[scope];
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const path = scope === "admin" ? "/admin/refresh" : "/auth/refresh";
+  const request = httpRequest<void>(path, {
+    method: "POST",
+    authMode: "none",
+    skipAuthRefresh: true,
+  })
+    .then(() => true)
+    .catch(() => false)
+    .finally(() => {
+      delete refreshRequests[scope];
+    });
+
+  refreshRequests[scope] = request;
+  return request;
 }

@@ -5,12 +5,17 @@ import test from "node:test";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { WsAdapter } from "@nestjs/platform-ws";
 import { Test } from "@nestjs/testing";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { TypeOrmModule, getRepositoryToken } from "@nestjs/typeorm";
 import { DataType, newDb } from "pg-mem";
 import request from "supertest";
+import { Repository } from "typeorm";
 import { ChatEntity } from "../src/entities/chat.entity";
 import { ChatParticipantEntity } from "../src/entities/chat-participant.entity";
 import { ContactEntity } from "../src/entities/contact.entity";
+import {
+  LocationPermissionEntity,
+  LocationPermissionStatus,
+} from "../src/entities/location-permission.entity";
 import { LocationShareEntity } from "../src/entities/location-share.entity";
 import { MediaEntity } from "../src/entities/media.entity";
 import { MessageEntity } from "../src/entities/message.entity";
@@ -51,6 +56,7 @@ async function createTestApp(): Promise<INestApplication> {
       TypeOrmModule.forRootAsync({
         useFactory: async () => ({
           type: "postgres",
+          autoLoadEntities: true,
           entities: [
             UserEntity,
             ContactEntity,
@@ -170,23 +176,71 @@ function authedRequest(app: INestApplication, token: string) {
   };
 }
 
-test("contacts: authenticated user can add existing user by phone", async (t) => {
+async function establishContact(
+  app: INestApplication,
+  requester: { token: string },
+  recipient: { token: string },
+  recipientPhone: string,
+) {
+  const requestResponse = await authedRequest(app, requester.token)
+    .post("/api/contacts")
+    .send({ phone: recipientPhone });
+  assert.equal(requestResponse.status, 201);
+  assert.equal(requestResponse.body.status, "pending");
+  assert.equal(requestResponse.body.requestID, null);
+
+  const incoming = await authedRequest(app, recipient.token).get(
+    "/api/contacts/requests",
+  );
+  const requestID = incoming.body.incoming.at(-1)?.requestID as
+    | string
+    | undefined;
+  assert.ok(requestID);
+  const acceptResponse = await authedRequest(app, recipient.token).post(
+    `/api/contacts/requests/${requestID}/accept`,
+  );
+  assert.equal(acceptResponse.status, 201);
+  return acceptResponse;
+}
+
+test("contacts: profile data is disclosed only after acceptance", async (t) => {
   const app = await createTestApp();
   t.after(async () => {
     await app.close();
   });
 
   const owner = await authenticateUser(app, "+15550100001", "Owner");
-  await authenticateUser(app, "+15550100002", "Contact");
+  const contact = await authenticateUser(app, "+15550100002", "Contact");
 
-  const response = await authedRequest(app, owner.token)
+  const requestResponse = await authedRequest(app, owner.token)
     .post("/api/contacts")
     .send({ phone: "+1 (555) 010-0002" });
 
-  assert.equal(response.status, 201);
-  assert.equal(response.body.displayName, "Contact");
-  assert.equal(response.body.phone, "+15550100002");
-  assert.ok(response.body.directChatID);
+  assert.equal(requestResponse.status, 201);
+  assert.equal(requestResponse.body.status, "pending");
+  assert.equal(requestResponse.body.displayName, undefined);
+  assert.equal(requestResponse.body.phone, undefined);
+  assert.equal(requestResponse.body.directChatID, undefined);
+  assert.deepEqual(
+    (await authedRequest(app, owner.token).get("/api/contacts")).body,
+    [],
+  );
+
+  const incoming = await authedRequest(app, contact.token).get(
+    "/api/contacts/requests",
+  );
+  assert.equal(incoming.status, 200);
+  assert.equal(incoming.body.incoming.length, 1);
+  assert.equal(incoming.body.incoming[0].requesterDisplayName, "Owner");
+  assert.equal(incoming.body.incoming[0].phone, undefined);
+
+  const accepted = await authedRequest(app, contact.token).post(
+    `/api/contacts/requests/${incoming.body.incoming[0].requestID as string}/accept`,
+  );
+  assert.equal(accepted.status, 201);
+  assert.equal(accepted.body.displayName, "Owner");
+  assert.equal(accepted.body.phone, "+15550100001");
+  assert.ok(accepted.body.directChatID);
 });
 
 test("contacts: user cannot add himself", async (t) => {
@@ -212,7 +266,7 @@ test("contacts: adding same contact twice does not create duplicate", async (t) 
   });
 
   const owner = await authenticateUser(app, "+15550100004", "Owner");
-  await authenticateUser(app, "+15550100005", "Repeat");
+  const repeat = await authenticateUser(app, "+15550100005", "Repeat");
   const api = authedRequest(app, owner.token);
 
   const firstAdd = await api
@@ -221,13 +275,15 @@ test("contacts: adding same contact twice does not create duplicate", async (t) 
   const secondAdd = await api
     .post("/api/contacts")
     .send({ phone: "+15550100005" });
-  const list = await api.get("/api/contacts");
+  const requests = await authedRequest(app, repeat.token).get(
+    "/api/contacts/requests",
+  );
 
   assert.equal(firstAdd.status, 201);
   assert.equal(secondAdd.status, 201);
-  assert.equal(secondAdd.body.alreadyExists, true);
-  assert.equal(list.status, 200);
-  assert.equal(list.body.length, 1);
+  assert.deepEqual(firstAdd.body, secondAdd.body);
+  assert.equal(requests.status, 200);
+  assert.equal(requests.body.incoming.length, 1);
 });
 
 test("contacts: user cannot see contacts of another user", async (t) => {
@@ -252,7 +308,7 @@ test("contacts: user cannot see contacts of another user", async (t) => {
   assert.deepEqual(response.body, []);
 });
 
-test("contacts: adding unknown phone returns USER_NOT_FOUND", async (t) => {
+test("contacts: unknown phone returns a non-enumerating response", async (t) => {
   const app = await createTestApp();
   t.after(async () => {
     await app.close();
@@ -263,8 +319,11 @@ test("contacts: adding unknown phone returns USER_NOT_FOUND", async (t) => {
     .post("/api/contacts")
     .send({ phone: "+15550999999" });
 
-  assert.equal(response.status, 404);
-  assert.equal(response.body.code, "USER_NOT_FOUND");
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.body, {
+    requestID: null,
+    status: "pending",
+  });
 });
 
 test("contacts: contact list returns only current user contacts", async (t) => {
@@ -274,12 +333,12 @@ test("contacts: contact list returns only current user contacts", async (t) => {
   });
 
   const owner = await authenticateUser(app, "+15550100010", "Owner");
-  await authenticateUser(app, "+15550100011", "First");
-  await authenticateUser(app, "+15550100012", "Second");
+  const first = await authenticateUser(app, "+15550100011", "First");
+  const second = await authenticateUser(app, "+15550100012", "Second");
 
   const api = authedRequest(app, owner.token);
-  await api.post("/api/contacts").send({ phone: "+15550100011" });
-  await api.post("/api/contacts").send({ phone: "+15550100012" });
+  await establishContact(app, owner, first, "+15550100011");
+  await establishContact(app, owner, second, "+15550100012");
 
   const response = await api.get("/api/contacts");
 
@@ -306,12 +365,88 @@ test("contacts: direct chat is created or reused after adding contact", async (t
   });
   assert.equal(createdChat.status, 201);
 
-  const response = await ownerApi.post("/api/contacts").send({
-    phone: "+15550100014",
-  });
+  const response = await establishContact(app, owner, contact, "+15550100014");
 
   assert.equal(response.status, 201);
   assert.equal(response.body.directChatID, createdChat.body.id);
+});
+
+test("contacts: blocking removes disclosure and revokes the relationship", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const first = await authenticateUser(app, "+15550100028", "First");
+  const second = await authenticateUser(app, "+15550100029", "Second");
+  const accepted = await establishContact(app, first, second, "+15550100029");
+  const chatsRepository = app.get<Repository<ChatEntity>>(
+    getRepositoryToken(ChatEntity),
+  );
+  const directChatID = accepted.body.directChatID as string;
+  const epochBeforeBlock = (
+    await chatsRepository.findOneByOrFail({ id: directChatID })
+  ).encryptionEpoch;
+  const expiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  assert.equal(
+    (
+      await authedRequest(app, first.token)
+        .post(`/api/location/permissions/${second.userID}`)
+        .send({ expiresAt: expiry })
+    ).status,
+    201,
+  );
+  assert.equal(
+    (
+      await authedRequest(app, second.token)
+        .post(`/api/location/permissions/${first.userID}`)
+        .send({ expiresAt: expiry })
+    ).status,
+    201,
+  );
+
+  const blockResponse = await authedRequest(app, second.token).post(
+    `/api/contacts/${first.userID}/block`,
+  );
+  assert.equal(blockResponse.status, 201);
+  assert.deepEqual(
+    (await authedRequest(app, first.token).get("/api/contacts")).body,
+    [],
+  );
+  assert.deepEqual(
+    (await authedRequest(app, second.token).get("/api/contacts")).body,
+    [],
+  );
+  assert.equal(
+    (await chatsRepository.findOneByOrFail({ id: directChatID }))
+      .encryptionEpoch,
+    epochBeforeBlock + 1,
+  );
+  const locationPermissionsRepository = app.get<
+    Repository<LocationPermissionEntity>
+  >(getRepositoryToken(LocationPermissionEntity));
+  const permissions = await locationPermissionsRepository.find();
+  assert.equal(permissions.length, 2);
+  assert.ok(
+    permissions.every(
+      (permission) =>
+        permission.status === LocationPermissionStatus.REVOKED &&
+        permission.revokedAt instanceof Date,
+    ),
+  );
+
+  const hiddenBlockResponse = await authedRequest(app, first.token)
+    .post("/api/contacts")
+    .send({ phone: "+15550100029" });
+  assert.deepEqual(hiddenBlockResponse.body, {
+    requestID: null,
+    status: "pending",
+  });
+
+  const unblockResponse = await authedRequest(app, second.token).post(
+    `/api/contacts/${first.userID}/unblock`,
+  );
+  assert.equal(unblockResponse.status, 201);
 });
 
 test("chat: direct summaries show the other participant and groups keep their title", async (t) => {
@@ -595,17 +730,28 @@ test("location: contacts see only sharing contacts", async (t) => {
     "+15550100023",
     "Visible Contact",
   );
-  await authenticateUser(app, "+15550100024", "Hidden Contact");
+  const hiddenContact = await authenticateUser(
+    app,
+    "+15550100024",
+    "Hidden Contact",
+  );
   const ownerApi = authedRequest(app, owner.token);
 
-  await ownerApi.post("/api/contacts").send({ phone: "+15550100023" });
-  await ownerApi.post("/api/contacts").send({ phone: "+15550100024" });
-  await authedRequest(app, visibleContact.token).post("/api/location/me").send({
+  await establishContact(app, owner, visibleContact, "+15550100023");
+  await establishContact(app, owner, hiddenContact, "+15550100024");
+  const visibleApi = authedRequest(app, visibleContact.token);
+  await visibleApi.post("/api/location/me").send({
     latitude: 53.91,
     longitude: 27.57,
     accuracy: 18,
     sharingEnabled: true,
   });
+  const grantResponse = await visibleApi
+    .post(`/api/location/permissions/${owner.userID}`)
+    .send({
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+  assert.equal(grantResponse.status, 201);
 
   const response = await ownerApi.get("/api/location/contacts");
 
@@ -630,7 +776,7 @@ test("location: contacts do not see users without consent or non-contacts", asyn
   const outsider = await authenticateUser(app, "+15550100027", "Outsider");
   const ownerApi = authedRequest(app, owner.token);
 
-  await ownerApi.post("/api/contacts").send({ phone: "+15550100026" });
+  await establishContact(app, owner, visibleContact, "+15550100026");
 
   await authedRequest(app, visibleContact.token).post("/api/location/me").send({
     latitude: 53.92,
@@ -650,6 +796,67 @@ test("location: contacts do not see users without consent or non-contacts", asyn
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, []);
+});
+
+test("location: revoking an explicit permission removes access", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => {
+    await app.close();
+  });
+
+  const viewer = await authenticateUser(app, "+15550100030", "Viewer");
+  const owner = await authenticateUser(app, "+15550100031", "Owner");
+  await establishContact(app, viewer, owner, "+15550100031");
+  const ownerApi = authedRequest(app, owner.token);
+  await ownerApi.post("/api/location/me").send({
+    latitude: 53.9,
+    longitude: 27.56,
+    sharingEnabled: true,
+  });
+  await ownerApi.post(`/api/location/permissions/${viewer.userID}`).send({
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  });
+  assert.equal(
+    (await authedRequest(app, viewer.token).get("/api/location/contacts")).body
+      .length,
+    1,
+  );
+
+  const revokeResponse = await ownerApi.delete(
+    `/api/location/permissions/${viewer.userID}`,
+  );
+  assert.equal(revokeResponse.status, 200);
+  assert.deepEqual(
+    (await authedRequest(app, viewer.token).get("/api/location/contacts")).body,
+    [],
+  );
+});
+
+test("location: plaintext coordinate endpoints are disabled when E2EE is required", async (t) => {
+  const previousE2EERequired = process.env["E2EE_REQUIRED"];
+  process.env["E2EE_REQUIRED"] = "true";
+  const app = await createTestApp();
+  t.after(async () => {
+    if (previousE2EERequired === undefined) {
+      delete process.env["E2EE_REQUIRED"];
+    } else {
+      process.env["E2EE_REQUIRED"] = previousE2EERequired;
+    }
+    await app.close();
+  });
+
+  const user = await authenticateUser(app, "+15550100032", "Private");
+  const api = authedRequest(app, user.token);
+  const updateResponse = await api.post("/api/location/me").send({
+    latitude: 53.9,
+    longitude: 27.56,
+    sharingEnabled: true,
+  });
+  const readResponse = await api.get("/api/location/me");
+
+  assert.equal(updateResponse.status, 403);
+  assert.equal(readResponse.status, 403);
+  assert.equal((await api.delete("/api/location/me")).status, 200);
 });
 
 test("location: unauthenticated request rejected", async (t) => {

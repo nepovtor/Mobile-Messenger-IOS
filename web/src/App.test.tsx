@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "@/App";
 
@@ -113,5 +113,56 @@ describe("App push session handling", () => {
 
     expect(detachPushFromSession).not.toHaveBeenCalled();
     expect(syncPushForUser).not.toHaveBeenCalled();
+  });
+
+  it("keeps a protected route gated until cookie sessions are restored", async () => {
+    let resolveUserSession: (() => void) | undefined;
+    let resolveAdminSession: (() => void) | undefined;
+    restoreSession.mockReturnValueOnce(
+      new Promise<undefined>((resolve) => {
+        resolveUserSession = () => resolve(undefined);
+      }),
+    );
+    restoreAdminSession.mockReturnValueOnce(
+      new Promise<undefined>((resolve) => {
+        resolveAdminSession = () => resolve(undefined);
+      }),
+    );
+    authStoreMock.mockReturnValue({
+      restoreSession,
+      isAuthenticated: true,
+      isLoading: true,
+    });
+    authStoreMock.getState.mockReturnValue({
+      isAuthenticated: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Загружаем экран…")).toBeInTheDocument();
+    expect(screen.queryByText("map")).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveUserSession?.();
+      resolveAdminSession?.();
+    });
+
+    expect(await screen.findByText("map")).toBeInTheDocument();
+  });
+
+  it("does not block routing when push initialization fails", async () => {
+    initializePush.mockRejectedValueOnce(new Error("push unavailable"));
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("login")).toBeInTheDocument();
   });
 });

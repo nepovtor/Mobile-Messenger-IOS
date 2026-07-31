@@ -5,6 +5,10 @@ import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
 import { MessageEntity } from "../../entities/message.entity";
 import { ChatEventsService } from "../chat-events/chat-events.service";
+import {
+  isE2EERequired,
+  isLegacyMessagesReadEnabled,
+} from "../common/runtime-config";
 import { MediaService } from "../media/media.service";
 import type { ChatSummary, MessageResponse } from "./chat.service";
 
@@ -157,6 +161,9 @@ export class ChatPresenter {
   }
 
   private messagePreview(message: MessageEntity | null): string | null {
+    if (isE2EERequired() || !isLegacyMessagesReadEnabled()) {
+      return null;
+    }
     if (!message) {
       return null;
     }

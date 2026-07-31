@@ -34,9 +34,19 @@ export class PhoneVerificationCodeEntity {
   @Column({ name: "resend_available_at", type: "timestamptz" })
   resendAvailableAt!: Date;
 
-  @Column({ name: "request_ip", type: "varchar", nullable: true })
-  requestIP!: string | null;
+  @Column({
+    name: "request_ip_hash",
+    type: "varchar",
+    length: 64,
+    nullable: true,
+  })
+  requestIPHash!: string | null;
 
-  @Column({ name: "user_agent", type: "varchar", nullable: true })
-  userAgent!: string | null;
+  @Column({
+    name: "device_identifier_hash",
+    type: "varchar",
+    length: 64,
+    nullable: true,
+  })
+  deviceIdentifierHash!: string | null;
 }

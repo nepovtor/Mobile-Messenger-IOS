@@ -26,8 +26,8 @@ export const pushApi = {
     return httpRequest<{ ok: true }>(
       apiPath("deletePushSubscriptionFallback"),
       {
-      method: "POST",
-      body: JSON.stringify(payload),
+        method: "POST",
+        body: JSON.stringify(payload),
       },
     );
   },

@@ -34,10 +34,7 @@ struct APIResponseParser {
     private struct ResponseEnvelope {
         let data: Data
         let response: HTTPURLResponse
-        let url: String
         let contentType: String
-        let responseText: String
-        let preview: String
     }
 
     static func requestJSON<T: Decodable>(
@@ -96,9 +93,9 @@ struct APIResponseParser {
     ) async throws -> ResponseEnvelope {
         do {
             let (data, response) = try await session.data(for: request)
-            return try makeEnvelope(data: data, response: response, fallbackURL: request.url)
+            return try makeEnvelope(data: data, response: response)
         } catch {
-            throw transportError(from: error, request: request)
+            throw transportError(from: error)
         }
     }
 
@@ -109,39 +106,30 @@ struct APIResponseParser {
     ) async throws -> ResponseEnvelope {
         do {
             let (data, response) = try await session.upload(for: request, from: body)
-            return try makeEnvelope(data: data, response: response, fallbackURL: request.url)
+            return try makeEnvelope(data: data, response: response)
         } catch {
-            throw transportError(from: error, request: request)
+            throw transportError(from: error)
         }
     }
 
     private static func makeEnvelope(
         data: Data,
-        response: URLResponse,
-        fallbackURL: URL?
+        response: URLResponse
     ) throws -> ResponseEnvelope {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw ParseError(
                 userMessage: invalidResponseMessage,
-                technicalDetails: "Missing HTTPURLResponse. URL: \(fallbackURL?.absoluteString ?? "unknown")",
+                technicalDetails: "Missing HTTPURLResponse.",
                 isRetryable: true
             )
         }
 
-        let url = httpResponse.url?.absoluteString ?? fallbackURL?.absoluteString ?? "unknown"
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
-        let responseText = data.isEmpty ? "" : String(decoding: data, as: UTF8.self)
-        let preview = responseText
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .prefix(160)
 
         return ResponseEnvelope(
             data: data,
             response: httpResponse,
-            url: url,
-            contentType: contentType,
-            responseText: responseText,
-            preview: String(preview)
+            contentType: contentType
         )
     }
 
@@ -186,7 +174,7 @@ struct APIResponseParser {
             throw parseError
         }
 
-        guard isJSONContent(envelope.contentType) || looksLikeJSON(envelope.responseText) else {
+        guard isJSONContent(envelope.contentType) || looksLikeJSON(envelope.data) else {
             let parseError = ParseError(
                 userMessage: invalidResponseMessage,
                 technicalDetails: technicalDetails(reason: "Response was not JSON", envelope: envelope)
@@ -210,16 +198,15 @@ struct APIResponseParser {
         }
     }
 
-    private static func transportError(from error: Error, request: URLRequest) -> ParseError {
+    private static func transportError(from error: Error) -> ParseError {
         if let parseError = error as? ParseError {
             return parseError
         }
 
-        let url = request.url?.absoluteString ?? "unknown"
         if let urlError = error as? URLError {
             let parseError = ParseError(
                 userMessage: userMessage(for: urlError),
-                technicalDetails: "Transport failure. URL: \(url), code: \(urlError.code.rawValue), description: \(urlError.localizedDescription)",
+                technicalDetails: "Transport failure. Code: \(urlError.code.rawValue).",
                 isRetryable: isRetryable(urlError)
             )
             logDebugInfo(parseError)
@@ -228,7 +215,7 @@ struct APIResponseParser {
 
         let parseError = ParseError(
             userMessage: invalidResponseMessage,
-            technicalDetails: "Unexpected transport failure. URL: \(url), error: \(String(describing: error))"
+            technicalDetails: "Unexpected transport failure."
         )
         logDebugInfo(parseError)
         return parseError
@@ -245,30 +232,24 @@ struct APIResponseParser {
             return true
         }
 
-        let trimmed = envelope.responseText
+        let trimmed = String(decoding: envelope.data.prefix(512), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
         return trimmed.hasPrefix("<!doctype html") || trimmed.hasPrefix("<html") || trimmed.hasPrefix("<body")
     }
 
-    private static func looksLikeJSON(_ text: String) -> Bool {
-        guard let firstCharacter = text.trimmingCharacters(in: .whitespacesAndNewlines).first else {
+    private static func looksLikeJSON(_ data: Data) -> Bool {
+        guard let firstCharacter = String(decoding: data.prefix(512), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .first else {
             return false
         }
         return firstCharacter == "{" || firstCharacter == "["
     }
 
-    private static func sanitizePreview(_ preview: String) -> String {
-        preview
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private static func technicalDetails(reason: String, envelope: ResponseEnvelope) -> String {
-        let preview = sanitizePreview(envelope.preview)
-        return "Reason: \(reason), status: \(envelope.response.statusCode), url: \(envelope.url), content-type: \(envelope.contentType), preview: \(preview)"
+        "Reason: \(reason), status: \(envelope.response.statusCode)."
     }
 
     private static func userMessage(for urlError: URLError) -> String {
@@ -335,13 +316,13 @@ struct APIResponseParser {
             }
         }
 
-        return String(describing: error)
+        return "Unknown decoding error"
     }
 
     private static func logDebugInfo(_ error: ParseError) {
         #if DEBUG
         guard let technicalDetails = error.technicalDetails,
-              let summaryData = "[API] \(error.userMessage)\n[API] \(technicalDetails)\n".data(using: .utf8) else {
+              let summaryData = "[API] \(technicalDetails)\n".data(using: .utf8) else {
             return
         }
         FileHandle.standardError.write(summaryData)

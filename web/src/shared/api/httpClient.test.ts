@@ -50,6 +50,84 @@ describe("httpRequest", () => {
     expect(warningSpy).toHaveBeenCalled();
   });
 
+  it("uses cookie credentials without adding an authorization header", async () => {
+    await httpRequest("/auth/me");
+
+    const requestInit = vi.mocked(fetch).mock.calls[0]?.[1];
+    expect(requestInit?.credentials).toBe("include");
+    const headers = new Headers(requestInit?.headers);
+    expect(headers.has("Authorization")).toBe(false);
+    expect(headers.get("X-Client-Platform")).toBe("web");
+  });
+
+  it("refreshes an expired cookie session once and retries the request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: async () => JSON.stringify({ message: "Unauthorized" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 204,
+          text: async () => "",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ userID: "user-1" }),
+        }),
+    );
+
+    await expect(httpRequest("/auth/me")).resolves.toEqual({
+      userID: "user-1",
+    });
+
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(calls.map(([url]) => String(url))).toEqual([
+      expect.stringMatching(/\/auth\/me$/),
+      expect.stringMatching(/\/auth\/refresh$/),
+      expect.stringMatching(/\/auth\/me$/),
+    ]);
+    expect(calls.every(([, init]) => init?.credentials === "include")).toBe(
+      true,
+    );
+  });
+
+  it("uses the isolated admin refresh endpoint for admin requests", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: async () => JSON.stringify({ message: "Unauthorized" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 204,
+          text: async () => "",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ login: "operator" }),
+        }),
+    );
+
+    await httpRequest("/admin/me", { authMode: "admin" });
+
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual([
+      expect.stringMatching(/\/admin\/me$/),
+      expect.stringMatching(/\/admin\/refresh$/),
+      expect.stringMatching(/\/admin\/me$/),
+    ]);
+  });
+
   it("preserves an internal server message for higher-level error mapping", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.stubGlobal(

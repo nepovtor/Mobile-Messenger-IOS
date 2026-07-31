@@ -11,16 +11,21 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { createHmac, randomInt } from "node:crypto";
-import { compare, hash } from "bcryptjs";
-import { JwtService } from "@nestjs/jwt";
+import { compare as compareBcrypt } from "bcryptjs";
+import { argon2id, hash as argon2Hash, verify as argon2Verify } from "argon2";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Repository } from "typeorm";
+import { DataSource, IsNull, Repository } from "typeorm";
+import { SessionPrincipalType } from "../../entities/auth-session.entity";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
 import {
   TelegramLinkEntity,
   TelegramLinkState,
 } from "../../entities/telegram-link.entity";
-import { AuthMethod, UserEntity } from "../../entities/user.entity";
+import { AuthMethod, UserEntity, UserStatus } from "../../entities/user.entity";
+import {
+  SecurityActorType,
+  SecurityAuditOutcome,
+} from "../../entities/security-audit-event.entity";
 import {
   buildDisplayName,
   normalizeContact,
@@ -33,14 +38,20 @@ import {
   getAuthCodeTTLSeconds,
   getAuthRateLimitWindowMs,
   getAuthTestCode,
-  getJwtExpiresIn,
-  getJwtSecret,
+  getLogIpHashKey,
+  getOtpPepper,
   getPhoneRequestRateLimitMaxRequests,
   getVerificationProvider,
   isPasswordLoginEnabled,
   isTestCodeAllowed,
   shouldExposeDebugAuthCode,
 } from "../common/runtime-config";
+import { SecurityAuditService } from "../security/security-audit.service";
+import { SessionService } from "../sessions/session.service";
+import {
+  IssuedSession,
+  SessionRequestContext,
+} from "../sessions/session.types";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { LoginAuthDto } from "./dto/login-auth.dto";
 import { LabLoginDto } from "./dto/lab-login.dto";
@@ -53,8 +64,13 @@ import {
   TelegramNotLinkedError,
 } from "./sms/sms.types";
 
-type AuthResult = {
+export type AuthResult = {
   token: string;
+  refreshToken: string;
+  accessExpiresIn: string;
+  refreshExpiresAt: Date;
+  sessionId: string;
+  deviceUuid: string;
   userID: string;
   login: string;
   displayName: string;
@@ -114,7 +130,9 @@ export class AuthService implements OnModuleInit {
     private readonly verificationCodesRepository: Repository<PhoneVerificationCodeEntity>,
     @InjectRepository(TelegramLinkEntity)
     private readonly telegramLinksRepository: Repository<TelegramLinkEntity>,
-    private readonly jwtService: JwtService,
+    private readonly dataSource: DataSource,
+    private readonly sessionService: SessionService,
+    private readonly securityAuditService: SecurityAuditService,
     private readonly authRateLimitService: AuthRateLimitService,
     @Inject(SMS_SERVICE)
     private readonly smsService: SmsService,
@@ -138,10 +156,7 @@ export class AuthService implements OnModuleInit {
 
   async requestCode(
     dto: RequestAuthDto,
-    requestContext?: {
-      requestIP?: string | null;
-      userAgent?: string | null;
-    },
+    requestContext: SessionRequestContext,
   ): Promise<{
     status: "code_sent";
     delivery: string;
@@ -150,11 +165,22 @@ export class AuthService implements OnModuleInit {
     debugCode?: string;
   }> {
     const phone = this.resolvePhone(dto);
-    this.authRateLimitService.consume(`request:phone:${phone}`, {
-      maxRequests: getPhoneRequestRateLimitMaxRequests(),
-      windowMs: getAuthRateLimitWindowMs(),
-      message: "Too many auth requests for this phone number",
-    });
+    this.authRateLimitService.consume(
+      `request:phone:${this.hashRateLimitValue(phone)}`,
+      {
+        maxRequests: getPhoneRequestRateLimitMaxRequests(),
+        windowMs: getAuthRateLimitWindowMs(),
+        message: "Too many auth requests for this phone number",
+      },
+    );
+    this.authRateLimitService.consume(
+      `request:device:${this.hashRateLimitValue(requestContext.deviceUuid)}`,
+      {
+        maxRequests: getPhoneRequestRateLimitMaxRequests() * 2,
+        windowMs: getAuthRateLimitWindowMs(),
+        message: "Too many auth requests for this device",
+      },
+    );
 
     const activeCode = await this.findLatestCode(phone);
     const now = new Date();
@@ -179,8 +205,8 @@ export class AuthService implements OnModuleInit {
       resendAvailableAt: new Date(
         now.getTime() + this.resendCooldownSeconds * 1000,
       ),
-      requestIP: requestContext?.requestIP ?? null,
-      userAgent: requestContext?.userAgent ?? null,
+      requestIPHash: this.hashContextValue(requestContext.ipAddress),
+      deviceIdentifierHash: this.hashContextValue(requestContext.deviceUuid),
     });
 
     await this.verificationCodesRepository.save(codeEntity);
@@ -190,13 +216,12 @@ export class AuthService implements OnModuleInit {
     } catch (error) {
       await this.verificationCodesRepository.delete({ id: codeEntity.id });
       if (error instanceof TelegramNotLinkedError) {
-        throw new HttpException(
-          {
-            code: error.code,
-            message: error.message,
-          },
-          HttpStatus.BAD_REQUEST,
-        );
+        return {
+          status: "code_sent",
+          delivery: getVerificationProvider(),
+          resendAfterSeconds: this.resendCooldownSeconds,
+          expiresIn: this.codeTTLSeconds,
+        };
       }
       if (error instanceof SmsProviderUnavailableError) {
         throw new ServiceUnavailableException(
@@ -204,10 +229,7 @@ export class AuthService implements OnModuleInit {
         );
       }
 
-      this.logger.error(
-        `Failed to deliver verification code for ${phone}`,
-        error as Error,
-      );
+      this.logger.error("Failed to deliver verification code", error as Error);
       throw new ServiceUnavailableException(
         "Verification provider unavailable",
       );
@@ -222,56 +244,12 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async verifyCode(dto: VerifyAuthDto): Promise<{
-    token: string;
-    userID: string;
-    displayName: string;
-    phone: string;
-  }> {
+  async verifyCode(
+    dto: VerifyAuthDto,
+    requestContext: SessionRequestContext,
+  ): Promise<AuthResult> {
     const phone = this.resolvePhone(dto);
-    const verificationCode = await this.findLatestCode(phone);
-
-    if (!verificationCode) {
-      throw new UnauthorizedException("Invalid verification code");
-    }
-
-    if (verificationCode.consumedAt) {
-      throw new UnauthorizedException(
-        "Verification code has already been used",
-      );
-    }
-
-    if (verificationCode.expiresAt.getTime() < Date.now()) {
-      throw new UnauthorizedException("Verification code expired");
-    }
-
-    if (verificationCode.attempts >= this.codeMaxAttempts) {
-      throw new HttpException(
-        "Too many verification attempts",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    const submittedCode = dto.code.trim();
-    if (
-      this.hashVerificationCode(phone, submittedCode) !==
-      verificationCode.codeHash
-    ) {
-      verificationCode.attempts += 1;
-      await this.verificationCodesRepository.save(verificationCode);
-
-      if (verificationCode.attempts >= this.codeMaxAttempts) {
-        throw new HttpException(
-          "Too many verification attempts",
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
-
-      throw new UnauthorizedException("Invalid verification code");
-    }
-
-    verificationCode.consumedAt = new Date();
-    await this.verificationCodesRepository.save(verificationCode);
+    await this.consumeVerificationCode(phone, dto.code.trim());
     const telegramLink = await this.telegramLinksRepository.findOne({
       where: {
         phone,
@@ -292,13 +270,16 @@ export class AuthService implements OnModuleInit {
       await this.telegramLinksRepository.save(telegramLink);
     }
 
-    return this.buildAuthResult(user);
+    return this.buildAuthResult(user, requestContext);
   }
 
-  async login(dto: LoginAuthDto): Promise<AuthResult> {
+  async login(
+    dto: LoginAuthDto,
+    requestContext: SessionRequestContext,
+  ): Promise<AuthResult> {
     if (dto.login?.trim()) {
       const user = await this.authenticateUserByLogin(dto.login, dto.password);
-      return this.buildAuthResult(user);
+      return this.buildAuthResult(user, requestContext);
     }
 
     if (!areDemoAccountsEnabled() || !isPasswordLoginEnabled()) {
@@ -323,15 +304,15 @@ export class AuthService implements OnModuleInit {
       demoAccount.displayName,
     );
 
-    return this.buildAuthResult(user);
+    return this.buildAuthResult(user, requestContext);
   }
 
-  async loginLabUser(dto: LabLoginDto): Promise<{ token: string }> {
+  async loginLabUser(
+    dto: LabLoginDto,
+    requestContext: SessionRequestContext,
+  ): Promise<AuthResult> {
     const user = await this.authenticateUserByLogin(dto.login, dto.password);
-    const result = await this.buildAuthResult(user);
-    return {
-      token: result.token,
-    };
+    return this.buildAuthResult(user, requestContext);
   }
 
   async getMe(userID: string): Promise<{
@@ -361,6 +342,79 @@ export class AuthService implements OnModuleInit {
       telegramChatId: user.telegramChatId,
       telegramUsername: user.telegramUsername,
     };
+  }
+
+  async refreshSession(
+    refreshToken: string,
+    requestContext: SessionRequestContext,
+  ): Promise<AuthResult> {
+    const identity = await this.sessionService.resolveRefreshPrincipal(
+      refreshToken,
+      SessionPrincipalType.USER,
+    );
+    const user = await this.usersRepository.findOneBy({
+      id: identity.principalId as UserEntity["id"],
+    });
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException("Session is no longer valid");
+    }
+    const issued = await this.sessionService.rotateSession(
+      refreshToken,
+      SessionPrincipalType.USER,
+      user.sessionVersion,
+      requestContext,
+    );
+    return {
+      ...this.toTokenFields(issued),
+      userID: user.id,
+      login: user.login ?? user.contact,
+      displayName: user.displayName,
+      phone: user.phone ?? user.contact,
+    };
+  }
+
+  async logoutSession(user: { sub: string; sid: string }): Promise<void> {
+    await this.sessionService.revokeSession(
+      SessionPrincipalType.USER,
+      user.sub,
+      user.sid,
+      "logout",
+    );
+  }
+
+  async logoutWithRefreshToken(refreshToken: string | null): Promise<void> {
+    if (!refreshToken) {
+      return;
+    }
+    await this.sessionService.revokeByRefreshToken(
+      refreshToken,
+      SessionPrincipalType.USER,
+      "logout",
+    );
+  }
+
+  listSessions(user: { sub: string; sid: string }) {
+    return this.sessionService.listSessions(
+      SessionPrincipalType.USER,
+      user.sub,
+      user.sid,
+    );
+  }
+
+  async revokeSession(
+    user: { sub: string; sid: string },
+    sessionId: string,
+  ): Promise<{ revoked: true }> {
+    const revoked = await this.sessionService.revokeSession(
+      SessionPrincipalType.USER,
+      user.sub,
+      sessionId,
+      "user_revoked",
+    );
+    if (!revoked) {
+      throw new BadRequestException("Session not found");
+    }
+    return { revoked: true };
   }
 
   private findDemoAccount(
@@ -468,24 +522,25 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  private async buildAuthResult(user: UserEntity): Promise<AuthResult> {
-    const token = await this.jwtService.signAsync(
-      {
-        sub: user.id,
-        login: user.login ?? user.contact,
-        displayName: user.displayName,
-        contact: user.contact,
-        method: user.method,
-        phone: user.phone ?? user.contact,
-      },
-      {
-        secret: getJwtSecret(),
-        expiresIn: getJwtExpiresIn() as never,
-      },
+  private async buildAuthResult(
+    user: UserEntity,
+    requestContext: SessionRequestContext,
+  ): Promise<AuthResult> {
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException("Account is not active");
+    }
+    user.lastLoginAt = new Date();
+    await this.usersRepository.save(user);
+    const issued = await this.sessionService.issueSession(
+      SessionPrincipalType.USER,
+      user.id,
+      user.sessionVersion,
+      requestContext,
     );
+    await this.recordLogin(user, requestContext, SecurityAuditOutcome.SUCCESS);
 
     return {
-      token,
+      ...this.toTokenFields(issued),
       userID: user.id,
       login: user.login ?? user.contact,
       displayName: user.displayName,
@@ -512,16 +567,32 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    const passwordMatches = await compare(password, user.passwordHash);
+    const passwordMatches = await this.verifyUserPassword(
+      user.passwordHash,
+      password,
+    );
     if (!passwordMatches) {
       throw new UnauthorizedException("Invalid credentials");
+    }
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException("Account is not active");
+    }
+    if (user.passwordHash.startsWith("$2")) {
+      user.passwordHash = await this.hashPassword(password);
+      await this.usersRepository.save(user);
     }
 
     return user;
   }
 
   async hashPassword(password: string): Promise<string> {
-    return hash(password, 12);
+    return argon2Hash(password, {
+      type: argon2id,
+      memoryCost: 65_536,
+      timeCost: 3,
+      parallelism: 1,
+      hashLength: 32,
+    });
   }
 
   normalizeLogin(login: string): string {
@@ -564,9 +635,139 @@ export class AuthService implements OnModuleInit {
   }
 
   private hashVerificationCode(phone: string, code: string): string {
-    return createHmac("sha256", getJwtSecret())
+    return createHmac("sha256", getOtpPepper())
       .update(`${phone}:${code}`)
       .digest("hex");
+  }
+
+  private async consumeVerificationCode(
+    phone: string,
+    submittedCode: string,
+  ): Promise<void> {
+    const result = await this.dataSource.transaction<
+      "consumed" | "invalid" | "expired" | "used" | "limited" | "missing"
+    >(async (manager) => {
+      const repository = manager.getRepository(PhoneVerificationCodeEntity);
+      const verificationCode = await repository.findOne({
+        where: { phone },
+        order: { createdAt: "DESC" },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!verificationCode) {
+        return "missing";
+      }
+      if (verificationCode.consumedAt) {
+        return "used";
+      }
+      if (verificationCode.expiresAt.getTime() < Date.now()) {
+        return "expired";
+      }
+      if (verificationCode.attempts >= this.codeMaxAttempts) {
+        return "limited";
+      }
+      if (
+        this.hashVerificationCode(phone, submittedCode) !==
+        verificationCode.codeHash
+      ) {
+        verificationCode.attempts += 1;
+        await repository.save(verificationCode);
+        return verificationCode.attempts >= this.codeMaxAttempts
+          ? "limited"
+          : "invalid";
+      }
+
+      verificationCode.consumedAt = new Date();
+      await repository.save(verificationCode);
+      return "consumed";
+    });
+
+    switch (result) {
+      case "consumed":
+        return;
+      case "limited":
+        throw new HttpException(
+          "Too many verification attempts",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      case "expired":
+        throw new UnauthorizedException("Verification code expired");
+      case "used":
+        throw new UnauthorizedException(
+          "Verification code has already been used",
+        );
+      case "invalid":
+      case "missing":
+        throw new UnauthorizedException("Invalid verification code");
+    }
+  }
+
+  private async verifyUserPassword(
+    encodedHash: string,
+    password: string,
+  ): Promise<boolean> {
+    try {
+      if (encodedHash.startsWith("$argon2id$")) {
+        return await argon2Verify(encodedHash, password);
+      }
+      if (encodedHash.startsWith("$2")) {
+        return await compareBcrypt(password, encodedHash);
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  private toTokenFields(
+    issued: IssuedSession,
+  ): Pick<
+    AuthResult,
+    | "token"
+    | "refreshToken"
+    | "accessExpiresIn"
+    | "refreshExpiresAt"
+    | "sessionId"
+    | "deviceUuid"
+  > {
+    return {
+      token: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      accessExpiresIn: issued.accessExpiresIn,
+      refreshExpiresAt: issued.refreshExpiresAt,
+      sessionId: issued.sessionId,
+      deviceUuid: issued.deviceUuid,
+    };
+  }
+
+  private hashRateLimitValue(value: string): string {
+    return createHmac("sha256", getOtpPepper()).update(value).digest("hex");
+  }
+
+  private hashContextValue(value: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+    return createHmac("sha256", getLogIpHashKey() ?? getOtpPepper())
+      .update(value)
+      .digest("hex");
+  }
+
+  private async recordLogin(
+    user: UserEntity,
+    context: SessionRequestContext,
+    outcome: SecurityAuditOutcome,
+  ): Promise<void> {
+    await this.securityAuditService.record({
+      eventType: "auth.user.login",
+      actorType: SecurityActorType.USER,
+      actorId: user.id,
+      outcome,
+      ipHash: this.hashContextValue(context.ipAddress),
+      metadata: {
+        method: user.method,
+        platform: context.platform,
+      },
+    });
   }
 
   private findLatestCode(

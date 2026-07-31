@@ -27,7 +27,7 @@ export const systemApi = {
     return httpRequest<SystemLogEntry[]>(
       `${apiPath("systemErrorLogs")}?limit=${limit}`,
       {
-      authMode: "admin",
+        authMode: "admin",
       },
     );
   },
