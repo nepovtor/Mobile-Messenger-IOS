@@ -68,9 +68,11 @@ With a disposable PostgreSQL 16 instance:
 Scripts/migration-smoke.sh
 ```
 
-CI additionally builds/tests iOS, lints the Supabase schema, reviews dependency
-changes, scans Git history for secrets, runs CodeQL, and scans the production
-container for critical vulnerabilities.
+CI additionally builds/tests iOS, lints the Supabase schema, scans Git history
+for secrets, and scans the production container for critical vulnerabilities.
+CodeQL and Dependency Review run when GitHub Advanced Security is enabled and
+the `CODEQL_ENABLED` and `DEPENDENCY_REVIEW_ENABLED` repository variables are
+set to `true`; locked backend and web dependency audits remain mandatory.
 
 ## Open release blockers
 

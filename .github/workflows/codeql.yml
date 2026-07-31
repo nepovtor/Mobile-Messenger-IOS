@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   analyze:
+    if: vars.CODEQL_ENABLED == 'true'
     name: Analyze ${{ matrix.language }}
     strategy:
       fail-fast: false

@@ -6,8 +6,9 @@ to deploy while any release blocker in
 
 ## 1. Pre-deployment approvals
 
-- Reviewed commit/PR with green backend, web, iOS, migration, CodeQL, secret,
-  dependency, and container checks.
+- Reviewed commit/PR with green backend, web, iOS, migration, secret, and
+  container checks. CodeQL and dependency review must also be green when
+  GitHub Advanced Security is enabled.
 - E2EE protocol gate approved, or the production deployment remains disabled.
 - No high/critical production dependency advisory accepted without a dated,
   owned exception.
@@ -100,6 +101,13 @@ PUSH_ALLOW_TEST_ENDPOINT=false
 
 `CORS_ORIGINS` and `WS_ORIGINS` are explicit comma-separated HTTPS origins;
 wildcards are forbidden.
+
+For this private repository, GitHub CodeQL upload and Dependency Review require
+GitHub Advanced Security. After enabling it in repository settings, create the
+repository variables `CODEQL_ENABLED=true` and
+`DEPENDENCY_REVIEW_ENABLED=true`. The workflows remain skipped until both the
+feature and their corresponding variables are enabled; backend and web package
+audits continue to run unconditionally.
 
 ## 4. Build and configuration checks
 
