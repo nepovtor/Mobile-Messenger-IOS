@@ -30,6 +30,7 @@ final class ChatRepositorySpy: ChatRepository {
         status: .sending
     )
     var historyResult: [Message] = []
+    var cachedHistoryResult: [Message]?
     var observedChats: AsyncStream<[Chat]> = AsyncStream { continuation in
         continuation.finish()
     }
@@ -39,9 +40,15 @@ final class ChatRepositorySpy: ChatRepository {
     }
 
     var onSendMessage: ((UUID, String, UUID?) -> Void)?
+    var sendMessageHandler: ((UUID, String, UUID?) -> Message)?
+    var loadHistoryHandler: ((UUID, Int, UUID?) -> [Message])?
     var onMarkMessage: ((UUID) -> Void)?
+    var onObserveMessages: ((UUID) -> Void)?
     var deletedChatIDs: [UUID] = []
     var markedMessageIDs: [UUID] = []
+    var historyLoadCount = 0
+    var historyRequests: [(chatID: UUID, limit: Int, before: UUID?)] = []
+    var observedMessageChatIDs: [UUID] = []
 
     func createChat(title _: String, participantContacts _: [String]) async throws -> Chat {
         createChatResult
@@ -63,21 +70,25 @@ final class ChatRepositorySpy: ChatRepository {
         observedChats
     }
 
-    func observeMessages(for _: UUID) -> AsyncStream<Message> {
-        observedMessages
+    func observeMessages(for chatID: UUID) async -> AsyncStream<Message> {
+        observedMessageChatIDs.append(chatID)
+        onObserveMessages?(chatID)
+        return observedMessages
     }
 
     func cachedHistory(for _: UUID, limit _: Int, before _: UUID?) async -> [Message] {
-        historyResult
+        cachedHistoryResult ?? historyResult
     }
 
-    func loadHistory(for _: UUID, limit _: Int, before _: UUID?) async throws -> [Message] {
-        historyResult
+    func loadHistory(for chatID: UUID, limit: Int, before: UUID?) async throws -> [Message] {
+        historyLoadCount += 1
+        historyRequests.append((chatID, limit, before))
+        return loadHistoryHandler?(chatID, limit, before) ?? historyResult
     }
 
     func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message {
         onSendMessage?(chatID, text, localID)
-        return sendMessageResult
+        return sendMessageHandler?(chatID, text, localID) ?? sendMessageResult
     }
 
     func sendImageMessage(chatID _: UUID, imageData _: Data, caption _: String?, localID _: UUID?) async throws -> Message {
@@ -459,10 +470,17 @@ final class LocationServiceStub: LocationNetworking {
         accuracy: 25,
         updatedAt: "2026-05-02T09:00:00.000Z"
     )
+    var sharingPermissions: [ServerLocationPermission] = []
     var contactLocations: [ServerSharedLocation] = []
+    var updateLocationCallCount = 0
+    var stopSharingCallCount = 0
 
     func fetchMyLocation() async throws -> ServerMyLocationShare {
         myLocation
+    }
+
+    func fetchSharingPermissions() async throws -> [ServerLocationPermission] {
+        sharingPermissions
     }
 
     func updateMyLocation(
@@ -471,6 +489,7 @@ final class LocationServiceStub: LocationNetworking {
         accuracy: Double?,
         sharingEnabled: Bool
     ) async throws -> ServerMyLocationShare {
+        updateLocationCallCount += 1
         _ = latitude
         _ = longitude
         _ = accuracy
@@ -480,6 +499,7 @@ final class LocationServiceStub: LocationNetworking {
     }
 
     func stopSharing() async throws {
+        stopSharingCallCount += 1
         myLocation = ServerMyLocationShare(
             sharingEnabled: false,
             latitude: nil,

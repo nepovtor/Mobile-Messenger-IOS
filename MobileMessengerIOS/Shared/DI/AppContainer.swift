@@ -215,6 +215,7 @@ public final class AppContainer: ObservableObject {
     func makeMapViewModel() -> MapViewModel {
         MapViewModel(
             loadMyLocation: LoadMyLocationUseCase(repository: locationRepository),
+            loadSharingPermissions: LoadLocationSharingPermissionsUseCase(repository: locationRepository),
             loadContactLocations: LoadContactLocationsUseCase(repository: locationRepository),
             updateMyLocation: UpdateMyLocationUseCase(repository: locationRepository),
             stopLocationSharing: StopLocationSharingUseCase(repository: locationRepository),

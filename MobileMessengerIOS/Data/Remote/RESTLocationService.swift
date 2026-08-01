@@ -2,6 +2,7 @@ import Foundation
 
 public protocol LocationNetworking: Sendable {
     func fetchMyLocation() async throws -> ServerMyLocationShare
+    func fetchSharingPermissions() async throws -> [ServerLocationPermission]
     func updateMyLocation(
         latitude: Double,
         longitude: Double,
@@ -18,6 +19,22 @@ public struct ServerMyLocationShare: Codable, Sendable {
     public let longitude: Double?
     public let accuracy: Double?
     public let updatedAt: String?
+}
+
+public enum ServerLocationPermissionStatus: String, Codable, Sendable {
+    case active
+    case revoked
+}
+
+public struct ServerLocationPermission: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID { granteeUserID }
+
+    public let granteeUserID: UUID
+    public let displayName: String
+    public let status: ServerLocationPermissionStatus
+    public let grantedAt: String
+    public let expiresAt: String?
+    public let revokedAt: String?
 }
 
 public struct ServerSharedLocation: Decodable, Identifiable, Hashable, Sendable {
@@ -89,6 +106,29 @@ public struct RESTLocationService: LocationNetworking {
 
     public func fetchMyLocation() async throws -> ServerMyLocationShare {
         var request = URLRequest(url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.getMyLocation)))
+        request.httpMethod = "GET"
+        try await authorize(&request)
+
+        do {
+            return try await APIResponseParser.requestJSON(
+                request,
+                using: session,
+                decoder: JSONDecoder()
+            )
+        } catch let parseError as APIResponseParser.ParseError where parseError.statusCode == 401 {
+            await unauthorizedHandler()
+            throw AppError.unauthorized
+        } catch let parseError as APIResponseParser.ParseError {
+            throw AppError.wrapped(parseError)
+        } catch {
+            throw AppError.wrapped(error)
+        }
+    }
+
+    public func fetchSharingPermissions() async throws -> [ServerLocationPermission] {
+        var request = URLRequest(
+            url: baseURL.appendingAPIPath(GeneratedAPIContract.path(.listLocationPermissions))
+        )
         request.httpMethod = "GET"
         try await authorize(&request)
 

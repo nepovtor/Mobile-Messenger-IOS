@@ -11,6 +11,10 @@ public struct DefaultLocationRepository: LocationRepository {
         MyLocationShare(dto: try await service.fetchMyLocation())
     }
 
+    public func fetchSharingPermissions() async throws -> [LocationSharePermission] {
+        try await service.fetchSharingPermissions().map(LocationSharePermission.init(dto:))
+    }
+
     public func fetchContactLocations() async throws -> [SharedLocation] {
         try await service.fetchContactLocations().map(SharedLocation.init(dto:))
     }

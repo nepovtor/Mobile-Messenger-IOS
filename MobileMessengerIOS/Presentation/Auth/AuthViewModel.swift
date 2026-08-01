@@ -141,6 +141,12 @@ public final class AuthViewModel: ObservableObject {
         clearTransientState(keepContact: true)
     }
 
+    public func updateContact(_ value: String) {
+        guard contact != value else { return }
+        contact = value
+        clearTransientState(keepContact: true)
+    }
+
     public func requestCode() async {
         guard !isRequestingCode else { return }
         errorMessage = nil
@@ -153,6 +159,7 @@ public final class AuthViewModel: ObservableObject {
 
         do {
             let response = try await authService.requestCode(method: method, contact: sanitizedContact)
+            code = ""
             isCodeSent = true
             codeExpirationSeconds = response.expiresIn
         } catch {

@@ -156,5 +156,34 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertEqual(signIn?.password, account.password)
     }
 
-}
+    func testChangingContactResetsTelegramFlow() {
+        let viewModel = AuthViewModel(authService: AuthServiceSpy(), sessionStore: makeSessionStore())
+        viewModel.contact = "+375291234567"
+        viewModel.code = "123456"
+        viewModel.isCodeSent = true
+        viewModel.codeExpirationSeconds = 300
+        viewModel.telegramPairingExpiresIn = 600
+        viewModel.errorMessage = "Старая ошибка"
 
+        viewModel.updateContact("+375291234568")
+
+        XCTAssertEqual(viewModel.contact, "+375291234568")
+        XCTAssertEqual(viewModel.code, "")
+        XCTAssertFalse(viewModel.isCodeSent)
+        XCTAssertNil(viewModel.codeExpirationSeconds)
+        XCTAssertNil(viewModel.telegramPairingExpiresIn)
+        XCTAssertNil(viewModel.errorMessage)
+    }
+
+    func testRequestingNewCodeClearsPreviouslyEnteredCode() async {
+        let viewModel = AuthViewModel(authService: AuthServiceSpy(), sessionStore: makeSessionStore())
+        viewModel.contact = "+375291234567"
+        viewModel.code = "999999"
+
+        await viewModel.requestCode()
+
+        XCTAssertTrue(viewModel.isCodeSent)
+        XCTAssertEqual(viewModel.code, "")
+    }
+
+}

@@ -10,8 +10,14 @@ struct DialogueView: View {
 
     @StateObject private var viewModel: ChatViewModel
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var preparedImage: UIImage?
     @State private var editDraft = ""
     @State private var pendingDeleteMessage: Message?
+    @State private var isNearBottom = true
+    @State private var hasNewMessagesBelow = false
+    @State private var olderHistoryAnchorID: UUID?
+    @State private var hasPerformedInitialScroll = false
+    @State private var composerTextHeight: CGFloat = 36
 
     @MainActor
     init(chat: ChatListItem) {
@@ -28,50 +34,119 @@ struct DialogueView: View {
         ZStack {
             ChatWallpaper(isHighContrastDarkActive: isHighContrastDarkActive)
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        if viewModel.isLoadingHistory {
-                            ForEach(0..<5, id: \.self) { index in
-                                MessageSkeletonBubble(isOutgoing: index.isMultiple(of: 2))
-                            }
-                        } else {
-                            ForEach(viewModel.messages, id: \._id) { message in
-                                MessageBubbleView(message: message, isGroup: chat.isGroup)
-                                    .contextMenu {
-                                        if message.isOutgoing && message.deletedAt == nil {
-                                            if message.kind == .text {
-                                                Button("Изменить") {
-                                                    editDraft = message.text
-                                                    viewModel.beginEditing(message)
+            GeometryReader { viewport in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            if viewModel.isLoadingHistory {
+                                ForEach(0..<5, id: \.self) { index in
+                                    MessageSkeletonBubble(isOutgoing: index.isMultiple(of: 2))
+                                }
+                            } else {
+                                if viewModel.hasMoreHistory, let firstMessage = viewModel.messages.first {
+                                    Group {
+                                        if viewModel.isLoadingOlderHistory {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                        .frame(height: 28)
+                                        .frame(maxWidth: .infinity)
+                                        .onAppear {
+                                            loadOlderMessages(preserving: firstMessage.localID)
+                                        }
+                                        .accessibilityLabel("Загрузка предыдущих сообщений")
+                                }
+
+                                ForEach(viewModel.messages, id: \.localID) { message in
+                                    MessageBubbleView(message: message, isGroup: chat.isGroup)
+                                        .contextMenu {
+                                            if message.isOutgoing && message.deletedAt == nil {
+                                                if message.kind == .text {
+                                                    Button("Изменить") {
+                                                        editDraft = message.text
+                                                        viewModel.beginEditing(message)
+                                                    }
+                                                }
+
+                                                Button("Удалить", role: .destructive) {
+                                                    pendingDeleteMessage = message
                                                 }
                                             }
-
-                                            Button("Удалить", role: .destructive) {
-                                                pendingDeleteMessage = message
+                                        }
+                                        .id(message.localID)
+                                        .onAppear {
+                                            if message == viewModel.messages.last {
+                                                viewModel.markAsRead(messageID: message.id.messageID)
                                             }
                                         }
-                                    }
-                                    .id(message.id.messageID)
-                                    .onAppear {
-                                        if message == viewModel.messages.last {
-                                            viewModel.markAsRead(messageID: message.id.messageID)
-                                        }
-                                    }
+                                }
                             }
+
+                            Color.clear
+                                .frame(height: 1)
+                                .id(ChatScrollTarget.bottom)
+                                .background {
+                                    GeometryReader { bottomMarker in
+                                        Color.clear.preference(
+                                            key: ChatBottomOffsetPreferenceKey.self,
+                                            value: bottomMarker.frame(in: .named(ChatScrollSpace.name)).maxY
+                                        )
+                                    }
+                                }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 14)
+                        .padding(.bottom, 12)
+                    }
+                    .coordinateSpace(name: ChatScrollSpace.name)
+                    .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
+                    .onPreferenceChange(ChatBottomOffsetPreferenceKey.self) { bottomOffset in
+                        updateBottomProximity(
+                            bottomOffset: bottomOffset,
+                            viewportHeight: viewport.size.height
+                        )
+                    }
+                    .onAppear {
+                        scrollToBottom(using: proxy, animated: false)
+                    }
+                    .onChange(of: viewModel.messages.last?.localID) { previousID, newID in
+                        handleLastMessageChange(
+                            previousID: previousID,
+                            newID: newID,
+                            using: proxy
+                        )
+                    }
+                    .onChange(of: viewModel.isLoadingOlderHistory) { wasLoading, isLoading in
+                        guard wasLoading, !isLoading, let anchorID = olderHistoryAnchorID else { return }
+                        olderHistoryAnchorID = nil
+                        restoreScrollPosition(to: anchorID, using: proxy)
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if hasNewMessagesBelow {
+                            Button {
+                                hasNewMessagesBelow = false
+                                scrollToBottom(using: proxy, animated: true)
+                            } label: {
+                                Label("Новые сообщения", systemImage: "arrow.down")
+                                    .font(.footnote.weight(.semibold))
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 36)
+                                    .foregroundStyle(.white)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(AppTheme.primary)
+                                    )
+                                    .shadow(color: Color.black.opacity(0.16), radius: 8, y: 3)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(12)
+                            .accessibilityIdentifier("newMessagesButton")
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                }
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .onAppear {
-                    scrollToBottom(using: proxy, animated: false)
-                }
-                .onChange(of: viewModel.messages.count) {
-                    scrollToBottom(using: proxy, animated: true)
                 }
             }
         }
@@ -96,14 +171,28 @@ struct DialogueView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .onAppear { viewModel.onAppear() }
         .onDisappear { viewModel.onDisappear() }
         .task(id: selectedPhotoItem) {
-            guard let selectedPhotoItem,
-                  let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else { return }
-            viewModel.sendImage(image)
-            self.selectedPhotoItem = nil
+            guard let selectedPhotoItem else { return }
+
+            do {
+                let data = try await selectedPhotoItem.loadTransferable(type: Data.self)
+                guard !Task.isCancelled else { return }
+                guard let data, let image = UIImage(data: data) else {
+                    viewModel.banner = .error("Не удалось подготовить фотографию")
+                    self.selectedPhotoItem = nil
+                    return
+                }
+
+                preparedImage = image
+                self.selectedPhotoItem = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                viewModel.banner = .error("Не удалось подготовить фотографию")
+                self.selectedPhotoItem = nil
+            }
         }
         .sheet(item: $viewModel.activeEditMessage) { message in
             NavigationStack {
@@ -172,61 +261,94 @@ struct DialogueView: View {
     @MainActor
     private var messageInput: some View {
         let isSendingMedia = viewModel.isSendingMedia
-        let isSendDisabled = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingMedia
-        let useHighContrast = isHighContrastDarkActive
-        let mediaInnerDarkness = useHighContrast ? 0.10 : 0.03
-        let inputInnerDarkness = useHighContrast ? 0.10 : 0.06
+        let isPreparingMedia = selectedPhotoItem != nil
+        let hasText = !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasPreparedAttachment = preparedImage != nil
+        let isSendDisabled = (!hasText && !hasPreparedAttachment) || isSendingMedia || isPreparingMedia
+        let inputInnerDarkness = isHighContrastDarkActive ? 0.10 : 0.06
         let toolbarBackground = toolbarBackgroundColor
 
-        return HStack(alignment: .bottom, spacing: 10) {
-            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                ZStack {
-                    if isSendingMedia {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                    } else {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(AppTheme.primary.opacity(0.9))
-                    }
-                }
-                .frame(width: 42, height: 42)
-                .liquidGlassCircle(
-                    tint: Color.white,
-                    secondaryTint: AppTheme.aqua,
-                    innerDarkness: mediaInnerDarkness
-                )
-            }
-            .disabled(isSendingMedia)
+        return VStack(spacing: 0) {
+            if let preparedImage {
+                HStack(spacing: 10) {
+                    Image(uiImage: preparedImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 38, height: 38)
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-            HStack(alignment: .bottom, spacing: 10) {
-                ZStack(alignment: .topLeading) {
-                    if viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Сообщение")
+                    Text("Фото готово к отправке")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        self.preparedImage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
                             .foregroundStyle(.secondary)
-                            .padding(.top, 10)
-                            .padding(.leading, 6)
                     }
-
-                    TextEditor(text: $viewModel.inputText)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 24, maxHeight: 108)
-                        .padding(.horizontal, 2)
-                        .onChange(of: viewModel.inputText) {
-                            viewModel.handleInputChanged(viewModel.inputText)
-                        }
-                        .onTapGesture {
-                            if let last = viewModel.messages.last {
-                                viewModel.markAsRead(messageID: last.id.messageID)
-                            }
-                        }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Удалить вложение")
                 }
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+            }
 
-                Button(action: viewModel.sendMessage) {
+            HStack(alignment: .bottom, spacing: 4) {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    ZStack {
+                        if isSendingMedia || isPreparingMedia {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                        } else {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(AppTheme.primary.opacity(0.9))
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+                }
+                .disabled(isSendingMedia || isPreparingMedia)
+                .accessibilityLabel("Прикрепить фотографию")
+                .accessibilityIdentifier("messageAttachmentButton")
+
+                ZStack(alignment: .leading) {
+                    GrowingMessageTextView(
+                        text: $viewModel.inputText,
+                        measuredHeight: $composerTextHeight,
+                        minimumHeight: 36,
+                        maximumLines: 5
+                    )
+                    .frame(height: composerTextHeight)
+
+                    if viewModel.inputText.isEmpty {
+                        Text("Сообщение")
+                            .font(.body)
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 9)
+                            .allowsHitTesting(false)
+                    }
+                }
+                    .padding(.horizontal, 6)
+                    .onChange(of: viewModel.inputText) {
+                        viewModel.handleInputChanged(viewModel.inputText)
+                    }
+                    .onTapGesture {
+                        if let last = viewModel.messages.last {
+                            viewModel.markAsRead(messageID: last.id.messageID)
+                        }
+                    }
+                    .accessibilityIdentifier("messageComposerTextField")
+
+                Button(action: sendDraft) {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 36, height: 36)
                         .liquidGlassCircle(
                             tint: AppTheme.primary,
                             secondaryTint: AppTheme.aqua,
@@ -234,30 +356,40 @@ struct DialogueView: View {
                         )
                 }
                 .disabled(isSendDisabled)
-                .opacity(isSendDisabled ? 0.55 : 1)
+                .opacity(isSendDisabled ? 0.45 : 1)
+                .accessibilityLabel("Отправить сообщение")
+                .accessibilityIdentifier("messageSendButton")
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
-            .padding(.vertical, 8)
-            .liquidGlassCard(
-                cornerRadius: 26,
-                tint: .white,
-                secondaryTint: AppTheme.aqua,
-                innerDarkness: inputInnerDarkness
-            )
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
+        .liquidGlassCard(
+            cornerRadius: 24,
+            tint: .white,
+            secondaryTint: AppTheme.aqua,
+            innerDarkness: inputInnerDarkness
+        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
         .background(
             Rectangle()
                 .fill(toolbarBackground)
+                .ignoresSafeArea(edges: .bottom)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(toolbarDividerColor)
                         .frame(height: 1)
                 }
         )
+    }
+
+    private func sendDraft() {
+        if let preparedImage {
+            self.preparedImage = nil
+            viewModel.sendImage(preparedImage)
+        } else {
+            viewModel.sendMessage()
+        }
     }
 
     @ViewBuilder
@@ -290,29 +422,69 @@ struct DialogueView: View {
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy, animated: Bool) {
-        guard let last = viewModel.messages.last else { return }
+        guard !viewModel.messages.isEmpty else { return }
 
-        if animated {
-            withAnimation(.easeOut(duration: 0.24)) {
-                proxy.scrollTo(last.id.messageID, anchor: .bottom)
+        Task { @MainActor in
+            await Task.yield()
+
+            if animated {
+                withAnimation(.easeOut(duration: 0.24)) {
+                    proxy.scrollTo(ChatScrollTarget.bottom, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(ChatScrollTarget.bottom, anchor: .bottom)
             }
+
+            hasPerformedInitialScroll = true
+        }
+    }
+
+    private func handleLastMessageChange(
+        previousID: UUID?,
+        newID: UUID?,
+        using proxy: ScrollViewProxy
+    ) {
+        guard let newID, previousID != newID else { return }
+
+        let shouldFollowMessage = previousID == nil || isNearBottom || viewModel.messages.last?.isOutgoing == true
+        if shouldFollowMessage {
+            hasNewMessagesBelow = false
+            scrollToBottom(using: proxy, animated: previousID != nil)
         } else {
-            proxy.scrollTo(last.id.messageID, anchor: .bottom)
+            hasNewMessagesBelow = true
+        }
+    }
+
+    private func updateBottomProximity(bottomOffset: CGFloat, viewportHeight: CGFloat) {
+        guard bottomOffset.isFinite, viewportHeight > 0 else { return }
+
+        let nearBottomThreshold: CGFloat = 120
+        let isNowNearBottom = bottomOffset <= viewportHeight + nearBottomThreshold
+        isNearBottom = isNowNearBottom
+        if isNowNearBottom {
+            hasNewMessagesBelow = false
+        }
+    }
+
+    private func loadOlderMessages(preserving anchorID: UUID) {
+        guard hasPerformedInitialScroll, !viewModel.isLoadingOlderHistory else { return }
+        olderHistoryAnchorID = anchorID
+        viewModel.loadOlderMessages()
+    }
+
+    private func restoreScrollPosition(to anchorID: UUID, using proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            await Task.yield()
+            proxy.scrollTo(anchorID, anchor: .top)
         }
     }
 
     private var toolbarBackgroundColor: Color {
-        if isHighContrastDarkActive {
-            return Color(uiColor: .systemBackground).opacity(0.94)
-        }
-        return Color(uiColor: .systemBackground).opacity(0.78)
+        Color(uiColor: .systemBackground)
     }
 
     private var toolbarDividerColor: Color {
-        if isHighContrastDarkActive {
-            return Color.white.opacity(0.10)
-        }
-        return Color.white.opacity(0.45)
+        Color(uiColor: .separator).opacity(0.45)
     }
 
     private var isHighContrastDarkActive: Bool {
@@ -620,6 +792,94 @@ private struct ChatWallpaper: View {
     }
 }
 
-private extension Message {
-    var _id: UUID { id.messageID }
+private enum ChatScrollTarget: Hashable {
+    case bottom
+}
+
+private struct GrowingMessageTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var measuredHeight: CGFloat
+    let minimumHeight: CGFloat
+    let maximumLines: Int
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .clear
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
+        textView.textContainer.lineFragmentPadding = 5
+        textView.isScrollEnabled = false
+        textView.showsVerticalScrollIndicator = true
+        textView.keyboardDismissMode = .interactive
+        textView.textContainer.lineBreakMode = .byWordWrapping
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.accessibilityIdentifier = "messageComposerTextField"
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
+        if textView.text != text {
+            textView.text = text
+        }
+
+        DispatchQueue.main.async { [weak coordinator = context.coordinator] in
+            coordinator?.recalculateHeight()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: GrowingMessageTextView
+        weak var textView: UITextView?
+
+        init(parent: GrowingMessageTextView) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+            recalculateHeight()
+        }
+
+        func recalculateHeight() {
+            guard let textView, textView.bounds.width > 0 else { return }
+
+            let font = textView.font ?? .preferredFont(forTextStyle: .body)
+            let insets = textView.textContainerInset.top + textView.textContainerInset.bottom
+            let maximumHeight = ceil(font.lineHeight * CGFloat(parent.maximumLines) + insets)
+            let fittingHeight = ceil(
+                textView.sizeThatFits(
+                    CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
+                ).height
+            )
+            let targetHeight = min(max(parent.minimumHeight, fittingHeight), maximumHeight)
+            let shouldScroll = fittingHeight > maximumHeight
+
+            if textView.isScrollEnabled != shouldScroll {
+                textView.isScrollEnabled = shouldScroll
+            }
+            if abs(parent.measuredHeight - targetHeight) > 0.5 {
+                parent.measuredHeight = targetHeight
+            }
+        }
+    }
+}
+
+private enum ChatScrollSpace {
+    static let name = "dialogueMessagesScroll"
+}
+
+private struct ChatBottomOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }

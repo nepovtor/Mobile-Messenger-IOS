@@ -3,6 +3,7 @@ import MapKit
 
 struct MapView: View {
     @EnvironmentObject private var sessionStore: SessionStore
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: MapViewModel
     @StateObject private var permissionManager = LocationPermissionManager()
     @State private var mapPosition: MapCameraPosition
@@ -64,12 +65,21 @@ struct MapView: View {
             }
             .task {
                 viewModel.handleSessionChange(sessionStore.state)
-                viewModel.onAppear()
+                viewModel.onAppear(
+                    using: permissionManager,
+                    isApplicationActive: scenePhase == .active
+                )
             }
             .onChange(of: sessionStore.state) { _, newState in
                 permissionManager.stopTracking()
                 viewModel.handleSessionChange(newState)
-                viewModel.onAppear()
+                viewModel.onAppear(
+                    using: permissionManager,
+                    isApplicationActive: scenePhase == .active
+                )
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                viewModel.setApplicationActive(newPhase == .active, using: permissionManager)
             }
         }
     }
@@ -127,6 +137,22 @@ struct MapView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
             }
+
+            HStack(spacing: 8) {
+                Image(systemName: trackingStatusSymbol)
+                    .foregroundStyle(trackingStatusTint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.trackingStatus.title)
+                        .font(.footnote.weight(.semibold))
+                    if let updatedAt = viewModel.lastLocationUpdateAt {
+                        Text(updatedAt, style: .relative)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
 
             ZStack {
                 Map(position: $mapPosition) {
@@ -187,6 +213,34 @@ struct MapView: View {
 
     private func syncMapPosition() {
         mapPosition = .region(viewModel.region)
+    }
+
+    private var trackingStatusSymbol: String {
+        switch viewModel.trackingStatus {
+        case .active:
+            return "location.fill"
+        case .starting:
+            return "location.circle"
+        case .paused:
+            return "pause.circle"
+        case .authorizationDenied, .noActivePermission, .unavailable:
+            return "location.slash"
+        case .off:
+            return "location"
+        }
+    }
+
+    private var trackingStatusTint: Color {
+        switch viewModel.trackingStatus {
+        case .active:
+            return AppTheme.mint
+        case .starting:
+            return AppTheme.primary
+        case .authorizationDenied, .noActivePermission, .unavailable:
+            return AppTheme.coral
+        case .off, .paused:
+            return .secondary
+        }
     }
 
     static func formattedTimestamp(_ value: String) -> String {

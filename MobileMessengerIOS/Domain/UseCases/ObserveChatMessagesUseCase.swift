@@ -7,7 +7,7 @@ public struct ObserveChatMessagesUseCase {
         self.repository = repository
     }
 
-    public func callAsFunction(chatID: UUID) -> AsyncStream<Message> {
-        repository.observeMessages(for: chatID)
+    public func callAsFunction(chatID: UUID) async -> AsyncStream<Message> {
+        await repository.observeMessages(for: chatID)
     }
 }

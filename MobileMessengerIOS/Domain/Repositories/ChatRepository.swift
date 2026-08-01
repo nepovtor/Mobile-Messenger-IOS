@@ -6,7 +6,7 @@ public protocol ChatRepository {
     func cachedChats(searchQuery: String?) async -> [Chat]
     func listChats(searchQuery: String?) async throws -> [Chat]
     func observeChats() -> AsyncStream<[Chat]>
-    func observeMessages(for chatID: UUID) -> AsyncStream<Message>
+    func observeMessages(for chatID: UUID) async -> AsyncStream<Message>
     func cachedHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async -> [Message]
     func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message]
     func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message

@@ -2,7 +2,7 @@ import Foundation
 
 public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     private var chats: [UUID: ChatRecord] = [:]
-    private var messageStreams: [UUID: AsyncStream<Message>.Continuation] = [:]
+    private var messageStreams: [UUID: [UUID: AsyncStream<Message>.Continuation]] = [:]
     private var chatStreams: [UUID: AsyncStream<[Chat]>.Continuation] = [:]
     private let storageURL: URL
     private let encoder: JSONEncoder
@@ -43,15 +43,15 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
     public func removeChat(id: UUID) async throws {
         let removedRecord = chats.removeValue(forKey: id)
-        let messageContinuation = messageStreams.removeValue(forKey: id)
+        let messageContinuations = messageStreams.removeValue(forKey: id)
 
-        guard removedRecord != nil || messageContinuation != nil else {
+        guard removedRecord != nil || messageContinuations != nil else {
             return
         }
 
         try persistImmediately()
         broadcastChats()
-        messageContinuation?.finish()
+        messageContinuations?.values.forEach { $0.finish() }
     }
 
     public func upsert(chats: [Chat]) async throws {
@@ -99,7 +99,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         }
         broadcastChats()
         for message in messages {
-            messageStreams[chatID]?.yield(message)
+            messageStreams[chatID]?.values.forEach { $0.yield(message) }
         }
     }
 
@@ -115,7 +115,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             schedulePersistence()
         }
         broadcastChats()
-        messageStreams[chatID]?.yield(message)
+        messageStreams[chatID]?.values.forEach { $0.yield(message) }
     }
 
     public func replaceMessage(localID: UUID, in chatID: UUID, with message: Message) async throws {
@@ -134,7 +134,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         chats[chatID] = record
         try persistImmediately()
         broadcastChats()
-        messageStreams[chatID]?.yield(message)
+        messageStreams[chatID]?.values.forEach { $0.yield(message) }
     }
 
     public func loadMessages(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
@@ -163,9 +163,10 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
     public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
         AsyncStream { continuation in
-            messageStreams[chatID] = continuation
+            let token = UUID()
+            messageStreams[chatID, default: [:]][token] = continuation
             continuation.onTermination = { _ in
-                Task { await self.removeContinuation(for: chatID) }
+                Task { await self.removeContinuation(for: chatID, token: token) }
             }
         }
     }
@@ -196,7 +197,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             schedulePersistence()
         }
         broadcastChats()
-        messageStreams[chatID]?.yield(updated)
+        messageStreams[chatID]?.values.forEach { $0.yield(updated) }
     }
 
     public func updateStatus(forLocalID localID: UUID, in chatID: UUID, status: MessageStatus) async throws {
@@ -213,7 +214,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
             schedulePersistence()
         }
         broadcastChats()
-        messageStreams[chatID]?.yield(updated)
+        messageStreams[chatID]?.values.forEach { $0.yield(updated) }
     }
 
     public func pendingMessages(in chatID: UUID) async throws -> [Message] {
@@ -246,8 +247,11 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         broadcastChats()
     }
 
-    private func removeContinuation(for chatID: UUID) {
-        messageStreams[chatID] = nil
+    private func removeContinuation(for chatID: UUID, token: UUID) {
+        messageStreams[chatID]?[token] = nil
+        if messageStreams[chatID]?.isEmpty == true {
+            messageStreams[chatID] = nil
+        }
     }
 
     private func removeChatContinuation(id: UUID) {
