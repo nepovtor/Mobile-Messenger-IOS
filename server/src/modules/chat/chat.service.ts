@@ -345,13 +345,27 @@ export class ChatService {
       if (!trimmedText) {
         throw new BadRequestException("Text message must contain text");
       }
-    } else if (dto.kind === MessageKind.IMAGE) {
+    } else if (
+      dto.kind === MessageKind.IMAGE ||
+      dto.kind === MessageKind.AUDIO
+    ) {
+      const mediaLabel =
+        dto.kind === MessageKind.AUDIO ? "Audio" : "Image";
       if (!dto.mediaID) {
-        throw new BadRequestException("Image message must contain mediaID");
+        throw new BadRequestException(
+          `${mediaLabel} message must contain mediaID`,
+        );
       }
       media = await this.mediaService.getUploadedMediaOrFail(dto.mediaID);
       if (media.uploadedById !== user.sub) {
         throw new BadRequestException("Media belongs to another user");
+      }
+      const expectedPrefix =
+        dto.kind === MessageKind.AUDIO ? "audio/" : "image/";
+      if (!media.mimeType.startsWith(expectedPrefix)) {
+        throw new BadRequestException(
+          `${mediaLabel} message contains incompatible media`,
+        );
       }
     } else {
       throw new BadRequestException("Unsupported message kind");

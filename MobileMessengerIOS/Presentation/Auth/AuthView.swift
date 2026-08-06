@@ -15,6 +15,12 @@ struct AuthView: View {
         case code
     }
 
+    private enum ScrollTarget: Hashable {
+        case top
+        case flow
+        case bottom
+    }
+
     @MainActor
     init(onAuthorized: @escaping () -> Void) {
         self.init(container: .shared, onAuthorized: onAuthorized)
@@ -31,15 +37,40 @@ struct AuthView: View {
         ZStack {
             AuthenticationBackdrop()
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
-                    heroSection
-                    authCard
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        heroSection
+                            .id(ScrollTarget.top)
+                        authCard
+                        Color.clear
+                            .frame(height: 1)
+                            .id(ScrollTarget.bottom)
+                    }
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 36)
                 }
-                .frame(maxWidth: 560, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
+                .scrollDismissesKeyboard(.interactively)
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: viewModel.telegramPairingExpiresIn) { _, expiresIn in
+                    guard expiresIn != nil else { return }
+                    scrollAfterLayout(to: .flow, using: proxy)
+                }
+                .onChange(of: viewModel.isCodeSent) { _, isCodeSent in
+                    guard isCodeSent else { return }
+                    focusedField = .code
+                    scrollAfterLayout(to: .flow, using: proxy, delay: .milliseconds(350))
+                }
+                .onChange(of: isDemoAccountsExpanded) { _, isExpanded in
+                    guard isExpanded else { return }
+                    scrollAfterLayout(to: .bottom, using: proxy)
+                }
+                .onChange(of: isBackendSupportExpanded) { _, isExpanded in
+                    guard isExpanded else { return }
+                    scrollAfterLayout(to: .bottom, using: proxy)
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -54,10 +85,6 @@ struct AuthView: View {
                     focusedField = nil
                 }
             }
-        }
-        .onChange(of: viewModel.isCodeSent) { _, isCodeSent in
-            guard isCodeSent else { return }
-            focusedField = .code
         }
         .onReceive(viewModel.sessionStore.$state) { state in
             if case .authenticated = state {
@@ -266,6 +293,20 @@ struct AuthView: View {
                 pairingConfirmationSection
             } else {
                 telegramStartSection
+            }
+        }
+        .id(ScrollTarget.flow)
+    }
+
+    private func scrollAfterLayout(
+        to target: ScrollTarget,
+        using proxy: ScrollViewProxy,
+        delay: Duration = .milliseconds(180)
+    ) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(target, anchor: target == .bottom ? .bottom : .center)
             }
         }
     }

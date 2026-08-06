@@ -1,3 +1,4 @@
+import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -9,6 +10,7 @@ struct DialogueView: View {
     let chat: ChatListItem
 
     @StateObject private var viewModel: ChatViewModel
+    @StateObject private var voiceRecorder = VoiceMessageRecorder()
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var preparedImage: UIImage?
     @State private var editDraft = ""
@@ -173,7 +175,10 @@ struct DialogueView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .onAppear { viewModel.onAppear() }
-        .onDisappear { viewModel.onDisappear() }
+        .onDisappear {
+            voiceRecorder.cancel()
+            viewModel.onDisappear()
+        }
         .task(id: selectedPhotoItem) {
             guard let selectedPhotoItem else { return }
 
@@ -261,120 +266,144 @@ struct DialogueView: View {
     @MainActor
     private var messageInput: some View {
         let isSendingMedia = viewModel.isSendingMedia
-        let isPreparingMedia = selectedPhotoItem != nil
         let hasText = !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasPreparedAttachment = preparedImage != nil
-        let isSendDisabled = (!hasText && !hasPreparedAttachment) || isSendingMedia || isPreparingMedia
-        let inputInnerDarkness = isHighContrastDarkActive ? 0.10 : 0.06
+        let useHighContrast = isHighContrastDarkActive
+        let mediaInnerDarkness = useHighContrast ? 0.10 : 0.03
+        let inputInnerDarkness = useHighContrast ? 0.10 : 0.06
         let toolbarBackground = toolbarBackgroundColor
+        return HStack(alignment: .bottom, spacing: 10) {
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                ZStack {
+                    if isSendingMedia {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    } else {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.primary.opacity(0.9))
+                    }
+                }
+                .frame(width: 42, height: 42)
+                .liquidGlassCircle(
+                    tint: Color.white,
+                    secondaryTint: AppTheme.aqua,
+                    innerDarkness: mediaInnerDarkness
+                )
+            }
+            .disabled(isSendingMedia || voiceRecorder.isRecording)
 
-        return VStack(spacing: 0) {
-            if let preparedImage {
-                HStack(spacing: 10) {
-                    Image(uiImage: preparedImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 38, height: 38)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            HStack(alignment: .bottom, spacing: 10) {
+                if voiceRecorder.isRecording {
+                    Button(role: .destructive) {
+                        voiceRecorder.cancel()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .accessibilityLabel("Отменить запись")
 
-                    Text("Фото готово к отправке")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 8)
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 9, height: 9)
+                        Text(voiceRecorder.formattedDuration)
+                            .font(.system(.body, design: .monospaced).weight(.semibold))
+                        Text("Запись")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                    }
 
                     Button {
-                        self.preparedImage = nil
+                        voiceRecorder.finish()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassCircle(
+                                tint: AppTheme.primary,
+                                secondaryTint: AppTheme.aqua,
+                                innerDarkness: 0.54
+                            )
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Удалить вложение")
-                }
-                .padding(.horizontal, 10)
-                .padding(.top, 8)
-            }
+                    .accessibilityLabel("Отправить голосовое сообщение")
+                } else {
+                    ZStack(alignment: .topLeading) {
+                        if !hasText {
+                            Text("Сообщение")
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 10)
+                                .padding(.leading, 6)
+                        }
+                        TextEditor(text: $viewModel.inputText)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 24, maxHeight: 108)
+                            .padding(.horizontal, 2)
+                            .onChange(of: viewModel.inputText) {
+                                viewModel.handleInputChanged(viewModel.inputText)
+                            }
+                            .onTapGesture {
+                                if let last = viewModel.messages.last {
+                                    viewModel.markAsRead(messageID: last.id.messageID)
+                                }
+                            }
+                    }
 
-            HStack(alignment: .bottom, spacing: 4) {
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    ZStack {
-                        if isSendingMedia || isPreparingMedia {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                        } else {
-                            Image(systemName: "photo.on.rectangle.angled")
+                    if hasText {
+                        Button(action: viewModel.sendMessage) {
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .liquidGlassCircle(
+                                    tint: AppTheme.primary,
+                                    secondaryTint: AppTheme.aqua,
+                                    innerDarkness: 0.54
+                                )
+                        }
+                        .disabled(isSendingMedia)
+                        .opacity(isSendingMedia ? 0.55 : 1)
+                    } else {
+                        Button {
+                            voiceRecorder.start(
+                                onFinish: { data in viewModel.sendAudio(data) },
+                                onError: { message in viewModel.banner = .error(message) }
+                            )
+                        } label: {
+                            Image(systemName: "mic.fill")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(AppTheme.primary.opacity(0.9))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .liquidGlassCircle(
+                                    tint: AppTheme.primary,
+                                    secondaryTint: AppTheme.aqua,
+                                    innerDarkness: 0.54
+                                )
                         }
-                    }
-                    .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
-                }
-                .disabled(isSendingMedia || isPreparingMedia)
-                .accessibilityLabel("Прикрепить фотографию")
-                .accessibilityIdentifier("messageAttachmentButton")
-
-                ZStack(alignment: .leading) {
-                    GrowingMessageTextView(
-                        text: $viewModel.inputText,
-                        measuredHeight: $composerTextHeight,
-                        minimumHeight: 36,
-                        maximumLines: 5
-                    )
-                    .frame(height: composerTextHeight)
-
-                    if viewModel.inputText.isEmpty {
-                        Text("Сообщение")
-                            .font(.body)
-                            .foregroundStyle(.tertiary)
-                            .padding(.leading, 9)
-                            .allowsHitTesting(false)
+                        .disabled(isSendingMedia)
+                        .opacity(isSendingMedia ? 0.55 : 1)
+                        .accessibilityLabel("Записать голосовое сообщение")
                     }
                 }
-                    .padding(.horizontal, 6)
-                    .onChange(of: viewModel.inputText) {
-                        viewModel.handleInputChanged(viewModel.inputText)
-                    }
-                    .onTapGesture {
-                        if let last = viewModel.messages.last {
-                            viewModel.markAsRead(messageID: last.id.messageID)
-                        }
-                    }
-                    .accessibilityIdentifier("messageComposerTextField")
-
-                Button(action: sendDraft) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .liquidGlassCircle(
-                            tint: AppTheme.primary,
-                            secondaryTint: AppTheme.aqua,
-                            innerDarkness: 0.54
-                        )
-                }
-                .disabled(isSendDisabled)
-                .opacity(isSendDisabled ? 0.45 : 1)
-                .accessibilityLabel("Отправить сообщение")
-                .accessibilityIdentifier("messageSendButton")
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .padding(.vertical, 8)
+            .liquidGlassCard(
+                cornerRadius: 26,
+                tint: .white,
+                secondaryTint: AppTheme.aqua,
+                innerDarkness: inputInnerDarkness
+            )
         }
-        .liquidGlassCard(
-            cornerRadius: 24,
-            tint: .white,
-            secondaryTint: AppTheme.aqua,
-            innerDarkness: inputInnerDarkness
-        )
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
         .background(
             Rectangle()
                 .fill(toolbarBackground)
-                .ignoresSafeArea(edges: .bottom)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(toolbarDividerColor)
@@ -608,6 +637,12 @@ private struct MessageBubbleView: View {
                     MessageAttachmentImageView(attachment: imageAttachment)
                 }
 
+                if let audioAttachment = message.attachments.first(where: { $0.kind == .audio }) {
+                    VoiceMessageAttachmentView(
+                        attachment: audioAttachment,
+                        isOutgoing: message.isOutgoing
+                    )
+                }
                 if !message.text.isEmpty || message.kind == .text {
                     Text(message.text)
                         .foregroundStyle(message.isOutgoing ? .white : .primary)
@@ -881,5 +916,294 @@ private struct ChatBottomOffsetPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+
+@MainActor
+private final class VoiceMessageRecorder: NSObject, ObservableObject {
+    @Published private(set) var isRecording = false
+    @Published private(set) var duration: TimeInterval = 0
+
+    private let maximumDuration: TimeInterval = 120
+    private var recorder: AVAudioRecorder?
+    private var timer: Timer?
+    private var completion: ((Data) -> Void)?
+    private var errorHandler: ((String) -> Void)?
+
+    var formattedDuration: String {
+        Self.format(duration)
+    }
+
+    func start(
+        onFinish: @escaping (Data) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        guard !isRecording else { return }
+        completion = onFinish
+        errorHandler = onError
+
+        let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
+        case .granted:
+            beginRecording()
+        case .denied:
+            fail("Разрешите доступ к микрофону в настройках iPhone")
+        case .undetermined:
+            session.requestRecordPermission { [weak self] granted in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if granted {
+                        self.beginRecording()
+                    } else {
+                        self.fail("Без доступа к микрофону запись невозможна")
+                    }
+                }
+            }
+        @unknown default:
+            fail("Не удалось определить разрешение на использование микрофона")
+        }
+    }
+
+    func finish() {
+        guard isRecording, let recorder else { return }
+        isRecording = false
+        timer?.invalidate()
+        timer = nil
+        let url = recorder.url
+        let recordedDuration = recorder.currentTime
+        recorder.stop()
+        self.recorder = nil
+        duration = 0
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        guard recordedDuration >= 0.5 else {
+            try? FileManager.default.removeItem(at: url)
+            fail("Голосовое сообщение слишком короткое")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            try? FileManager.default.removeItem(at: url)
+            let callback = completion
+            resetCallbacks()
+            callback?(data)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            fail("Не удалось прочитать записанное сообщение")
+        }
+    }
+
+    func cancel() {
+        guard recorder != nil || isRecording else {
+            resetCallbacks()
+            return
+        }
+        isRecording = false
+        timer?.invalidate()
+        timer = nil
+        let url = recorder?.url
+        recorder?.stop()
+        recorder = nil
+        duration = 0
+        if let url {
+            try? FileManager.default.removeItem(at: url)
+        }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        resetCallbacks()
+    }
+
+    private func beginRecording() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(
+                .playAndRecord,
+                mode: .spokenAudio,
+                options: [.defaultToSpeaker, .allowBluetoothHFP]
+            )
+            try session.setActive(true)
+
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("voice-\(UUID().uuidString).m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 24_000,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 32_000,
+                AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
+            ]
+            let recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder.isMeteringEnabled = true
+            guard recorder.prepareToRecord(), recorder.record() else {
+                throw NSError(domain: "VoiceRecorder", code: 1)
+            }
+            self.recorder = recorder
+            duration = 0
+            isRecording = true
+            timer?.invalidate()
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, let recorder = self.recorder else { return }
+                    self.duration = min(recorder.currentTime, self.maximumDuration)
+                    if recorder.currentTime >= self.maximumDuration {
+                        self.finish()
+                    }
+                }
+            }
+        } catch {
+            cancel()
+            fail("Не удалось начать запись. Проверьте микрофон и повторите попытку")
+        }
+    }
+
+    private func fail(_ message: String) {
+        let callback = errorHandler
+        resetCallbacks()
+        callback?(message)
+    }
+
+    private func resetCallbacks() {
+        completion = nil
+        errorHandler = nil
+    }
+
+    private static func format(_ value: TimeInterval) -> String {
+        let seconds = max(0, Int(value.rounded(.down)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct VoiceMessageAttachmentView: View {
+    let attachment: MessageAttachment
+    let isOutgoing: Bool
+    @StateObject private var player = VoiceMessagePlayer()
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                guard let url = attachment.localPath ?? attachment.url else { return }
+                player.toggle(url: url)
+            } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isOutgoing ? Color.white : AppTheme.primary)
+                    .frame(width: 42, height: 42)
+                    .background(
+                        Circle()
+                            .fill(isOutgoing ? Color.white.opacity(0.18) : AppTheme.primary.opacity(0.12))
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(attachment.localPath == nil && attachment.url == nil)
+            .accessibilityLabel(player.isPlaying ? "Пауза" : "Воспроизвести голосовое сообщение")
+
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(
+                    value: player.elapsed,
+                    total: max(player.duration, 1)
+                )
+                .tint(isOutgoing ? .white : AppTheme.primary)
+
+                HStack {
+                    Image(systemName: "waveform")
+                    Text(player.timeLabel)
+                        .font(.caption.monospacedDigit())
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.86) : Color.secondary)
+            }
+        }
+        .frame(minWidth: 210, maxWidth: 260)
+        .onDisappear { player.stop() }
+    }
+}
+
+@MainActor
+private final class VoiceMessagePlayer: ObservableObject {
+    @Published private(set) var isPlaying = false
+    @Published private(set) var elapsed: TimeInterval = 0
+    @Published private(set) var duration: TimeInterval = 0
+
+    private var player: AVPlayer?
+    private var loadedURL: URL?
+    private var timeObserver: Any?
+    private var endObserver: NSObjectProtocol?
+
+    var timeLabel: String {
+        let displayed = duration > 0 ? duration : elapsed
+        let seconds = max(0, Int(displayed.rounded(.down)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    func toggle(url: URL) {
+        if loadedURL != url {
+            prepare(url: url)
+        }
+        guard let player else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+        } else {
+            if duration > 0, elapsed >= duration - 0.2 {
+                player.seek(to: .zero)
+                elapsed = 0
+            }
+            player.play()
+            isPlaying = true
+        }
+    }
+
+    func stop() {
+        player?.pause()
+        isPlaying = false
+        removeObservers()
+        player = nil
+        loadedURL = nil
+    }
+
+    private func prepare(url: URL) {
+        stop()
+        loadedURL = url
+        let item = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: item)
+        self.player = player
+
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
+            queue: .main
+        ) { [weak self, weak player] time in
+            Task { @MainActor in
+                guard let self else { return }
+                let current = time.seconds
+                if current.isFinite {
+                    self.elapsed = max(0, current)
+                }
+                let total = player?.currentItem?.duration.seconds ?? 0
+                if total.isFinite, total > 0 {
+                    self.duration = total
+                }
+            }
+        }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isPlaying = false
+                self.elapsed = self.duration
+            }
+        }
+    }
+
+    private func removeObservers() {
+        if let timeObserver, let player {
+            player.removeTimeObserver(timeObserver)
+        }
+        timeObserver = nil
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        endObserver = nil
     }
 }

@@ -43,10 +43,16 @@ const PRESIGNED_DOWNLOAD_TTL_SECONDS = 5 * 60;
 const PENDING_UPLOAD_TTL_MS = 15 * 60 * 1000;
 const UPLOADED_ATTACHMENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_LEGACY_IMAGE_BYTES = 20_000_000;
+const MAX_LEGACY_AUDIO_BYTES = 20_000_000;
 const ALLOWED_LEGACY_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
+]);
+const ALLOWED_LEGACY_AUDIO_TYPES = new Set(["audio/mp4"]);
+const ALLOWED_LEGACY_MEDIA_TYPES = new Set([
+  ...ALLOWED_LEGACY_IMAGE_TYPES,
+  ...ALLOWED_LEGACY_AUDIO_TYPES,
 ]);
 
 type StorageClients = {
@@ -235,17 +241,20 @@ export class MediaService {
     objectKey: string;
   }> {
     this.assertLegacyMediaAllowed();
-    if (!ALLOWED_LEGACY_IMAGE_TYPES.has(dto.mimeType)) {
+    if (!ALLOWED_LEGACY_MEDIA_TYPES.has(dto.mimeType)) {
       throw new BadRequestException(
-        "Only JPEG, PNG, and WebP uploads are supported",
+        "Only JPEG, PNG, WebP, and M4A/AAC voice uploads are supported",
       );
     }
 
     const storage = this.requireStorage();
     await this.assertBucketAccessible(storage);
-    const extension = legacyImageExtension(dto.mimeType);
+    const extension = legacyMediaExtension(dto.mimeType);
+    const mediaDirectory = ALLOWED_LEGACY_AUDIO_TYPES.has(dto.mimeType)
+      ? "legacy-audio"
+      : "legacy-images";
     const media = this.mediaRepository.create({
-      objectKey: `legacy-images/v1/${randomUUID()}/${randomUUID()}.${extension}`,
+      objectKey: `${mediaDirectory}/v1/${randomUUID()}/${randomUUID()}.${extension}`,
       mimeType: dto.mimeType,
       sizeBytes: dto.sizeBytes,
       width: dto.width ?? null,
@@ -304,12 +313,23 @@ export class MediaService {
         }),
       );
       if (!result.Body) {
-        throw new BadRequestException("Uploaded image is empty");
+        throw new BadRequestException("Uploaded media is empty");
       }
       const source = Buffer.from(await result.Body.transformToByteArray());
       if (source.length !== media.sizeBytes) {
-        throw new BadRequestException("Uploaded image size does not match");
+        throw new BadRequestException("Uploaded media size does not match");
       }
+      if (ALLOWED_LEGACY_AUDIO_TYPES.has(media.mimeType)) {
+        if (source.length > MAX_LEGACY_AUDIO_BYTES) {
+          throw new BadRequestException("Uploaded audio is too large");
+        }
+        assertLegacyAudioMagic(source, media.mimeType);
+        media.width = null;
+        media.height = null;
+        media.status = MediaStatus.UPLOADED;
+        return this.mediaRepository.save(media);
+      }
+
       assertLegacyImageMagic(source, media.mimeType);
 
       const image = sharp(source, {
@@ -352,7 +372,7 @@ export class MediaService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException("Uploaded image is invalid");
+      throw new BadRequestException("Uploaded media is invalid");
     }
   }
 
@@ -520,7 +540,7 @@ function assertObjectSize(
   }
 }
 
-function legacyImageExtension(mimeType: string): string {
+function legacyMediaExtension(mimeType: string): string {
   switch (mimeType) {
     case "image/jpeg":
       return "jpg";
@@ -528,8 +548,10 @@ function legacyImageExtension(mimeType: string): string {
       return "png";
     case "image/webp":
       return "webp";
+    case "audio/mp4":
+      return "m4a";
     default:
-      throw new BadRequestException("Unsupported image type");
+      throw new BadRequestException("Unsupported media type");
   }
 }
 
@@ -554,6 +576,14 @@ function assertLegacyImageMagic(source: Buffer, mimeType: string): void {
     (mimeType === "image/webp" && isWebp);
   if (!matches) {
     throw new BadRequestException("Uploaded image type does not match");
+  }
+}
+
+function assertLegacyAudioMagic(source: Buffer, mimeType: string): void {
+  const isMp4Container =
+    source.length >= 12 && source.subarray(4, 8).toString("ascii") === "ftyp";
+  if (mimeType !== "audio/mp4" || !isMp4Container) {
+    throw new BadRequestException("Uploaded audio type does not match");
   }
 }
 

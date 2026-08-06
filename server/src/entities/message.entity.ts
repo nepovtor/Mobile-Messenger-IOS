@@ -25,6 +25,7 @@ export enum MessageStatus {
 export enum MessageKind {
   TEXT = "text",
   IMAGE = "image",
+  AUDIO = "audio",
 }
 
 @Entity({ name: "messages" })
