@@ -71,7 +71,22 @@ rsync -rz --no-times --omit-dir-times \
   "$WEB_DIR/dist/index.html" "$REMOTE:$DEPLOY_TARGET/index.html"
 
 echo "Verifying the public page..."
-curl -fsSIL --max-time 30 "$PUBLIC_URL" >/dev/null
+RESPONSE_HEADERS="$(
+  curl -fsSIL --max-time 30 "${PUBLIC_URL}?deployment-cache-check=1"
+)"
+CACHE_CONTROL="$(
+  printf '%s\n' "$RESPONSE_HEADERS" \
+    | awk 'BEGIN { IGNORECASE = 1 } /^cache-control:/ { value = $0 } END { print value }' \
+    | tr -d '\r'
+)"
+
+case "$CACHE_CONTROL" in
+  *no-cache* | *no-store* | *max-age=0*) ;;
+  *)
+    echo "Public HTML must not be cached across deployments. Received: ${CACHE_CONTROL:-missing Cache-Control header}" >&2
+    exit 1
+    ;;
+esac
 
 echo
 echo "Deployment complete: $PUBLIC_URL"
