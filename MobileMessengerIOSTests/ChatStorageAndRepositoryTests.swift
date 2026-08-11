@@ -84,6 +84,46 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         XCTAssertEqual(messages.first?.text, "Second")
     }
 
+    func testTerminatingOldMessageStreamDoesNotDetachReopenedObserver() async throws {
+        let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
+        let chatID = UUID()
+        let oldStream = await store.observeMessages(for: chatID)
+        let oldTask = Task {
+            for await _ in oldStream {}
+        }
+        oldTask.cancel()
+
+        let reopenedStream = await store.observeMessages(for: chatID)
+        let received = expectation(description: "reopened stream receives message")
+        let reopenedTask = Task {
+            for await message in reopenedStream {
+                XCTAssertEqual(message.id.chatID, chatID)
+                received.fulfill()
+                break
+            }
+        }
+
+        // Let the old stream's asynchronous termination callback run after the new
+        // observer has registered. Its token must not remove the reopened observer.
+        await Task.yield()
+        try await store.append(
+            message: Message(
+                id: Message.Identifier(chatID: chatID, messageID: UUID()),
+                localID: UUID(),
+                authorID: UUID(),
+                authorName: "Анна",
+                kind: .text,
+                text: "Still live",
+                createdAt: Date(),
+                status: .delivered
+            ),
+            for: chatID
+        )
+
+        await fulfillment(of: [received], timeout: 1.0)
+        reopenedTask.cancel()
+    }
+
     func testRemoteCacheUpdatesArePersistedAfterDebounce() async throws {
         let storageURL = temporaryStoreURL()
         let store = SwiftDataChatStore(storageURL: storageURL)

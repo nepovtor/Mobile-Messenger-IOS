@@ -74,6 +74,64 @@ public struct MyLocationShare: Hashable, Sendable {
     )
 }
 
+public enum LocationSharePermissionStatus: String, Hashable, Sendable {
+    case active
+    case revoked
+}
+
+public struct LocationSharePermission: Identifiable, Hashable, Sendable {
+    public var id: UUID { granteeUserID }
+
+    public let granteeUserID: UUID
+    public let displayName: String
+    public let status: LocationSharePermissionStatus
+    public let grantedAt: String
+    public let expiresAt: String?
+    public let revokedAt: String?
+
+    public init(
+        granteeUserID: UUID,
+        displayName: String,
+        status: LocationSharePermissionStatus,
+        grantedAt: String,
+        expiresAt: String?,
+        revokedAt: String?
+    ) {
+        self.granteeUserID = granteeUserID
+        self.displayName = displayName
+        self.status = status
+        self.grantedAt = grantedAt
+        self.expiresAt = expiresAt
+        self.revokedAt = revokedAt
+    }
+
+    public func isValid(at date: Date) -> Bool {
+        guard status == .active,
+              revokedAt == nil,
+              let expiresAt,
+              let expiryDate = Self.parseTimestamp(expiresAt) else {
+            return false
+        }
+        return expiryDate > date
+    }
+
+    public var expirationDate: Date? {
+        expiresAt.flatMap(Self.parseTimestamp)
+    }
+
+    private static func parseTimestamp(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        return standard.date(from: value)
+    }
+}
+
 extension SharedLocation {
     init(dto: ServerSharedLocation) {
         self.init(
@@ -98,6 +156,19 @@ extension MyLocationShare {
             longitude: dto.longitude,
             accuracy: dto.accuracy,
             updatedAt: dto.updatedAt
+        )
+    }
+}
+
+extension LocationSharePermission {
+    init(dto: ServerLocationPermission) {
+        self.init(
+            granteeUserID: dto.granteeUserID,
+            displayName: dto.displayName,
+            status: dto.status == .active ? .active : .revoked,
+            grantedAt: dto.grantedAt,
+            expiresAt: dto.expiresAt,
+            revokedAt: dto.revokedAt
         )
     }
 }

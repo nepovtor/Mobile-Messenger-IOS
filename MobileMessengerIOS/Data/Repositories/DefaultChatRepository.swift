@@ -8,8 +8,11 @@ public final class DefaultChatRepository: ChatRepository {
     private let reachability: ReachabilityService
     private let fileManager: FileManager
     private let pendingSendCoordinator = PendingSendCoordinator()
+    private let activeChatSubscriptions = ActiveChatSubscriptionRegistry()
+    private let chatSyncCoordinator = ChatSyncCoordinator()
     private var reachabilityTask: Task<Void, Never>?
     private var realtimeTask: Task<Void, Never>?
+    private var connectionStateTask: Task<Void, Never>?
 
     public init(
         store: ChatLocalStore,
@@ -32,6 +35,9 @@ public final class DefaultChatRepository: ChatRepository {
         realtimeTask = Task { [weak self] in
             await self?.observeRealtime()
         }
+        connectionStateTask = Task { [weak self] in
+            await self?.observeRealtimeConnectionState()
+        }
         Task { [weak self] in
             await self?.retryAllPendingMessages()
         }
@@ -40,6 +46,7 @@ public final class DefaultChatRepository: ChatRepository {
     deinit {
         reachabilityTask?.cancel()
         realtimeTask?.cancel()
+        connectionStateTask?.cancel()
     }
 
     public func createChat(title: String, participantContacts: [String]) async throws -> Chat {
@@ -78,8 +85,40 @@ public final class DefaultChatRepository: ChatRepository {
         (try? await store.loadMessages(for: chatID, limit: limit, before: messageID)) ?? []
     }
 
-    public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
-        store.observeMessages(for: chatID)
+    public func observeMessages(for chatID: UUID) async -> AsyncStream<Message> {
+        let storeEvents = store.observeMessages(for: chatID)
+        let registration = await activeChatSubscriptions.add(chatID: chatID)
+
+        if registration.isFirstForChat {
+            realtime.connect(to: chatID)
+            realtime.activate()
+        }
+
+        // The initial history request finishes before ChatViewModel opens this stream.
+        // Subscribe first, then reconcile the bounded latest page so an event that lands
+        // in that gap is recovered without reloading the full history per event.
+        await synchronizeLatestMessages(for: chatID, context: "chat_open_gap_sync")
+
+        return AsyncStream { [weak self] continuation in
+            let forwardingTask = Task {
+                for await message in storeEvents {
+                    guard !Task.isCancelled else { break }
+                    guard message.id.chatID == chatID else { continue }
+                    continuation.yield(message)
+                }
+                continuation.finish()
+            }
+
+            continuation.onTermination = { [weak self] _ in
+                forwardingTask.cancel()
+                Task {
+                    await self?.finishObservingMessages(
+                        chatID: chatID,
+                        token: registration.token
+                    )
+                }
+            }
+        }
     }
 
     public func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
@@ -136,6 +175,44 @@ public final class DefaultChatRepository: ChatRepository {
                     localPath: localFileURL,
                     thumbnailURL: nil,
                     fileSize: Int64(imageData.count)
+                )
+            ]
+        )
+        try await store.ensureChatExists(id: chatID, title: "Диалог")
+        try await store.append(message: optimistic, for: chatID)
+        Task { [weak self] in
+            await self?.attemptDelivery(of: optimistic)
+        }
+        return optimistic
+    }
+
+    public func sendAudioMessage(
+        chatID: UUID,
+        audioData: Data,
+        localID: UUID?
+    ) async throws -> Message {
+        guard !audioData.isEmpty, audioData.count <= 20_000_000 else {
+            throw AppError.network(description: "Некорректный размер голосового сообщения")
+        }
+        let local = localID ?? UUID()
+        let localFileURL = try savePendingAudio(data: audioData, localID: local)
+        let optimistic = Message(
+            id: Message.Identifier(chatID: chatID, messageID: local),
+            localID: local,
+            authorID: SessionStore.Constants.currentUserID,
+            authorName: SessionStore.Constants.currentUserDisplayName,
+            kind: .audio,
+            text: "",
+            createdAt: Date(),
+            status: .sending,
+            attachments: [
+                MessageAttachment(
+                    id: local,
+                    kind: .audio,
+                    url: nil,
+                    localPath: localFileURL,
+                    thumbnailURL: nil,
+                    fileSize: Int64(audioData.count)
                 )
             ]
         )
@@ -221,8 +298,10 @@ public final class DefaultChatRepository: ChatRepository {
                     mediaID: nil,
                     clientMessageID: message.localID
                 )
-            case .image:
-                let localFileURL = message.attachments.first(where: { $0.kind == .image })?.localPath
+            case .image, .audio:
+                let attachmentKind: MessageAttachment.Kind = message.kind == .audio ? .audio : .image
+                let mimeType = message.kind == .audio ? "audio/mp4" : "image/jpeg"
+                let localFileURL = message.attachments.first(where: { $0.kind == attachmentKind })?.localPath
                 guard let localFileURL else {
                     try await store.updateStatus(forLocalID: message.localID, in: message.id.chatID, status: .failed)
                     await pendingSendCoordinator.finish(localID: message.localID)
@@ -230,16 +309,20 @@ public final class DefaultChatRepository: ChatRepository {
                 }
                 let data = try Data(contentsOf: localFileURL)
                 let upload = try await remote.requestUploadURL(
-                    mimeType: "image/jpeg",
+                    mimeType: mimeType,
                     sizeBytes: data.count,
                     width: nil,
                     height: nil
                 )
-                let etag = try await remote.uploadImage(to: upload.uploadURL, data: data, mimeType: "image/jpeg")
+                let etag = try await remote.uploadImage(
+                    to: upload.uploadURL,
+                    data: data,
+                    mimeType: mimeType
+                )
                 try await remote.confirmUpload(mediaID: upload.mediaID, etag: etag)
                 deliveredMessage = try await realtime.sendMessage(
                     chatID: message.id.chatID,
-                    kind: .image,
+                    kind: message.kind,
                     text: message.text.isEmpty ? nil : message.text,
                     mediaID: upload.mediaID,
                     clientMessageID: message.localID
@@ -277,12 +360,15 @@ public final class DefaultChatRepository: ChatRepository {
             case .chatDeleted:
                 try? await store.removeChat(id: envelope.chatID)
             case .message(let message):
+                guard message.id.chatID == envelope.chatID else { continue }
                 try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.append(message: message, for: envelope.chatID)
             case .messageUpdated(let message):
+                guard message.id.chatID == envelope.chatID else { continue }
                 try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.append(message: message, for: envelope.chatID)
             case .messageDeleted(let message):
+                guard message.id.chatID == envelope.chatID else { continue }
                 try? await store.ensureChatExists(id: envelope.chatID, title: "Диалог")
                 try? await store.append(message: message, for: envelope.chatID)
             case .messageRead(let messageID):
@@ -294,6 +380,52 @@ public final class DefaultChatRepository: ChatRepository {
                 break
             }
         }
+    }
+
+    private func observeRealtimeConnectionState() async {
+        var hasObservedConnectedState = false
+        for await state in realtime.observeConnectionState() {
+            guard case .connected = state else { continue }
+
+            if hasObservedConnectedState {
+                let chatIDs = await activeChatSubscriptions.activeChatIDs()
+                for chatID in chatIDs {
+                    await synchronizeLatestMessages(
+                        for: chatID,
+                        context: "chat_reconnect_gap_sync"
+                    )
+                }
+            }
+            hasObservedConnectedState = true
+        }
+    }
+
+    private func finishObservingMessages(chatID: UUID, token: UUID) async {
+        guard await activeChatSubscriptions.remove(chatID: chatID, token: token) else {
+            return
+        }
+        realtime.disconnect(from: chatID)
+    }
+
+    private func synchronizeLatestMessages(for chatID: UUID, context: String) async {
+        guard await chatSyncCoordinator.begin(chatID: chatID) else { return }
+
+        do {
+            let messages = try await remote.loadMessages(
+                chatID: chatID,
+                limit: 200,
+                before: nil
+            ).map { $0.asDomainMessage() }
+            let validatedMessages = messages.filter { $0.id.chatID == chatID }
+            if !validatedMessages.isEmpty {
+                try await store.ensureChatExists(id: chatID, title: "Диалог")
+                try await store.upsert(messages: validatedMessages, for: chatID)
+            }
+        } catch {
+            analytics.track(error: error, context: context)
+        }
+
+        await chatSyncCoordinator.finish(chatID: chatID)
     }
 
     private func retryAllPendingMessages() async {
@@ -325,6 +457,24 @@ public final class DefaultChatRepository: ChatRepository {
         URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         return appSupport.appendingPathComponent("MobileMessengerIOS/pending-images", isDirectory: true)
     }
+
+    private func savePendingAudio(data: Data, localID: UUID) throws -> URL {
+        let directory = pendingAudioDirectory()
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        let url = directory.appendingPathComponent("\(localID.uuidString).m4a")
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    private func pendingAudioDirectory() -> URL {
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ??
+        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return appSupport.appendingPathComponent("MobileMessengerIOS/pending-audio", isDirectory: true)
+    }
 }
 
 extension ServerChat {
@@ -351,5 +501,45 @@ private actor PendingSendCoordinator {
 
     func finish(localID: UUID) {
         inFlight.remove(localID)
+    }
+}
+
+private actor ActiveChatSubscriptionRegistry {
+    struct Registration: Sendable {
+        let token: UUID
+        let isFirstForChat: Bool
+    }
+
+    private var tokensByChatID: [UUID: Set<UUID>] = [:]
+
+    func add(chatID: UUID) -> Registration {
+        let token = UUID()
+        let isFirstForChat = tokensByChatID[chatID]?.isEmpty != false
+        tokensByChatID[chatID, default: []].insert(token)
+        return Registration(token: token, isFirstForChat: isFirstForChat)
+    }
+
+    /// Returns true only when the removed token was the last observer for the chat.
+    func remove(chatID: UUID, token: UUID) -> Bool {
+        guard tokensByChatID[chatID]?.remove(token) != nil else { return false }
+        guard tokensByChatID[chatID]?.isEmpty == true else { return false }
+        tokensByChatID[chatID] = nil
+        return true
+    }
+
+    func activeChatIDs() -> [UUID] {
+        Array(tokensByChatID.keys)
+    }
+}
+
+private actor ChatSyncCoordinator {
+    private var inFlightChatIDs: Set<UUID> = []
+
+    func begin(chatID: UUID) -> Bool {
+        inFlightChatIDs.insert(chatID).inserted
+    }
+
+    func finish(chatID: UUID) {
+        inFlightChatIDs.remove(chatID)
     }
 }

@@ -204,6 +204,49 @@ final class RealtimeServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(factoryCalls, 2)
     }
 
+    func testChatSubscriptionContinuesDeliveringAfterReconnect() async throws {
+        let firstSocket = FakeRealtimeSocketTask()
+        let secondSocket = FakeRealtimeSocketTask()
+        let chatID = UUID()
+        let messageID = UUID()
+        var factoryCalls = 0
+        let service = try DefaultChatRealtimeService(
+            websocketURL: XCTUnwrap(URL(string: "ws://localhost/realtime")),
+            authTokenProvider: { "test-token" },
+            analytics: AnalyticsServiceSpy(),
+            reachability: ReachabilityServiceStub(isReachable: true),
+            featureFlags: FeatureFlags(
+                isRealtimeEnabled: true,
+                isPushEnabled: true,
+                isMediaEnabled: true,
+                isLoggingVerbose: false
+            ),
+            maxReconnectDelay: 0.01,
+            heartbeatInterval: 10,
+            sleep: { _ in },
+            socketFactory: { _ in
+                defer { factoryCalls += 1 }
+                return factoryCalls == 0 ? firstSocket : secondSocket
+            }
+        )
+
+        firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        firstSocket.enqueue(error: AppError.network(description: "Connection lost"))
+        secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        secondSocket.enqueue(text: #"{"event":"message.created","data":{"chatID":"\#(chatID.uuidString)","message":{"id":"\#(messageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"После reconnect","status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
+
+        service.connect(to: chatID)
+        let stream = service.observeEvents(for: chatID)
+        service.activate()
+
+        let event = await nextChatEvent(from: stream)
+        guard case let .message(message)? = event else {
+            return XCTFail("Expected message after reconnect")
+        }
+        XCTAssertEqual(message.id.messageID, messageID)
+        XCTAssertGreaterThanOrEqual(factoryCalls, 2)
+    }
+
     private func makeRealtimeService(
         socket: FakeRealtimeSocketTask,
         factory: (@Sendable (URLRequest) -> RealtimeSocketTask)? = nil
@@ -241,6 +284,21 @@ final class RealtimeServiceTests: XCTestCase {
         return nil
     }
 
+    private func nextChatEvent(
+        from stream: AsyncStream<ChatRealtimeEvent>
+    ) async -> ChatRealtimeEvent? {
+        var iterator = stream.makeAsyncIterator()
+        while let event = await iterator.next() {
+            switch event {
+            case .connected, .disconnected, .chatCreated, .chatDeleted:
+                continue
+            case .message, .messageUpdated, .messageDeleted, .messageRead, .typing:
+                return event
+            }
+        }
+        return nil
+    }
+
     private func nextState(
         from stream: AsyncStream<ChatRealtimeConnectionState>,
         matching predicate: @escaping (ChatRealtimeConnectionState) -> Bool
@@ -265,4 +323,3 @@ final class RealtimeServiceTests: XCTestCase {
         return await socket.cancelCount
     }
 }
-

@@ -173,6 +173,9 @@ export class ChatPresenter {
     if (message.kind === "image") {
       return "Фото";
     }
+    if (message.kind === "audio") {
+      return "Голосовое сообщение";
+    }
     return message.text?.trim() || null;
   }
 }

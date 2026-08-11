@@ -25,6 +25,8 @@ public final class ChatViewModel: ObservableObject {
     @Published public private(set) var isNetworkReachable = true
     @Published public var banner: Banner?
     @Published public var isLoadingHistory = true
+    @Published public private(set) var isLoadingOlderHistory = false
+    @Published public private(set) var hasMoreHistory = true
     @Published public var activeEditMessage: Message?
 
     private let chatID: UUID
@@ -32,6 +34,7 @@ public final class ChatViewModel: ObservableObject {
     private let loadHistory: LoadChatHistoryUseCase
     private let sendMessageUseCase: SendMessageUseCase
     private let sendImageMessageUseCase: SendImageMessageUseCase
+    private let sendAudioMessageUseCase: SendAudioMessageUseCase?
     private let editMessageUseCase: EditMessageUseCase
     private let deleteMessageUseCase: DeleteMessageUseCase
     private let setTypingUseCase: SetTypingUseCase
@@ -41,6 +44,7 @@ public final class ChatViewModel: ObservableObject {
     private let reachability: ReachabilityService
 
     private var observeTask: Task<Void, Never>?
+    private var olderHistoryTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var reachabilityTask: Task<Void, Never>?
     private var messageIndexByID: [UUID: Int] = [:]
@@ -54,6 +58,7 @@ public final class ChatViewModel: ObservableObject {
         loadHistory: LoadChatHistoryUseCase,
         sendMessage: SendMessageUseCase,
         sendImageMessage: SendImageMessageUseCase,
+        sendAudioMessage: SendAudioMessageUseCase? = nil,
         editMessage: EditMessageUseCase,
         deleteMessage: DeleteMessageUseCase,
         setTyping: SetTypingUseCase,
@@ -68,6 +73,7 @@ public final class ChatViewModel: ObservableObject {
         self.loadHistory = loadHistory
         self.sendMessageUseCase = sendMessage
         self.sendImageMessageUseCase = sendImageMessage
+        self.sendAudioMessageUseCase = sendAudioMessage
         self.editMessageUseCase = editMessage
         self.deleteMessageUseCase = deleteMessage
         self.setTypingUseCase = setTyping
@@ -79,6 +85,7 @@ public final class ChatViewModel: ObservableObject {
 
     deinit {
         observeTask?.cancel()
+        olderHistoryTask?.cancel()
         typingTask?.cancel()
         reachabilityTask?.cancel()
     }
@@ -86,17 +93,24 @@ public final class ChatViewModel: ObservableObject {
     public func onAppear() {
         guard observeTask == nil else { return }
         observeTask = Task { [weak self] in
-            await self?.bindMessages()
+            guard let self else { return }
+            await loadInitialHistory()
+            guard !Task.isCancelled else { return }
+            await bindMessages()
         }
-        reachabilityTask = Task { [weak self] in
-            await self?.observeReachability()
+        if reachabilityTask == nil {
+            reachabilityTask = Task { [weak self] in
+                await self?.observeReachability()
+            }
         }
-        Task { await loadInitialHistory() }
     }
 
     public func onDisappear() {
         observeTask?.cancel()
         observeTask = nil
+        olderHistoryTask?.cancel()
+        olderHistoryTask = nil
+        isLoadingOlderHistory = false
         typingTask?.cancel()
         reachabilityTask?.cancel()
         reachabilityTask = nil
@@ -124,6 +138,20 @@ public final class ChatViewModel: ObservableObject {
     public func retryFailedMessages() {
         banner = isNetworkReachable ? nil : .offline
         Task { await retryPending(chatID: chatID) }
+    }
+
+    public func loadOlderMessages() {
+        guard !isLoadingHistory,
+              !isLoadingOlderHistory,
+              hasMoreHistory,
+              let oldestMessageID = messages.first?.id.messageID else {
+            return
+        }
+
+        isLoadingOlderHistory = true
+        olderHistoryTask = Task { [weak self] in
+            await self?.loadOlderMessages(before: oldestMessageID)
+        }
     }
 
     public func handleInputChanged(_ text: String) {
@@ -158,6 +186,38 @@ public final class ChatViewModel: ObservableObject {
             } catch {
                 banner = .error(AppError.presentableMessage(for: error))
                 analytics.track(error: error, context: "send_image")
+            }
+        }
+    }
+
+    public func sendAudio(_ data: Data) {
+        guard !data.isEmpty else {
+            banner = .error("Запись голосового сообщения пуста")
+            return
+        }
+        guard data.count <= 20_000_000 else {
+            banner = .error("Голосовое сообщение превышает 20 МБ")
+            return
+        }
+        guard let sendAudioMessageUseCase else {
+            banner = .error("Отправка голосовых сообщений недоступна")
+            return
+        }
+
+        isSendingMedia = true
+        Task {
+            defer { isSendingMedia = false }
+            do {
+                let message = try await sendAudioMessageUseCase(
+                    chatID: chatID,
+                    audioData: data,
+                    localID: UUID()
+                )
+                upsert(message: message)
+                updateBannerState()
+            } catch {
+                banner = .error(AppError.presentableMessage(for: error))
+                analytics.track(error: error, context: "send_audio")
             }
         }
     }
@@ -236,16 +296,19 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func loadInitialHistory() async {
+        let pageSize = 100
         isLoadingHistory = true
-        let cachedHistory = await loadHistory.cached(chatID: chatID, limit: 100, before: nil)
+        let cachedHistory = await loadHistory.cached(chatID: chatID, limit: pageSize, before: nil)
         if !cachedHistory.isEmpty {
             merge(messages: cachedHistory)
+            hasMoreHistory = cachedHistory.count >= pageSize
             isLoadingHistory = false
         }
 
         do {
-            let history = try await loadHistory(chatID: chatID, limit: 100, before: nil)
+            let history = try await loadHistory(chatID: chatID, limit: pageSize, before: nil)
             merge(messages: history)
+            hasMoreHistory = history.count >= pageSize
             updateBannerState()
             isLoadingHistory = false
         } catch {
@@ -255,13 +318,33 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
+    private func loadOlderMessages(before messageID: UUID) async {
+        defer {
+            isLoadingOlderHistory = false
+            olderHistoryTask = nil
+        }
+
+        let pageSize = 100
+        do {
+            let olderMessages = try await loadHistory(
+                chatID: chatID,
+                limit: pageSize,
+                before: messageID
+            )
+            guard !Task.isCancelled else { return }
+            merge(messages: olderMessages)
+            hasMoreHistory = olderMessages.count >= pageSize
+        } catch {
+            analytics.track(error: error, context: "load_older_messages")
+        }
+    }
+
     private func bindMessages() async {
-        let stream = observeMessages(chatID: chatID)
+        let stream = await observeMessages(chatID: chatID)
         for await message in stream {
-            await MainActor.run {
-                upsert(message: message)
-                updateBannerState()
-            }
+            guard message.id.chatID == chatID else { continue }
+            upsert(message: message)
+            updateBannerState()
         }
     }
 

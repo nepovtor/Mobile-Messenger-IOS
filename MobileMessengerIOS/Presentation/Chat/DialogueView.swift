@@ -1,3 +1,4 @@
+import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -9,9 +10,16 @@ struct DialogueView: View {
     let chat: ChatListItem
 
     @StateObject private var viewModel: ChatViewModel
+    @StateObject private var voiceRecorder = VoiceMessageRecorder()
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var preparedImage: UIImage?
     @State private var editDraft = ""
     @State private var pendingDeleteMessage: Message?
+    @State private var isNearBottom = true
+    @State private var hasNewMessagesBelow = false
+    @State private var olderHistoryAnchorID: UUID?
+    @State private var hasPerformedInitialScroll = false
+    @State private var composerTextHeight: CGFloat = 36
 
     @MainActor
     init(chat: ChatListItem) {
@@ -28,50 +36,119 @@ struct DialogueView: View {
         ZStack {
             ChatWallpaper(isHighContrastDarkActive: isHighContrastDarkActive)
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        if viewModel.isLoadingHistory {
-                            ForEach(0..<5, id: \.self) { index in
-                                MessageSkeletonBubble(isOutgoing: index.isMultiple(of: 2))
-                            }
-                        } else {
-                            ForEach(viewModel.messages, id: \._id) { message in
-                                MessageBubbleView(message: message, isGroup: chat.isGroup)
-                                    .contextMenu {
-                                        if message.isOutgoing && message.deletedAt == nil {
-                                            if message.kind == .text {
-                                                Button("Изменить") {
-                                                    editDraft = message.text
-                                                    viewModel.beginEditing(message)
+            GeometryReader { viewport in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            if viewModel.isLoadingHistory {
+                                ForEach(0..<5, id: \.self) { index in
+                                    MessageSkeletonBubble(isOutgoing: index.isMultiple(of: 2))
+                                }
+                            } else {
+                                if viewModel.hasMoreHistory, let firstMessage = viewModel.messages.first {
+                                    Group {
+                                        if viewModel.isLoadingOlderHistory {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                        .frame(height: 28)
+                                        .frame(maxWidth: .infinity)
+                                        .onAppear {
+                                            loadOlderMessages(preserving: firstMessage.localID)
+                                        }
+                                        .accessibilityLabel("Загрузка предыдущих сообщений")
+                                }
+
+                                ForEach(viewModel.messages, id: \.localID) { message in
+                                    MessageBubbleView(message: message, isGroup: chat.isGroup)
+                                        .contextMenu {
+                                            if message.isOutgoing && message.deletedAt == nil {
+                                                if message.kind == .text {
+                                                    Button("Изменить") {
+                                                        editDraft = message.text
+                                                        viewModel.beginEditing(message)
+                                                    }
+                                                }
+
+                                                Button("Удалить", role: .destructive) {
+                                                    pendingDeleteMessage = message
                                                 }
                                             }
-
-                                            Button("Удалить", role: .destructive) {
-                                                pendingDeleteMessage = message
+                                        }
+                                        .id(message.localID)
+                                        .onAppear {
+                                            if message == viewModel.messages.last {
+                                                viewModel.markAsRead(messageID: message.id.messageID)
                                             }
                                         }
-                                    }
-                                    .id(message.id.messageID)
-                                    .onAppear {
-                                        if message == viewModel.messages.last {
-                                            viewModel.markAsRead(messageID: message.id.messageID)
-                                        }
-                                    }
+                                }
                             }
+
+                            Color.clear
+                                .frame(height: 1)
+                                .id(ChatScrollTarget.bottom)
+                                .background {
+                                    GeometryReader { bottomMarker in
+                                        Color.clear.preference(
+                                            key: ChatBottomOffsetPreferenceKey.self,
+                                            value: bottomMarker.frame(in: .named(ChatScrollSpace.name)).maxY
+                                        )
+                                    }
+                                }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 14)
+                        .padding(.bottom, 12)
+                    }
+                    .coordinateSpace(name: ChatScrollSpace.name)
+                    .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
+                    .onPreferenceChange(ChatBottomOffsetPreferenceKey.self) { bottomOffset in
+                        updateBottomProximity(
+                            bottomOffset: bottomOffset,
+                            viewportHeight: viewport.size.height
+                        )
+                    }
+                    .onAppear {
+                        scrollToBottom(using: proxy, animated: false)
+                    }
+                    .onChange(of: viewModel.messages.last?.localID) { previousID, newID in
+                        handleLastMessageChange(
+                            previousID: previousID,
+                            newID: newID,
+                            using: proxy
+                        )
+                    }
+                    .onChange(of: viewModel.isLoadingOlderHistory) { wasLoading, isLoading in
+                        guard wasLoading, !isLoading, let anchorID = olderHistoryAnchorID else { return }
+                        olderHistoryAnchorID = nil
+                        restoreScrollPosition(to: anchorID, using: proxy)
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if hasNewMessagesBelow {
+                            Button {
+                                hasNewMessagesBelow = false
+                                scrollToBottom(using: proxy, animated: true)
+                            } label: {
+                                Label("Новые сообщения", systemImage: "arrow.down")
+                                    .font(.footnote.weight(.semibold))
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 36)
+                                    .foregroundStyle(.white)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(AppTheme.primary)
+                                    )
+                                    .shadow(color: Color.black.opacity(0.16), radius: 8, y: 3)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(12)
+                            .accessibilityIdentifier("newMessagesButton")
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                }
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .onAppear {
-                    scrollToBottom(using: proxy, animated: false)
-                }
-                .onChange(of: viewModel.messages.count) {
-                    scrollToBottom(using: proxy, animated: true)
                 }
             }
         }
@@ -96,14 +173,31 @@ struct DialogueView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .onAppear { viewModel.onAppear() }
-        .onDisappear { viewModel.onDisappear() }
+        .onDisappear {
+            voiceRecorder.cancel()
+            viewModel.onDisappear()
+        }
         .task(id: selectedPhotoItem) {
-            guard let selectedPhotoItem,
-                  let data = try? await selectedPhotoItem.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else { return }
-            viewModel.sendImage(image)
-            self.selectedPhotoItem = nil
+            guard let selectedPhotoItem else { return }
+
+            do {
+                let data = try await selectedPhotoItem.loadTransferable(type: Data.self)
+                guard !Task.isCancelled else { return }
+                guard let data, let image = UIImage(data: data) else {
+                    viewModel.banner = .error("Не удалось подготовить фотографию")
+                    self.selectedPhotoItem = nil
+                    return
+                }
+
+                preparedImage = image
+                self.selectedPhotoItem = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                viewModel.banner = .error("Не удалось подготовить фотографию")
+                self.selectedPhotoItem = nil
+            }
         }
         .sheet(item: $viewModel.activeEditMessage) { message in
             NavigationStack {
@@ -172,12 +266,11 @@ struct DialogueView: View {
     @MainActor
     private var messageInput: some View {
         let isSendingMedia = viewModel.isSendingMedia
-        let isSendDisabled = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingMedia
+        let hasText = !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let useHighContrast = isHighContrastDarkActive
         let mediaInnerDarkness = useHighContrast ? 0.10 : 0.03
         let inputInnerDarkness = useHighContrast ? 0.10 : 0.06
         let toolbarBackground = toolbarBackgroundColor
-
         return HStack(alignment: .bottom, spacing: 10) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ZStack {
@@ -197,44 +290,103 @@ struct DialogueView: View {
                     innerDarkness: mediaInnerDarkness
                 )
             }
-            .disabled(isSendingMedia)
+            .disabled(isSendingMedia || voiceRecorder.isRecording)
 
             HStack(alignment: .bottom, spacing: 10) {
-                ZStack(alignment: .topLeading) {
-                    if viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Сообщение")
+                if voiceRecorder.isRecording {
+                    Button(role: .destructive) {
+                        voiceRecorder.cancel()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .accessibilityLabel("Отменить запись")
+
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 9, height: 9)
+                        Text(voiceRecorder.formattedDuration)
+                            .font(.system(.body, design: .monospaced).weight(.semibold))
+                        Text("Запись")
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .padding(.top, 10)
-                            .padding(.leading, 6)
+                        Spacer(minLength: 8)
                     }
 
-                    TextEditor(text: $viewModel.inputText)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 24, maxHeight: 108)
-                        .padding(.horizontal, 2)
-                        .onChange(of: viewModel.inputText) {
-                            viewModel.handleInputChanged(viewModel.inputText)
+                    Button {
+                        voiceRecorder.finish()
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassCircle(
+                                tint: AppTheme.primary,
+                                secondaryTint: AppTheme.aqua,
+                                innerDarkness: 0.54
+                            )
+                    }
+                    .accessibilityLabel("Отправить голосовое сообщение")
+                } else {
+                    ZStack(alignment: .topLeading) {
+                        if !hasText {
+                            Text("Сообщение")
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 10)
+                                .padding(.leading, 6)
                         }
-                        .onTapGesture {
-                            if let last = viewModel.messages.last {
-                                viewModel.markAsRead(messageID: last.id.messageID)
+                        TextEditor(text: $viewModel.inputText)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 24, maxHeight: 108)
+                            .padding(.horizontal, 2)
+                            .onChange(of: viewModel.inputText) {
+                                viewModel.handleInputChanged(viewModel.inputText)
                             }
-                        }
-                }
+                            .onTapGesture {
+                                if let last = viewModel.messages.last {
+                                    viewModel.markAsRead(messageID: last.id.messageID)
+                                }
+                            }
+                    }
 
-                Button(action: viewModel.sendMessage) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .liquidGlassCircle(
-                            tint: AppTheme.primary,
-                            secondaryTint: AppTheme.aqua,
-                            innerDarkness: 0.54
-                        )
+                    if hasText {
+                        Button(action: viewModel.sendMessage) {
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .liquidGlassCircle(
+                                    tint: AppTheme.primary,
+                                    secondaryTint: AppTheme.aqua,
+                                    innerDarkness: 0.54
+                                )
+                        }
+                        .disabled(isSendingMedia)
+                        .opacity(isSendingMedia ? 0.55 : 1)
+                    } else {
+                        Button {
+                            voiceRecorder.start(
+                                onFinish: { data in viewModel.sendAudio(data) },
+                                onError: { message in viewModel.banner = .error(message) }
+                            )
+                        } label: {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .liquidGlassCircle(
+                                    tint: AppTheme.primary,
+                                    secondaryTint: AppTheme.aqua,
+                                    innerDarkness: 0.54
+                                )
+                        }
+                        .disabled(isSendingMedia)
+                        .opacity(isSendingMedia ? 0.55 : 1)
+                        .accessibilityLabel("Записать голосовое сообщение")
+                    }
                 }
-                .disabled(isSendDisabled)
-                .opacity(isSendDisabled ? 0.55 : 1)
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)
@@ -258,6 +410,15 @@ struct DialogueView: View {
                         .frame(height: 1)
                 }
         )
+    }
+
+    private func sendDraft() {
+        if let preparedImage {
+            self.preparedImage = nil
+            viewModel.sendImage(preparedImage)
+        } else {
+            viewModel.sendMessage()
+        }
     }
 
     @ViewBuilder
@@ -290,29 +451,69 @@ struct DialogueView: View {
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy, animated: Bool) {
-        guard let last = viewModel.messages.last else { return }
+        guard !viewModel.messages.isEmpty else { return }
 
-        if animated {
-            withAnimation(.easeOut(duration: 0.24)) {
-                proxy.scrollTo(last.id.messageID, anchor: .bottom)
+        Task { @MainActor in
+            await Task.yield()
+
+            if animated {
+                withAnimation(.easeOut(duration: 0.24)) {
+                    proxy.scrollTo(ChatScrollTarget.bottom, anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo(ChatScrollTarget.bottom, anchor: .bottom)
             }
+
+            hasPerformedInitialScroll = true
+        }
+    }
+
+    private func handleLastMessageChange(
+        previousID: UUID?,
+        newID: UUID?,
+        using proxy: ScrollViewProxy
+    ) {
+        guard let newID, previousID != newID else { return }
+
+        let shouldFollowMessage = previousID == nil || isNearBottom || viewModel.messages.last?.isOutgoing == true
+        if shouldFollowMessage {
+            hasNewMessagesBelow = false
+            scrollToBottom(using: proxy, animated: previousID != nil)
         } else {
-            proxy.scrollTo(last.id.messageID, anchor: .bottom)
+            hasNewMessagesBelow = true
+        }
+    }
+
+    private func updateBottomProximity(bottomOffset: CGFloat, viewportHeight: CGFloat) {
+        guard bottomOffset.isFinite, viewportHeight > 0 else { return }
+
+        let nearBottomThreshold: CGFloat = 120
+        let isNowNearBottom = bottomOffset <= viewportHeight + nearBottomThreshold
+        isNearBottom = isNowNearBottom
+        if isNowNearBottom {
+            hasNewMessagesBelow = false
+        }
+    }
+
+    private func loadOlderMessages(preserving anchorID: UUID) {
+        guard hasPerformedInitialScroll, !viewModel.isLoadingOlderHistory else { return }
+        olderHistoryAnchorID = anchorID
+        viewModel.loadOlderMessages()
+    }
+
+    private func restoreScrollPosition(to anchorID: UUID, using proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            await Task.yield()
+            proxy.scrollTo(anchorID, anchor: .top)
         }
     }
 
     private var toolbarBackgroundColor: Color {
-        if isHighContrastDarkActive {
-            return Color(uiColor: .systemBackground).opacity(0.94)
-        }
-        return Color(uiColor: .systemBackground).opacity(0.78)
+        Color(uiColor: .systemBackground)
     }
 
     private var toolbarDividerColor: Color {
-        if isHighContrastDarkActive {
-            return Color.white.opacity(0.10)
-        }
-        return Color.white.opacity(0.45)
+        Color(uiColor: .separator).opacity(0.45)
     }
 
     private var isHighContrastDarkActive: Bool {
@@ -436,6 +637,12 @@ private struct MessageBubbleView: View {
                     MessageAttachmentImageView(attachment: imageAttachment)
                 }
 
+                if let audioAttachment = message.attachments.first(where: { $0.kind == .audio }) {
+                    VoiceMessageAttachmentView(
+                        attachment: audioAttachment,
+                        isOutgoing: message.isOutgoing
+                    )
+                }
                 if !message.text.isEmpty || message.kind == .text {
                     Text(message.text)
                         .foregroundStyle(message.isOutgoing ? .white : .primary)
@@ -620,6 +827,383 @@ private struct ChatWallpaper: View {
     }
 }
 
-private extension Message {
-    var _id: UUID { id.messageID }
+private enum ChatScrollTarget: Hashable {
+    case bottom
+}
+
+private struct GrowingMessageTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var measuredHeight: CGFloat
+    let minimumHeight: CGFloat
+    let maximumLines: Int
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .clear
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
+        textView.textContainer.lineFragmentPadding = 5
+        textView.isScrollEnabled = false
+        textView.showsVerticalScrollIndicator = true
+        textView.keyboardDismissMode = .interactive
+        textView.textContainer.lineBreakMode = .byWordWrapping
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.accessibilityIdentifier = "messageComposerTextField"
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
+        if textView.text != text {
+            textView.text = text
+        }
+
+        DispatchQueue.main.async { [weak coordinator = context.coordinator] in
+            coordinator?.recalculateHeight()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: GrowingMessageTextView
+        weak var textView: UITextView?
+
+        init(parent: GrowingMessageTextView) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+            recalculateHeight()
+        }
+
+        func recalculateHeight() {
+            guard let textView, textView.bounds.width > 0 else { return }
+
+            let font = textView.font ?? .preferredFont(forTextStyle: .body)
+            let insets = textView.textContainerInset.top + textView.textContainerInset.bottom
+            let maximumHeight = ceil(font.lineHeight * CGFloat(parent.maximumLines) + insets)
+            let fittingHeight = ceil(
+                textView.sizeThatFits(
+                    CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
+                ).height
+            )
+            let targetHeight = min(max(parent.minimumHeight, fittingHeight), maximumHeight)
+            let shouldScroll = fittingHeight > maximumHeight
+
+            if textView.isScrollEnabled != shouldScroll {
+                textView.isScrollEnabled = shouldScroll
+            }
+            if abs(parent.measuredHeight - targetHeight) > 0.5 {
+                parent.measuredHeight = targetHeight
+            }
+        }
+    }
+}
+
+private enum ChatScrollSpace {
+    static let name = "dialogueMessagesScroll"
+}
+
+private struct ChatBottomOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+
+@MainActor
+private final class VoiceMessageRecorder: NSObject, ObservableObject {
+    @Published private(set) var isRecording = false
+    @Published private(set) var duration: TimeInterval = 0
+
+    private let maximumDuration: TimeInterval = 120
+    private var recorder: AVAudioRecorder?
+    private var timer: Timer?
+    private var completion: ((Data) -> Void)?
+    private var errorHandler: ((String) -> Void)?
+
+    var formattedDuration: String {
+        Self.format(duration)
+    }
+
+    func start(
+        onFinish: @escaping (Data) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        guard !isRecording else { return }
+        completion = onFinish
+        errorHandler = onError
+
+        let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
+        case .granted:
+            beginRecording()
+        case .denied:
+            fail("Разрешите доступ к микрофону в настройках iPhone")
+        case .undetermined:
+            session.requestRecordPermission { [weak self] granted in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if granted {
+                        self.beginRecording()
+                    } else {
+                        self.fail("Без доступа к микрофону запись невозможна")
+                    }
+                }
+            }
+        @unknown default:
+            fail("Не удалось определить разрешение на использование микрофона")
+        }
+    }
+
+    func finish() {
+        guard isRecording, let recorder else { return }
+        isRecording = false
+        timer?.invalidate()
+        timer = nil
+        let url = recorder.url
+        let recordedDuration = recorder.currentTime
+        recorder.stop()
+        self.recorder = nil
+        duration = 0
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        guard recordedDuration >= 0.5 else {
+            try? FileManager.default.removeItem(at: url)
+            fail("Голосовое сообщение слишком короткое")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            try? FileManager.default.removeItem(at: url)
+            let callback = completion
+            resetCallbacks()
+            callback?(data)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            fail("Не удалось прочитать записанное сообщение")
+        }
+    }
+
+    func cancel() {
+        guard recorder != nil || isRecording else {
+            resetCallbacks()
+            return
+        }
+        isRecording = false
+        timer?.invalidate()
+        timer = nil
+        let url = recorder?.url
+        recorder?.stop()
+        recorder = nil
+        duration = 0
+        if let url {
+            try? FileManager.default.removeItem(at: url)
+        }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        resetCallbacks()
+    }
+
+    private func beginRecording() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(
+                .playAndRecord,
+                mode: .spokenAudio,
+                options: [.defaultToSpeaker, .allowBluetoothHFP]
+            )
+            try session.setActive(true)
+
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("voice-\(UUID().uuidString).m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 24_000,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 32_000,
+                AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
+            ]
+            let recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder.isMeteringEnabled = true
+            guard recorder.prepareToRecord(), recorder.record() else {
+                throw NSError(domain: "VoiceRecorder", code: 1)
+            }
+            self.recorder = recorder
+            duration = 0
+            isRecording = true
+            timer?.invalidate()
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, let recorder = self.recorder else { return }
+                    self.duration = min(recorder.currentTime, self.maximumDuration)
+                    if recorder.currentTime >= self.maximumDuration {
+                        self.finish()
+                    }
+                }
+            }
+        } catch {
+            cancel()
+            fail("Не удалось начать запись. Проверьте микрофон и повторите попытку")
+        }
+    }
+
+    private func fail(_ message: String) {
+        let callback = errorHandler
+        resetCallbacks()
+        callback?(message)
+    }
+
+    private func resetCallbacks() {
+        completion = nil
+        errorHandler = nil
+    }
+
+    private static func format(_ value: TimeInterval) -> String {
+        let seconds = max(0, Int(value.rounded(.down)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct VoiceMessageAttachmentView: View {
+    let attachment: MessageAttachment
+    let isOutgoing: Bool
+    @StateObject private var player = VoiceMessagePlayer()
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                guard let url = attachment.localPath ?? attachment.url else { return }
+                player.toggle(url: url)
+            } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isOutgoing ? Color.white : AppTheme.primary)
+                    .frame(width: 42, height: 42)
+                    .background(
+                        Circle()
+                            .fill(isOutgoing ? Color.white.opacity(0.18) : AppTheme.primary.opacity(0.12))
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(attachment.localPath == nil && attachment.url == nil)
+            .accessibilityLabel(player.isPlaying ? "Пауза" : "Воспроизвести голосовое сообщение")
+
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(
+                    value: player.elapsed,
+                    total: max(player.duration, 1)
+                )
+                .tint(isOutgoing ? .white : AppTheme.primary)
+
+                HStack {
+                    Image(systemName: "waveform")
+                    Text(player.timeLabel)
+                        .font(.caption.monospacedDigit())
+                }
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.86) : Color.secondary)
+            }
+        }
+        .frame(minWidth: 210, maxWidth: 260)
+        .onDisappear { player.stop() }
+    }
+}
+
+@MainActor
+private final class VoiceMessagePlayer: ObservableObject {
+    @Published private(set) var isPlaying = false
+    @Published private(set) var elapsed: TimeInterval = 0
+    @Published private(set) var duration: TimeInterval = 0
+
+    private var player: AVPlayer?
+    private var loadedURL: URL?
+    private var timeObserver: Any?
+    private var endObserver: NSObjectProtocol?
+
+    var timeLabel: String {
+        let displayed = duration > 0 ? duration : elapsed
+        let seconds = max(0, Int(displayed.rounded(.down)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    func toggle(url: URL) {
+        if loadedURL != url {
+            prepare(url: url)
+        }
+        guard let player else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+        } else {
+            if duration > 0, elapsed >= duration - 0.2 {
+                player.seek(to: .zero)
+                elapsed = 0
+            }
+            player.play()
+            isPlaying = true
+        }
+    }
+
+    func stop() {
+        player?.pause()
+        isPlaying = false
+        removeObservers()
+        player = nil
+        loadedURL = nil
+    }
+
+    private func prepare(url: URL) {
+        stop()
+        loadedURL = url
+        let item = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: item)
+        self.player = player
+
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
+            queue: .main
+        ) { [weak self, weak player] time in
+            Task { @MainActor in
+                guard let self else { return }
+                let current = time.seconds
+                if current.isFinite {
+                    self.elapsed = max(0, current)
+                }
+                let total = player?.currentItem?.duration.seconds ?? 0
+                if total.isFinite, total > 0 {
+                    self.duration = total
+                }
+            }
+        }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isPlaying = false
+                self.elapsed = self.duration
+            }
+        }
+    }
+
+    private func removeObservers() {
+        if let timeObserver, let player {
+            player.removeTimeObserver(timeObserver)
+        }
+        timeObserver = nil
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        endObserver = nil
+    }
 }

@@ -5,7 +5,21 @@ struct AuthView: View {
     @StateObject private var viewModel: AuthViewModel
     @ObservedObject private var container: AppContainer
     @Environment(\.openURL) private var openURL
+    @FocusState private var focusedField: AuthField?
+    @State private var isDemoAccountsExpanded = false
+    @State private var isBackendSupportExpanded = false
     let onAuthorized: () -> Void
+
+    private enum AuthField: Hashable {
+        case contact
+        case code
+    }
+
+    private enum ScrollTarget: Hashable {
+        case top
+        case flow
+        case bottom
+    }
 
     @MainActor
     init(onAuthorized: @escaping () -> Void) {
@@ -23,21 +37,55 @@ struct AuthView: View {
         ZStack {
             AuthenticationBackdrop()
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
-                    heroSection
-                    authCard
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        heroSection
+                            .id(ScrollTarget.top)
+                        authCard
+                        Color.clear
+                            .frame(height: 1)
+                            .id(ScrollTarget.bottom)
+                    }
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 36)
                 }
-                .frame(maxWidth: 560, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
+                .scrollDismissesKeyboard(.interactively)
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: viewModel.telegramPairingExpiresIn) { _, expiresIn in
+                    guard expiresIn != nil else { return }
+                    scrollAfterLayout(to: .flow, using: proxy)
+                }
+                .onChange(of: viewModel.isCodeSent) { _, isCodeSent in
+                    guard isCodeSent else { return }
+                    focusedField = .code
+                    scrollAfterLayout(to: .flow, using: proxy, delay: .milliseconds(350))
+                }
+                .onChange(of: isDemoAccountsExpanded) { _, isExpanded in
+                    guard isExpanded else { return }
+                    scrollAfterLayout(to: .bottom, using: proxy)
+                }
+                .onChange(of: isBackendSupportExpanded) { _, isExpanded in
+                    guard isExpanded else { return }
+                    scrollAfterLayout(to: .bottom, using: proxy)
+                }
             }
         }
         .preferredColorScheme(.dark)
         .animation(.easeInOut(duration: 0.2), value: viewModel.screenMode)
         .animation(.easeInOut(duration: 0.2), value: viewModel.credentialMode)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isCodeSent)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.telegramPairingExpiresIn)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Готово") {
+                    focusedField = nil
+                }
+            }
+        }
         .onReceive(viewModel.sessionStore.$state) { state in
             if case .authenticated = state {
                 onAuthorized()
@@ -46,7 +94,7 @@ struct AuthView: View {
     }
 
     private var heroSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        HStack(spacing: 16) {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(
                     LinearGradient(
@@ -55,23 +103,23 @@ struct AuthView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 78, height: 78)
+                .frame(width: 64, height: 64)
                 .overlay {
                     Image(systemName: "message.fill")
-                        .font(.system(size: 31, weight: .bold))
+                        .font(.system(size: 26, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .shadow(color: AppTheme.primary.opacity(0.40), radius: 18, y: 8)
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text("Mobile Messenger")
-                    .font(.system(size: 33, weight: .bold, design: .rounded))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Вход в Mobile Messenger")
+                    .font(.system(size: 27, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
 
-                Text("Безопасные чаты, контакты и геолокация в одном приложении.")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                Text("Введите номер — одноразовый код придёт в Telegram.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.76))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -80,14 +128,18 @@ struct AuthView: View {
 
     private var authCard: some View {
         VStack(alignment: .leading, spacing: 18) {
+            progressSection
+
+            if let lastUsedLogin = viewModel.lastUsedLogin,
+               lastUsedLogin.demoAccount != nil {
+                quickResumeSection(lastUsedLogin)
+            }
+
             contactField
             codeSection
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
-                    .fixedSize(horizontal: false, vertical: true)
+                errorCard(error)
             }
 
             if shouldShowBackendSupport {
@@ -102,10 +154,120 @@ struct AuthView: View {
         .background(AuthenticationCardSurface(cornerRadius: 28))
     }
 
+    private var currentStep: Int {
+        if viewModel.isCodeSent { return 3 }
+        if viewModel.telegramPairingExpiresIn != nil { return 2 }
+        return 1
+    }
+
+    private var progressSection: some View {
+        HStack(spacing: 8) {
+            progressItem(number: 1, title: "Номер")
+            progressConnector(after: 1)
+            progressItem(number: 2, title: "Telegram")
+            progressConnector(after: 2)
+            progressItem(number: 3, title: "Код")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Шаг \(currentStep) из 3")
+    }
+
+    private func progressItem(number: Int, title: String) -> some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(number <= currentStep ? AppTheme.primary : Color.white.opacity(0.10))
+                    .frame(width: 30, height: 30)
+
+                if number < currentStep {
+                    Image(systemName: "checkmark")
+                        .font(.caption.bold())
+                } else {
+                    Text("\(number)")
+                        .font(.caption.bold())
+                }
+            }
+
+            Text(title)
+                .font(.caption.weight(number == currentStep ? .bold : .medium))
+                .foregroundStyle(Color.white.opacity(number <= currentStep ? 0.95 : 0.45))
+        }
+        .foregroundStyle(.white)
+        .frame(minWidth: 58)
+    }
+
+    private func progressConnector(after step: Int) -> some View {
+        Capsule()
+            .fill(step < currentStep ? AppTheme.primary : Color.white.opacity(0.12))
+            .frame(maxWidth: .infinity)
+            .frame(height: 3)
+            .offset(y: -10)
+    }
+
+    private var contactHint: String {
+        if viewModel.contact.isEmpty {
+            return "В международном формате, например +375291234567"
+        }
+        if viewModel.isContactValid {
+            return "Номер заполнен — можно перейти к Telegram"
+        }
+        return "Проверьте формат: номер должен начинаться с +"
+    }
+
+    private var contactHintColor: Color {
+        guard !viewModel.contact.isEmpty else { return Color.white.opacity(0.55) }
+        return viewModel.isContactValid ? AppTheme.aqua : Color(red: 1.0, green: 0.60, blue: 0.60)
+    }
+
+    private func errorCard(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(Color(red: 1.0, green: 0.60, blue: 0.60))
+
+            Text(message)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.white.opacity(0.90))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.red.opacity(0.13))
+        )
+    }
+
+    private func statusCard(title: String, message: String, systemImage: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(AppTheme.aqua)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AuthenticationCardSurface(cornerRadius: 18, fill: Color(red: 0.07, green: 0.14, blue: 0.24)))
+    }
+
     private var contactField: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            fieldLabel("Номер телефона", systemImage: "iphone")
-            TextField("+7 (999) 000-00-00", text: $viewModel.contact)
+        VStack(alignment: .leading, spacing: 10) {
+            fieldLabel("1. Ваш номер телефона", systemImage: "iphone")
+            TextField(
+                "+375 29 123-45-67",
+                text: Binding(
+                    get: { viewModel.contact },
+                    set: viewModel.updateContact
+                )
+            )
                 .keyboardType(.phonePad)
                 .textContentType(.telephoneNumber)
                 .textInputAutocapitalization(.never)
@@ -115,212 +277,215 @@ struct AuthView: View {
                 .padding(.horizontal, 18)
                 .frame(height: 58)
                 .background(fieldBackground)
+                .focused($focusedField, equals: .contact)
 
-            Text("Введите номер в международном формате, например +375291234567")
+            Text(contactHint)
                 .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.55))
-        }
-    }
-
-    private var passwordSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            fieldLabel("Пароль", systemImage: "lock.fill")
-            SecureField("Введите пароль", text: $viewModel.password)
-                .textContentType(.password)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(size: 20, weight: .medium, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .frame(height: 58)
-                .background(fieldBackground)
-
-            Text("Для демо-аккаунтов используйте пароль из списка ниже")
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.55))
-
-            primaryButton(
-                title: "Войти с паролем",
-                systemImage: "paperplane.fill",
-                isLoading: viewModel.isSigningInWithPassword,
-                isEnabled: viewModel.isContactValid && viewModel.isPasswordValid && !viewModel.isSigningInWithPassword,
-                action: signInWithPassword
-            )
+                .foregroundStyle(contactHintColor)
         }
     }
 
     private var codeSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            fieldLabel("Подтверждение в Telegram", systemImage: "paperplane.fill")
-            telegramInstructionCard
+        Group {
             if viewModel.isCodeSent {
-                TextField("Введите код", text: $viewModel.code)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .font(.system(size: 20, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .frame(height: 58)
-                    .background(fieldBackground)
-            }
-
-            if let seconds = viewModel.codeExpirationSeconds {
-                Text("Код действует ещё \(seconds) сек.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.55))
-            } else if let pairingHint = viewModel.telegramPairingHintText {
-                Text(pairingHint)
-                    .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.55))
-                    .fixedSize(horizontal: false, vertical: true)
+                verificationSection
+            } else if viewModel.telegramPairingExpiresIn != nil {
+                pairingConfirmationSection
             } else {
-                Text("Введите реальный номер в международном формате, чтобы получить одноразовый код в Telegram.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.55))
-                    .fixedSize(horizontal: false, vertical: true)
+                telegramStartSection
             }
+        }
+        .id(ScrollTarget.flow)
+    }
+
+    private func scrollAfterLayout(
+        to target: ScrollTarget,
+        using proxy: ScrollViewProxy,
+        delay: Duration = .milliseconds(180)
+    ) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(target, anchor: target == .bottom ? .bottom : .center)
+            }
+        }
+    }
+
+    private var telegramStartSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            fieldLabel("2. Получите код в Telegram", systemImage: "paperplane.fill")
+
+            Text("Откроем защищённую ссылку на бота. Отправьте ему свой контакт и вернитесь сюда.")
+                .font(.subheadline)
+                .foregroundStyle(Color.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
 
             primaryButton(
-                title: viewModel.isCodeSent ? "Отправить код повторно" : "Получить код",
+                title: "Открыть Telegram",
                 systemImage: "paperplane.fill",
+                isLoading: viewModel.isLinkingTelegram,
+                isEnabled: viewModel.isContactValid && !viewModel.isLinkingTelegram,
+                action: linkTelegram
+            )
+
+            Button(action: requestCode) {
+                Text("Telegram уже привязан? Получить код")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(viewModel.isContactValid ? AppTheme.aqua : Color.white.opacity(0.38))
+            .disabled(!viewModel.isContactValid || viewModel.isRequestingCode)
+        }
+    }
+
+    private var pairingConfirmationSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            statusCard(
+                title: "Telegram открыт",
+                message: "Отправьте боту свой контакт, затем вернитесь и запросите одноразовый код.",
+                systemImage: "arrow.up.right.circle.fill"
+            )
+
+            primaryButton(
+                title: "Я отправил контакт — получить код",
+                systemImage: "number.circle.fill",
                 isLoading: viewModel.isRequestingCode,
                 isEnabled: viewModel.isContactValid && !viewModel.isRequestingCode,
                 action: requestCode
             )
 
-            if viewModel.isCodeSent {
-                primaryButton(
-                    title: "Подтвердить и продолжить",
-                    systemImage: "checkmark.circle.fill",
-                    isLoading: viewModel.isVerifyingCode,
-                    isEnabled: viewModel.isCodeValid && !viewModel.isVerifyingCode,
-                    action: verify
-                )
+            Button(action: linkTelegram) {
+                Text("Открыть Telegram ещё раз")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppTheme.aqua)
+            .disabled(viewModel.isLinkingTelegram)
+
+            if let seconds = viewModel.telegramPairingExpiresIn {
+                Text("Защищённая ссылка активна ещё \(seconds) сек.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.55))
             }
         }
     }
 
-    private var telegramInstructionCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(viewModel.telegramInstructionText)
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.82))
-                .fixedSize(horizontal: false, vertical: true)
+    private var verificationSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            fieldLabel("3. Введите код", systemImage: "number.circle.fill")
 
-            Button(action: linkTelegram) {
-                HStack(spacing: 10) {
-                    if viewModel.isLinkingTelegram {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "link.circle.fill")
+            TextField("Код из Telegram", text: $viewModel.code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 24, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .frame(height: 58)
+                .background(fieldBackground)
+                .focused($focusedField, equals: .code)
+                .onChange(of: viewModel.code) { _, value in
+                    let sanitized = String(value.filter(\.isNumber).prefix(6))
+                    if sanitized != value {
+                        viewModel.code = sanitized
                     }
-                    Text("Привязать Telegram")
                 }
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .frame(height: 50)
-            }
-            .buttonStyle(
-                LiquidGlassProminentButtonStyle(
-                    tint: AppTheme.primary,
-                    secondaryTint: AppTheme.aqua,
-                    height: 50
-                )
-            )
-            .disabled(!viewModel.isContactValid || viewModel.isLinkingTelegram)
 
-            if !viewModel.isContactValid {
-                Text("Сначала введите номер выше, чтобы приложение создало защищённую ссылку для бота.")
-                    .font(.caption)
+            if let seconds = viewModel.codeExpirationSeconds {
+                Text("Код действует ещё \(seconds) сек.")
+                    .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.55))
             }
+
+            primaryButton(
+                title: "Войти",
+                systemImage: "arrow.right.circle.fill",
+                isLoading: viewModel.isVerifyingCode,
+                isEnabled: viewModel.isCodeValid && !viewModel.isVerifyingCode,
+                action: verify
+            )
+
+            Button(action: requestCode) {
+                Text("Отправить новый код")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppTheme.aqua)
+            .disabled(viewModel.isRequestingCode)
         }
-        .padding(15)
-        .background(AuthenticationCardSurface(cornerRadius: 20, fill: Color(red: 0.08, green: 0.16, blue: 0.29)))
     }
 
     private var demoAccountsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("Демо-аккаунты")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-
-                Spacer(minLength: 0)
-
-                Text("Листайте вбок")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.45))
+            Button {
+                isDemoAccountsExpanded.toggle()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.fill")
+                    Text("Демо-вход для разработки")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(isDemoAccountsExpanded ? 180 : 0))
+                }
+                .foregroundStyle(.white.opacity(0.82))
             }
+            .buttonStyle(.plain)
 
-            if let lastUsedLogin = viewModel.lastUsedLogin {
-                lastUsedLoginSection(lastUsedLogin)
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 14) {
-                    ForEach(viewModel.demoAccounts) { account in
-                        DemoAccountCard(
-                            account: account,
-                            isSelected: account.contact == viewModel.contact
-                        ) {
-                            viewModel.selectDemoAccount(account)
-                        } onQuickSignIn: {
-                            Task { await viewModel.signInDemoAccount(account) }
+            if isDemoAccountsExpanded {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 14) {
+                        ForEach(viewModel.demoAccounts) { account in
+                            DemoAccountCard(
+                                account: account,
+                                isSelected: account.contact == viewModel.contact
+                            ) {
+                                viewModel.selectDemoAccount(account)
+                            } onQuickSignIn: {
+                                Task { await viewModel.signInDemoAccount(account) }
+                            }
+                            .frame(width: 292)
                         }
-                        .frame(width: 312)
                     }
                 }
-            }
 
-            Text("Последний выбранный вход запоминается на этом устройстве.")
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.55))
+                Text("Демо-аккаунты доступны только в Debug-сборке.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.55))
+            }
         }
     }
 
-    private func lastUsedLoginSection(_ lastUsedLogin: AuthLastUsedLogin) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Последний вход")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+    private func quickResumeSection(_ lastUsedLogin: AuthLastUsedLogin) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+                .font(.system(size: 28))
+                .foregroundStyle(AppTheme.aqua)
 
-            Text(lastUsedLogin.title)
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text(lastUsedLogin.subtitle)
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.62))
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                compactActionButton(
-                    title: "Заполнить",
-                    systemImage: "arrow.clockwise",
-                    prominent: false
-                ) {
-                    viewModel.applyLastUsedLogin()
-                }
-
-                if lastUsedLogin.demoAccount != nil {
-                    compactActionButton(
-                        title: "Войти сразу",
-                        systemImage: "person.crop.circle.badge.checkmark",
-                        prominent: true
-                    ) {
-                        Task { await viewModel.signInLastUsedDemoAccount() }
-                    }
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Продолжить как \(lastUsedLogin.title)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(lastUsedLogin.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.55))
             }
+
+            Spacer(minLength: 0)
+
+            Button("Войти") {
+                Task { await viewModel.signInLastUsedDemoAccount() }
+            }
+            .font(.subheadline.weight(.bold))
+            .buttonStyle(.borderedProminent)
+            .tint(AppTheme.primary)
         }
-        .padding(16)
-        .liquidGlassCard(
-            cornerRadius: 22,
-            tint: AppTheme.coral,
-            secondaryTint: AppTheme.primary,
-            innerDarkness: 0.34
-        )
+        .padding(14)
+        .background(AuthenticationCardSurface(cornerRadius: 18, fill: Color(red: 0.07, green: 0.14, blue: 0.24)))
     }
 
     private var shouldShowBackendSupport: Bool {
@@ -329,29 +494,36 @@ struct AuthView: View {
 
     private var backendSupportSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Кастомный backend активен только на этом устройстве.")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+            Button {
+                isBackendSupportExpanded.toggle()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                    Text("Проблемы с подключением?")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(isBackendSupportExpanded ? 180 : 0))
+                }
+                .foregroundStyle(Color.white.opacity(0.78))
+            }
+            .buttonStyle(.plain)
 
-            Text("Если авторизация или Telegram pairing работают нестабильно, можно сразу сбросить override и вернуться на встроенный production backend. Адрес API и токены здесь не показываются.")
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.72))
-                .fixedSize(horizontal: false, vertical: true)
+            if isBackendSupportExpanded {
+                Text("На устройстве активен кастомный backend. Если вход или Telegram работают нестабильно, вернитесь на встроенный production backend.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
 
-            compactActionButton(
-                title: "Сбросить backend",
-                systemImage: "arrow.counterclockwise",
-                prominent: false,
-                action: resetBackendConfiguration
-            )
+                compactActionButton(
+                    title: "Сбросить backend",
+                    systemImage: "arrow.counterclockwise",
+                    prominent: false,
+                    action: resetBackendConfiguration
+                )
+            }
         }
-        .padding(16)
-        .liquidGlassCard(
-            cornerRadius: 22,
-            tint: AppTheme.primary,
-            secondaryTint: AppTheme.aqua,
-            innerDarkness: 0.34
-        )
+        .padding(.vertical, 4)
     }
 
     private var fieldBackground: some View {
@@ -392,6 +564,8 @@ struct AuthView: View {
 
                 Text(title)
                     .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
             .frame(height: 58)
         }

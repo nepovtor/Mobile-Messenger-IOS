@@ -164,6 +164,7 @@ public final class AppContainer: ObservableObject {
             loadHistory: LoadChatHistoryUseCase(repository: chatRepository),
             sendMessage: SendMessageUseCase(repository: chatRepository),
             sendImageMessage: SendImageMessageUseCase(repository: chatRepository),
+            sendAudioMessage: SendAudioMessageUseCase(repository: chatRepository),
             editMessage: EditMessageUseCase(repository: chatRepository),
             deleteMessage: DeleteMessageUseCase(repository: chatRepository),
             setTyping: SetTypingUseCase(repository: chatRepository),
@@ -215,6 +216,7 @@ public final class AppContainer: ObservableObject {
     func makeMapViewModel() -> MapViewModel {
         MapViewModel(
             loadMyLocation: LoadMyLocationUseCase(repository: locationRepository),
+            loadSharingPermissions: LoadLocationSharingPermissionsUseCase(repository: locationRepository),
             loadContactLocations: LoadContactLocationsUseCase(repository: locationRepository),
             updateMyLocation: UpdateMyLocationUseCase(repository: locationRepository),
             stopLocationSharing: StopLocationSharingUseCase(repository: locationRepository),

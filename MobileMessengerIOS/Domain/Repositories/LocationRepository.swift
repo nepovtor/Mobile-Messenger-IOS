@@ -2,6 +2,7 @@ import Foundation
 
 public protocol LocationRepository: Sendable {
     func fetchMyLocation() async throws -> MyLocationShare
+    func fetchSharingPermissions() async throws -> [LocationSharePermission]
     func fetchContactLocations() async throws -> [SharedLocation]
     func updateMyLocation(
         latitude: Double,

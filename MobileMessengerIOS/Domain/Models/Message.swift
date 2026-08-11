@@ -4,6 +4,7 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
     public enum Kind: String, Codable, Sendable {
         case text
         case image
+        case audio
     }
 
     public struct Identifier: Hashable, Codable, Sendable {
@@ -108,5 +109,9 @@ public struct Message: Identifiable, Hashable, Sendable, Codable {
 
     public var primaryImageURL: URL? {
         attachments.first(where: { $0.kind == .image })?.url
+    }
+
+    public var primaryAudioURL: URL? {
+        attachments.first(where: { $0.kind == .audio })?.url
     }
 }

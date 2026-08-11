@@ -157,13 +157,14 @@ public struct ServerMessage: Decodable, Sendable {
     public func asDomainMessage(localID: UUID? = nil) -> Message {
         let attachments: [MessageAttachment]
         if let mediaURL {
+            let attachmentKind: MessageAttachment.Kind = kind == .audio ? .audio : .image
             attachments = [
                 MessageAttachment(
                     id: mediaID ?? id,
-                    kind: .image,
+                    kind: attachmentKind,
                     url: mediaURL,
                     localPath: nil,
-                    thumbnailURL: mediaURL,
+                    thumbnailURL: kind == .image ? mediaURL : nil,
                     fileSize: nil
                 )
             ]
