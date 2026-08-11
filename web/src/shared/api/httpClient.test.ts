@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, httpRequest } from "@/shared/api/httpClient";
+import {
+  clearLegacyAccessToken,
+  setLegacyAccessToken,
+} from "@/shared/auth/legacySession";
 
 describe("httpRequest", () => {
   beforeEach(() => {
+    clearLegacyAccessToken();
     vi.restoreAllMocks();
     vi.stubGlobal(
       "fetch",
@@ -58,6 +63,16 @@ describe("httpRequest", () => {
     const headers = new Headers(requestInit?.headers);
     expect(headers.has("Authorization")).toBe(false);
     expect(headers.get("X-Client-Platform")).toBe("web");
+  });
+
+  it("uses an in-memory bearer token only for a legacy user session", async () => {
+    setLegacyAccessToken("legacy-access-token");
+
+    await httpRequest("/auth/me");
+
+    const requestInit = vi.mocked(fetch).mock.calls[0]?.[1];
+    const headers = new Headers(requestInit?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer legacy-access-token");
   });
 
   it("refreshes an expired cookie session once and retries the request", async () => {

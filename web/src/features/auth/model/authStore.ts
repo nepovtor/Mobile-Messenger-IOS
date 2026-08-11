@@ -9,6 +9,10 @@ import type {
   TelegramPairingResponse,
 } from "@/features/auth/types/auth";
 import { validateDisplayName } from "@/utils/displayName";
+import {
+  clearLegacyAccessToken,
+  setLegacyAccessToken,
+} from "@/shared/auth/legacySession";
 
 type AuthStore = {
   currentUser: CurrentUser | null;
@@ -65,9 +69,11 @@ export const authStore = create<AuthStore>((set, get) => ({
   async verifyCode(phone, code) {
     set({ isLoading: true, error: null });
     try {
-      await authApi.verifyCode(phone, code);
+      const response = await authApi.verifyCode(phone, code);
+      setLegacyAccessToken(response.token);
       await authenticateWithSessionCookie(set);
     } catch (error) {
+      clearLegacyAccessToken();
       const message = mapAuthErrorMessage(error);
       set({ isLoading: false, error: message });
       throw error;
@@ -76,9 +82,11 @@ export const authStore = create<AuthStore>((set, get) => ({
   async login(payload) {
     set({ isLoading: true, error: null });
     try {
-      await authApi.login(payload);
+      const response = await authApi.login(payload);
+      setLegacyAccessToken(response.token);
       await authenticateWithSessionCookie(set);
     } catch (error) {
+      clearLegacyAccessToken();
       set({
         error: mapAuthErrorMessage(
           error,
@@ -91,6 +99,7 @@ export const authStore = create<AuthStore>((set, get) => ({
   },
   async logout() {
     await authApi.logout().catch(() => undefined);
+    clearLegacyAccessToken();
     set({
       currentUser: null,
       isAuthenticated: false,
@@ -153,6 +162,7 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   handleUnauthorized(message) {
+    clearLegacyAccessToken();
     set({
       currentUser: null,
       isAuthenticated: false,
@@ -200,6 +210,27 @@ export function mapAuthErrorMessage(
 ) {
   if (error instanceof ApiError && error.code === "TELEGRAM_NOT_LINKED") {
     return "Номер ещё не привязан к Telegram. Откройте Telegram и отправьте боту свой контакт.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    /verification code expired/i.test(error.backendMessage)
+  ) {
+    return "Срок действия кода истёк. Получите новый код.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    /verification code has already been used/i.test(error.backendMessage)
+  ) {
+    return "Код уже использован. Получите новый код.";
+  }
+
+  if (
+    error instanceof ApiError &&
+    /too many verification attempts/i.test(error.backendMessage)
+  ) {
+    return "Слишком много попыток. Получите новый код.";
   }
 
   if (

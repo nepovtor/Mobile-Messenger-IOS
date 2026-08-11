@@ -3,6 +3,10 @@ import {
   decodeRealtimeEvent,
   RealtimeClient,
 } from "@/features/chat/realtime/realtimeClient";
+import {
+  clearLegacyAccessToken,
+  setLegacyAccessToken,
+} from "@/shared/auth/legacySession";
 
 class WebSocketStub {
   static readonly OPEN = 1;
@@ -27,6 +31,7 @@ class WebSocketStub {
 
 describe("decodeRealtimeEvent", () => {
   afterEach(() => {
+    clearLegacyAccessToken();
     WebSocketStub.instances = [];
     vi.unstubAllGlobals();
   });
@@ -42,6 +47,19 @@ describe("decodeRealtimeEvent", () => {
     expect(socketUrl.search).toBe("");
     expect(socketUrl.hash).toBe("");
     expect(socketUrl.searchParams.has("token")).toBe(false);
+
+    client.disconnect();
+  });
+
+  it("uses a query token only for an in-memory legacy session", () => {
+    vi.stubGlobal("WebSocket", WebSocketStub);
+    setLegacyAccessToken("legacy-token");
+    const client = new RealtimeClient();
+
+    client.connect();
+
+    const socketUrl = new URL(WebSocketStub.instances[0].url);
+    expect(socketUrl.searchParams.get("token")).toBe("legacy-token");
 
     client.disconnect();
   });

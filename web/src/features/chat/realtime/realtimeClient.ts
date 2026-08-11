@@ -1,4 +1,5 @@
 import { appConfig } from "@/config/api";
+import { getLegacyAccessToken } from "@/shared/auth/legacySession";
 import type {
   ConnectionState,
   MessageAckEvent,
@@ -66,6 +67,10 @@ export class RealtimeClient {
     const url = new URL(appConfig.websocketUrl);
     url.search = "";
     url.hash = "";
+    const legacyAccessToken = getLegacyAccessToken();
+    if (legacyAccessToken) {
+      url.searchParams.set("token", legacyAccessToken);
+    }
 
     const socket = new WebSocket(url.toString());
     this.socket = socket;

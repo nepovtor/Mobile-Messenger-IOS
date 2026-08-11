@@ -1,4 +1,5 @@
 import { appConfig } from "@/config/api";
+import { getLegacyAccessToken } from "@/shared/auth/legacySession";
 
 export class ApiError extends Error {
   status: number;
@@ -98,6 +99,10 @@ export async function httpRequest<T>(
     requestHeaders.set("Content-Type", "application/json");
   }
   requestHeaders.set("X-Client-Platform", "web");
+  const legacyAccessToken = authMode === "user" ? getLegacyAccessToken() : null;
+  if (legacyAccessToken && !requestHeaders.has("Authorization")) {
+    requestHeaders.set("Authorization", `Bearer ${legacyAccessToken}`);
+  }
 
   try {
     const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
@@ -112,6 +117,7 @@ export async function httpRequest<T>(
       response.status === 401 &&
       authMode !== "none" &&
       !skipAuthRefresh &&
+      !legacyAccessToken &&
       (await refreshSession(authMode))
     ) {
       return httpRequest<T>(path, {

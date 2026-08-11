@@ -10,6 +10,10 @@ import {
 import { chatStore } from "@/features/chat/model/chatStore";
 import { realtimeStore } from "@/features/chat/model/realtimeStore";
 import { logoutUserSession } from "@/app/sessionCoordinator";
+import {
+  clearLegacyAccessToken,
+  getLegacyAccessToken,
+} from "@/shared/auth/legacySession";
 
 vi.mock("@/features/auth/api/authApi", () => ({
   authApi: {
@@ -30,6 +34,7 @@ vi.mock("@/features/profile/api/profileApi", () => ({
 
 describe("authStore", () => {
   beforeEach(() => {
+    clearLegacyAccessToken();
     vi.resetAllMocks();
     vi.mocked(authApi.logout).mockResolvedValue();
     authStore.setState({
@@ -135,6 +140,29 @@ describe("authStore", () => {
     expect(authStore.getState().currentUser?.contact).toBe("+15550003");
   });
 
+  it("keeps a legacy backend token in memory while restoring the user", async () => {
+    vi.mocked(authApi.verifyCode).mockResolvedValue({
+      userID: "user-legacy",
+      displayName: "Legacy",
+      phone: "+15550009",
+      token: "legacy-token",
+    });
+    vi.mocked(authApi.getMe).mockImplementation(async () => {
+      expect(getLegacyAccessToken()).toBe("legacy-token");
+      return {
+        userID: "user-legacy",
+        displayName: "Legacy",
+        contact: "+15550009",
+        method: "phone",
+      };
+    });
+
+    await authStore.getState().verifyCode("+15550009", "123456");
+
+    expect(authStore.getState().isAuthenticated).toBe(true);
+    expect(authStore.getState()).not.toHaveProperty("token");
+  });
+
   it("restores a session by requesting /me without local state", async () => {
     authStore.setState({
       currentUser: null,
@@ -234,6 +262,17 @@ describe("authStore", () => {
         new ApiError("Verification failed", 401, "INVALID_VERIFICATION_CODE"),
       ),
     ).toBe("Неверный код.");
+  });
+
+  it("explains expired and already-used verification codes", () => {
+    expect(
+      mapAuthErrorMessage(new ApiError("Verification code expired", 401)),
+    ).toBe("Срок действия кода истёк. Получите новый код.");
+    expect(
+      mapAuthErrorMessage(
+        new ApiError("Verification code has already been used", 401),
+      ),
+    ).toBe("Код уже использован. Получите новый код.");
   });
 
   it("maps network errors into backend-unavailable copy", () => {

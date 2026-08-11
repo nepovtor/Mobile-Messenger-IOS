@@ -10,6 +10,11 @@ export type AuthResponse = {
   userID: string;
   displayName: string;
   phone: string;
+  /**
+   * Transitional response field used by the pre-cookie production backend.
+   * It is kept in memory only and is never written to browser storage.
+   */
+  token?: string;
 };
 
 export type CurrentUser = {

@@ -1,7 +1,5 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
-
-RUN apk add --no-cache python3 make g++
 
 COPY server/package*.json ./
 RUN npm ci
@@ -11,9 +9,14 @@ COPY server/src ./src
 
 RUN npm run build && npm prune --omit=dev
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+
+# The runtime starts with `node` directly and does not need npm. Removing the
+# bundled package manager also keeps its transitive tooling out of the image.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 COPY --chown=node:node server/package*.json ./
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
