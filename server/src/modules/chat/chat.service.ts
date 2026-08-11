@@ -349,8 +349,7 @@ export class ChatService {
       dto.kind === MessageKind.IMAGE ||
       dto.kind === MessageKind.AUDIO
     ) {
-      const mediaLabel =
-        dto.kind === MessageKind.AUDIO ? "Audio" : "Image";
+      const mediaLabel = dto.kind === MessageKind.AUDIO ? "Audio" : "Image";
       if (!dto.mediaID) {
         throw new BadRequestException(
           `${mediaLabel} message must contain mediaID`,

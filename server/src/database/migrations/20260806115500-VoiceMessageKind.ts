@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class VoiceMessageKind20260806115500
-  implements MigrationInterface
-{
-  public readonly name = 'VoiceMessageKind20260806115500';
+export class VoiceMessageKind20260806115500 implements MigrationInterface {
+  public readonly name = "VoiceMessageKind20260806115500";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
