@@ -26,6 +26,7 @@ xcuserdata/
 *.xcodeproj/xcuserdata/
 
 # Local runtime artifacts
+.voice-messages-backup/
 .cloudflared.log
 .cloudflared.pid
 .server.log
