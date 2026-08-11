@@ -303,7 +303,8 @@ export class RealtimeGateway
     this.requireString(record["clientMessageId"], 1, 128);
     if (
       record["kind"] !== MessageKind.TEXT &&
-      record["kind"] !== MessageKind.IMAGE
+      record["kind"] !== MessageKind.IMAGE &&
+      record["kind"] !== MessageKind.AUDIO
     ) {
       throw new WsException("Invalid payload");
     }

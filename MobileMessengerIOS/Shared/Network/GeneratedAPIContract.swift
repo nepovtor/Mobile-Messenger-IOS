@@ -75,6 +75,7 @@ public enum GeneratedAPIContract {
         case updateMessage
         case updateMyLocation
         case updateProfile
+        case uploadVoiceMedia
         case version
     }
 
@@ -155,6 +156,7 @@ public enum GeneratedAPIContract {
         case .updateMessage: "chats/{chatID}/messages/{messageID}"
         case .updateMyLocation: "location/me"
         case .updateProfile: "users/me/profile"
+        case .uploadVoiceMedia: "media/voice"
         case .version: "version"
         }
         return parameters.reduce(template) { result, entry in

@@ -42,4 +42,37 @@ describe("MessageBubble", () => {
 
     expect(screen.getByLabelText(label)).toBeInTheDocument();
   });
+
+  it("renders a playable voice message when media is available", () => {
+    const message: Message = {
+      ...buildMessage("delivered"),
+      kind: "audio",
+      text: null,
+      mediaID: "voice-1",
+      mediaURL: "https://storage.example.test/voice.m4a",
+    };
+
+    render(<MessageBubble message={message} isOwn showAuthor={false} />);
+
+    const player = screen.getByLabelText("Голосовое сообщение");
+    expect(player).toHaveAttribute("src", message.mediaURL);
+  });
+
+  it("explains when a voice attachment has no download URL", () => {
+    const message: Message = {
+      ...buildMessage("delivered"),
+      kind: "audio",
+      text: null,
+      mediaID: "voice-1",
+      mediaURL: null,
+    };
+
+    render(
+      <MessageBubble message={message} isOwn={false} showAuthor={false} />,
+    );
+
+    expect(
+      screen.getByText("Голосовое сообщение недоступно"),
+    ).toBeInTheDocument();
+  });
 });

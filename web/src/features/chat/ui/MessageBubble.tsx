@@ -8,6 +8,7 @@ import {
   Pencil,
   RotateCcw,
   Trash2,
+  Volume2,
 } from "lucide-react";
 import { useState } from "react";
 import { toastStore } from "@/shared/model/toastStore";
@@ -51,7 +52,13 @@ function getMessageText(message: Message) {
     return message.text;
   }
 
-  return message.kind === "image" ? "Изображение" : "Сообщение";
+  if (message.kind === "image") {
+    return "Изображение";
+  }
+  if (message.kind === "audio") {
+    return "Голосовое сообщение";
+  }
+  return "Сообщение";
 }
 
 export function MessageBubble({
@@ -74,6 +81,7 @@ export function MessageBubble({
   const [isSaving, setSaving] = useState(false);
   const [isDeleting, setDeleting] = useState(false);
   const [isMenuOpen, setMenuOpen] = useState(false);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const statusMeta = getMessageStatusMeta(message.status);
   const StatusIcon = statusMeta.icon;
   const canManage = Boolean(
@@ -199,14 +207,61 @@ export function MessageBubble({
             </div>
           ) : (
             <>
-              <p
-                className={clsx(
-                  "whitespace-pre-wrap wrap-break-word text-sm leading-6",
-                  message.deletedAt && "italic opacity-80",
-                )}
-              >
-                {getMessageText(message)}
-              </p>
+              {message.deletedAt || message.kind === "text" ? (
+                <p
+                  className={clsx(
+                    "whitespace-pre-wrap wrap-break-word text-sm leading-6",
+                    message.deletedAt && "italic opacity-80",
+                  )}
+                >
+                  {getMessageText(message)}
+                </p>
+              ) : message.kind === "image" ? (
+                message.mediaURL && !mediaFailed ? (
+                  <div className="space-y-2">
+                    <img
+                      src={message.mediaURL}
+                      alt={message.text || "Изображение"}
+                      loading="lazy"
+                      className="max-h-96 min-w-40 rounded-[16px] object-cover"
+                      onError={() => setMediaFailed(true)}
+                    />
+                    {message.text ? (
+                      <p className="whitespace-pre-wrap wrap-break-word text-sm leading-6">
+                        {message.text}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-sm leading-6 text-slate-300">
+                    Изображение недоступно
+                  </p>
+                )
+              ) : message.mediaURL && !mediaFailed ? (
+                <div className="min-w-56 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-medium text-white/82">
+                    <Volume2 className="h-4 w-4" />
+                    Голосовое сообщение
+                  </div>
+                  <audio
+                    controls
+                    preload="metadata"
+                    aria-label="Голосовое сообщение"
+                    src={message.mediaURL}
+                    className="h-10 w-full max-w-72"
+                    onError={() => setMediaFailed(true)}
+                  />
+                  {message.text ? (
+                    <p className="whitespace-pre-wrap wrap-break-word text-sm leading-6">
+                      {message.text}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-sm leading-6 text-slate-300">
+                  Голосовое сообщение недоступно
+                </p>
+              )}
 
               <div
                 className={clsx(

@@ -20,6 +20,7 @@ export function ChatPanel({
   onBack,
   onReconnect,
   onSend,
+  onSendVoice,
   onRetry,
   onEditMessage,
   onDeleteMessage,
@@ -35,6 +36,7 @@ export function ChatPanel({
   onBack: () => void;
   onReconnect: () => void;
   onSend: (text: string) => Promise<void>;
+  onSendVoice: (recording: Blob) => Promise<void>;
   onRetry: (clientMessageId: string) => void;
   onEditMessage: (messageId: string, text: string) => Promise<void>;
   onDeleteMessage: (messageId: string) => Promise<void>;
@@ -116,6 +118,7 @@ export function ChatPanel({
 
       <MessageInput
         onSend={onSend}
+        onSendVoice={onSendVoice}
         onTypingStart={onTypingStart}
         onTypingStop={onTypingStop}
       />

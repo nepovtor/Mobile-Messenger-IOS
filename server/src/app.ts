@@ -77,7 +77,7 @@ export function configureApplication(
   app.use((_request: Request, response: Response, next: NextFunction) => {
     response.setHeader(
       "Permissions-Policy",
-      "camera=(), display-capture=(), geolocation=(), microphone=(), payment=(), usb=()",
+      "camera=(), display-capture=(), geolocation=(), microphone=(self), payment=(), usb=()",
     );
     next();
   });

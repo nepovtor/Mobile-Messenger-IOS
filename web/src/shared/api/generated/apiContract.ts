@@ -73,6 +73,7 @@ export const apiOperations = {
   updateMessage: "/chats/{chatID}/messages/{messageID}",
   updateMyLocation: "/location/me",
   updateProfile: "/users/me/profile",
+  uploadVoiceMedia: "/media/voice",
   version: "/version",
 } as const;
 

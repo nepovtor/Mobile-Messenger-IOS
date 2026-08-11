@@ -49,7 +49,7 @@ const ALLOWED_LEGACY_IMAGE_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
-const ALLOWED_LEGACY_AUDIO_TYPES = new Set(["audio/mp4"]);
+const ALLOWED_LEGACY_AUDIO_TYPES = new Set(["audio/mp4", "audio/webm"]);
 const ALLOWED_LEGACY_MEDIA_TYPES = new Set([
   ...ALLOWED_LEGACY_IMAGE_TYPES,
   ...ALLOWED_LEGACY_AUDIO_TYPES,
@@ -280,6 +280,55 @@ export class MediaService {
       uploadURL,
       objectKey: saved.objectKey,
     };
+  }
+
+  async uploadVoice(
+    userID: string,
+    source: Buffer,
+    mimeType: string,
+  ): Promise<MediaEntity> {
+    this.assertLegacyMediaAllowed();
+    if (!ALLOWED_LEGACY_AUDIO_TYPES.has(mimeType)) {
+      throw new BadRequestException("Unsupported voice message type");
+    }
+    if (source.length === 0 || source.length > MAX_LEGACY_AUDIO_BYTES) {
+      throw new BadRequestException("Voice message size is invalid");
+    }
+    assertLegacyAudioMagic(source, mimeType);
+
+    const storage = this.requireStorage();
+    await this.assertBucketAccessible(storage);
+    const media = await this.mediaRepository.save(
+      this.mediaRepository.create({
+        objectKey: `legacy-audio/v1/${randomUUID()}/${randomUUID()}.${legacyMediaExtension(mimeType)}`,
+        mimeType,
+        sizeBytes: source.length,
+        width: null,
+        height: null,
+        uploadedById: userID,
+        status: MediaStatus.PENDING,
+      }),
+    );
+
+    try {
+      await storage.s3.send(
+        new PutObjectCommand({
+          Bucket: storage.bucket,
+          Key: media.objectKey,
+          Body: source,
+          ContentLength: source.length,
+          ContentType: mimeType,
+        }),
+      );
+      media.status = MediaStatus.UPLOADED;
+      return await this.mediaRepository.save(media);
+    } catch {
+      await this.deleteObjectBestEffort(storage, media.objectKey);
+      await this.mediaRepository.remove(media);
+      throw new ServiceUnavailableException(
+        "Voice message storage is unavailable",
+      );
+    }
   }
 
   async confirmUpload(mediaID: string, userID: string): Promise<MediaEntity> {
@@ -550,6 +599,8 @@ function legacyMediaExtension(mimeType: string): string {
       return "webp";
     case "audio/mp4":
       return "m4a";
+    case "audio/webm":
+      return "webm";
     default:
       throw new BadRequestException("Unsupported media type");
   }
@@ -582,7 +633,13 @@ function assertLegacyImageMagic(source: Buffer, mimeType: string): void {
 function assertLegacyAudioMagic(source: Buffer, mimeType: string): void {
   const isMp4Container =
     source.length >= 12 && source.subarray(4, 8).toString("ascii") === "ftyp";
-  if (mimeType !== "audio/mp4" || !isMp4Container) {
+  const isWebmContainer =
+    source.length >= 4 &&
+    source.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+  const matches =
+    (mimeType === "audio/mp4" && isMp4Container) ||
+    (mimeType === "audio/webm" && isWebmContainer);
+  if (!matches) {
     throw new BadRequestException("Uploaded audio type does not match");
   }
 }

@@ -4,6 +4,7 @@ import type { ChatSummary, MessagesByChatId } from "@/features/chat/types/chat";
 import type { Message } from "@/features/chat/types/message";
 import { dedupeMessages, upsertMessage } from "@/utils/messageDedup";
 import { deliverTextMessage } from "@/features/chat/services/chatDelivery";
+import { uploadVoiceMessage } from "@/features/chat/services/voiceMessageUpload";
 
 function createLocalMessage(
   chatId: string,
@@ -47,6 +48,7 @@ type ChatStore = {
     text: string,
     currentUser: { userID: string; displayName: string },
   ) => Promise<void>;
+  sendVoiceMessage: (chatId: string, recording: Blob) => Promise<void>;
   retryMessage: (
     chatId: string,
     clientMessageId: string,
@@ -152,6 +154,22 @@ export const chatStore = create<ChatStore>((set, get) => ({
         error instanceof Error ? error.message : "Message send failed.",
       );
     }
+  },
+  async sendVoiceMessage(chatId, recording) {
+    const clientMessageId = crypto.randomUUID();
+    const persisted = await uploadVoiceMessage({
+      chatId,
+      recording,
+      clientMessageId,
+    });
+    get().upsertMessage(chatId, {
+      ...persisted,
+      clientMessageId,
+      status: persisted.status === "sending" ? "sent" : persisted.status,
+      error: null,
+      isLocal: false,
+    });
+    await get().loadChats();
   },
   async retryMessage(chatId, clientMessageId, currentUser) {
     const message = (get().messagesByChatId[chatId] ?? []).find(

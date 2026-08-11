@@ -34,6 +34,7 @@ export function AppShell({
     error: chatError,
     clearError: clearChatError,
     sendMessage,
+    sendVoiceMessage,
     retryMessage,
     editMessage,
     deleteMessage,
@@ -384,6 +385,9 @@ export function AppShell({
                 onReconnect={() => realtimeStore.getState().reconnect()}
                 onSend={(text) =>
                   sendMessage(selectedChat.id, text, currentUser)
+                }
+                onSendVoice={(recording) =>
+                  sendVoiceMessage(selectedChat.id, recording)
                 }
                 onRetry={(clientMessageId) =>
                   void retryMessage(

@@ -96,6 +96,10 @@ test("production responses include strict browser security headers", async () =>
           String(response.headers["permissions-policy"]),
           /geolocation=\(\)/,
         );
+        assert.match(
+          String(response.headers["permissions-policy"]),
+          /microphone=\(self\)/,
+        );
 
         const csp = String(response.headers["content-security-policy"]);
         assert.match(csp, /default-src 'self'/);

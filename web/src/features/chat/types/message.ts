@@ -4,7 +4,7 @@ export type MessageStatus =
   | "delivered"
   | "read"
   | "failed";
-export type MessageKind = "text" | "image";
+export type MessageKind = "text" | "image" | "audio";
 
 export type Message = {
   id: string;

@@ -88,7 +88,7 @@ export function MessageList({
               isOwn={isOwn}
               showAuthor={showAuthor}
               onEditMessage={
-                isOwn && !message.deletedAt
+                isOwn && !message.deletedAt && message.kind === "text"
                   ? (text) => onEditMessage(message.id, text)
                   : undefined
               }
