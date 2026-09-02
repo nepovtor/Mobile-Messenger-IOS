@@ -298,16 +298,7 @@ final class MapViewModel: ObservableObject {
                 participantContacts: [phone]
             )
             errorMessage = nil
-            return ChatListItem(
-                id: chat.id,
-                title: chat.title,
-                lastMessagePreview: chat.lastMessagePreview,
-                updatedAt: chat.lastActivity,
-                unreadCount: chat.unreadCount,
-                typingParticipants: chat.typingParticipants,
-                participantNames: chat.participantNames,
-                participantCount: chat.participantCount
-            )
+            return ChatListItem(chat: chat)
         } catch {
             errorMessage = AppError.presentableMessage(for: error)
             analytics.track(error: error, context: "map_open_chat")

@@ -63,6 +63,19 @@ public struct ChatListItem: Identifiable, Hashable {
         self.participantNames = participantNames
         self.participantCount = participantCount
     }
+
+    public init(chat: Chat) {
+        self.init(
+            id: chat.id,
+            title: chat.title,
+            lastMessagePreview: chat.lastMessagePreview,
+            updatedAt: chat.lastActivity,
+            unreadCount: chat.unreadCount,
+            typingParticipants: chat.typingParticipants,
+            participantNames: chat.participantNames,
+            participantCount: chat.participantCount
+        )
+    }
 }
 
 @MainActor
@@ -147,7 +160,7 @@ public final class ChatListViewModel: ObservableObject {
 
         do {
             let chat = try await createChatUseCase(title: title, participantContacts: participantContacts)
-            let item = Self.mapChat(chat)
+            let item = ChatListItem(chat: chat)
             chats.removeAll { $0.id == item.id }
             chats.insert(item, at: 0)
             allChats.removeAll { $0.id == chat.id }
@@ -231,19 +244,6 @@ public final class ChatListViewModel: ObservableObject {
             (chat.lastMessagePreview?.lowercased().contains(normalizedQuery) ?? false) ||
             chat.participantNames.contains(where: { $0.lowercased().contains(normalizedQuery) })
         }
-        chats = visibleChats.map(Self.mapChat)
-    }
-
-    private static func mapChat(_ chat: Chat) -> ChatListItem {
-        ChatListItem(
-            id: chat.id,
-            title: chat.title,
-            lastMessagePreview: chat.lastMessagePreview,
-            updatedAt: chat.lastActivity,
-            unreadCount: chat.unreadCount,
-            typingParticipants: chat.typingParticipants,
-            participantNames: chat.participantNames,
-            participantCount: chat.participantCount
-        )
+        chats = visibleChats.map(ChatListItem.init(chat:))
     }
 }

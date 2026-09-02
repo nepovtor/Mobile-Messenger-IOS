@@ -148,7 +148,7 @@ final class ContactsViewModel: ObservableObject {
             if let directChatID = contact.directChatID,
                let directChat = try await findChat(id: directChatID) {
                 errorMessage = nil
-                return Self.mapChat(directChat)
+                return ChatListItem(chat: directChat)
             }
 
             let chat = try await createChatUseCase(
@@ -156,7 +156,7 @@ final class ContactsViewModel: ObservableObject {
                 participantContacts: [contact.phone]
             )
             errorMessage = nil
-            return Self.mapChat(chat)
+            return ChatListItem(chat: chat)
         } catch {
             successMessage = nil
             errorMessage = AppError.presentableMessage(for: error)
@@ -202,16 +202,4 @@ final class ContactsViewModel: ObservableObject {
         return remoteChats.first(where: { $0.id == id })
     }
 
-    private static func mapChat(_ chat: Chat) -> ChatListItem {
-        ChatListItem(
-            id: chat.id,
-            title: chat.title,
-            lastMessagePreview: chat.lastMessagePreview,
-            updatedAt: chat.lastActivity,
-            unreadCount: chat.unreadCount,
-            typingParticipants: chat.typingParticipants,
-            participantNames: chat.participantNames,
-            participantCount: chat.participantCount
-        )
-    }
 }

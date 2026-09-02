@@ -3,6 +3,32 @@ import XCTest
 
 @MainActor
 final class ChatListViewModelTests: XCTestCase {
+    func testChatListItemCopiesChatDisplayFields() {
+        let date = Date(timeIntervalSince1970: 1_234_567_890)
+        let chat = Chat(
+            id: UUID(),
+            title: "Групповой чат",
+            lastMessagePreview: "Всем привет",
+            lastActivity: date,
+            unreadCount: 3,
+            typingParticipants: ["Анна"],
+            participantNames: ["Анна", "Борис", "Вера"],
+            participantCount: 3
+        )
+
+        let item = ChatListItem(chat: chat)
+
+        XCTAssertEqual(item.id, chat.id)
+        XCTAssertEqual(item.title, chat.title)
+        XCTAssertEqual(item.lastMessagePreview, chat.lastMessagePreview)
+        XCTAssertEqual(item.updatedAt, chat.lastActivity)
+        XCTAssertEqual(item.unreadCount, chat.unreadCount)
+        XCTAssertEqual(item.typingParticipants, chat.typingParticipants)
+        XCTAssertEqual(item.participantNames, chat.participantNames)
+        XCTAssertEqual(item.participantCount, chat.participantCount)
+        XCTAssertTrue(item.isGroup)
+    }
+
     func testCreateChatDeduplicatesExistingChatByIdentifier() async {
         let repository = ChatRepositorySpy()
         let analytics = AnalyticsServiceSpy()
@@ -165,4 +191,3 @@ final class ChatListViewModelTests: XCTestCase {
         )
     }
 }
-
