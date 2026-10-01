@@ -12,7 +12,7 @@ The project keeps the existing backend contract, Telegram verification flow, Clo
 
 ## Repository Layout
 
-- `MobileMessengerIOS/`: presentation, domain, data, and shared iOS layers
+- `MobileMessengerIOS/`: four iOS layers — `App`, `Data`, `Domain`, and `Presentation`
 - `MobileMessengerIOS.xcodeproj/`: Xcode project, schemes, and workspace metadata
 - `MobileMessengerIOSTests/`: iOS unit tests
 - `web/`: browser client built with Vite + React
@@ -82,6 +82,13 @@ iOS SwiftUI / Web React
   -> NestJS modules (auth, chat, contacts, users, realtime, media, push)
   -> PostgreSQL / Cloudways deployment
 ```
+
+The iOS app uses four explicit layers:
+
+- `App`: bootstrap, composition root, configuration, session, and platform services
+- `Data`: local storage, REST/WebSocket transport, and repository implementations
+- `Domain`: models, repository contracts, and use cases
+- `Presentation`: SwiftUI screens, reusable UI, and view models
 
 The repository follows feature-oriented boundaries:
 

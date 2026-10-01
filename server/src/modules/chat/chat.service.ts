@@ -278,7 +278,7 @@ export class ChatService {
     dto: SendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    this.requirePlaintextMessages();
+    await this.requirePlaintextMessages(chatID);
     return this.createMessage(
       chatID,
       {
@@ -296,7 +296,7 @@ export class ChatService {
     dto: RealtimeSendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    this.requirePlaintextMessages();
+    await this.requirePlaintextMessages(chatID);
     return this.createMessage(chatID, dto, user);
   }
 
@@ -522,7 +522,7 @@ export class ChatService {
     dto: UpdateMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    this.requirePlaintextMessages();
+    await this.requirePlaintextMessages(chatID);
     await this.getParticipantOrFail(chatID, user.sub);
     const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
 
@@ -563,7 +563,7 @@ export class ChatService {
     messageID: string,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    this.requirePlaintextMessages();
+    await this.requirePlaintextMessages(chatID);
     await this.getParticipantOrFail(chatID, user.sub);
     const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
 
@@ -646,8 +646,12 @@ export class ChatService {
     return this.findExistingDirectChat([firstUserID, secondUserID].sort());
   }
 
-  private requirePlaintextMessages(): void {
-    if (isE2EERequired()) {
+  private async requirePlaintextMessages(chatID: string): Promise<void> {
+    // A deployment flag change must not downgrade an already protected chat.
+    const chat = isE2EERequired()
+      ? null
+      : await this.chatsRepository.findOneBy({ id: chatID });
+    if (isE2EERequired() || chat?.e2eeRequired) {
       throw new ForbiddenException(
         "Plaintext messages are disabled; use encrypted-message envelopes",
       );

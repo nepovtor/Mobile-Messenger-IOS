@@ -3,6 +3,10 @@
 Status: **blocked; not a production E2EE implementation**
 Review date: 2026-07-31
 
+Follow-up: [2026-10-01 reassessment](./E2EE_REASSESSMENT_2026-10-01.md)
+updates library release research and records a stored-chat plaintext-policy fix.
+The historical dependency decision below is not a current version recommendation.
+
 This document separates the opaque-delivery server work in this branch from
 the client cryptography that is still missing. The project must not advertise
 end-to-end encryption or enable a public production rollout until every exit

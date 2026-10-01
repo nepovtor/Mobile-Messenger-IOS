@@ -27,7 +27,7 @@ const outputs = new Map([
     path.join(
       repositoryRoot,
       "MobileMessengerIOS",
-      "Shared",
+      "App",
       "Network",
       "GeneratedAPIContract.swift",
     ),

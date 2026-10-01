@@ -395,14 +395,14 @@
 			path = Domain;
 			sourceTree = "<group>";
 		};
-		CA58DA3C2F815CAE000D87A4 /* App */ = {
+		CA58DA3C2F815CAE000D87A4 /* Bootstrap */ = {
 			isa = PBXGroup;
 			children = (
 				CA58DA382F815CAE000D87A4 /* ContentView.swift */,
 				CA58DA392F815CAE000D87A4 /* MainTabView.swift */,
 				CA58DA3A2F815CAE000D87A4 /* MobileMessengerIOSApp.swift */,
 			);
-			path = App;
+			path = Bootstrap;
 			sourceTree = "<group>";
 		};
 		CA58DA3F2F815CAE000D87A4 /* Auth */ = {
@@ -445,7 +445,6 @@
 		CA58DA492F815CAE000D87A4 /* Presentation */ = {
 			isa = PBXGroup;
 			children = (
-				CA58DA3C2F815CAE000D87A4 /* App */,
 				CA58DA3F2F815CAE000D87A4 /* Auth */,
 				CA58DA422F815CAE000D87A4 /* Chat */,
 				CA58DA452F815CAE000D87A4 /* ChatList */,
@@ -539,9 +538,10 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
-		CA58DA5D2F815CAE000D87A4 /* Shared */ = {
+		CA58DA5D2F815CAE000D87A4 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				CA58DA3C2F815CAE000D87A4 /* Bootstrap */,
 				CA58DA4E2F815CAE000D87A4 /* Config */,
 				CA58DA502F815CAE000D87A4 /* DI */,
 				CA58DA522F815CAE000D87A4 /* Errors */,
@@ -551,18 +551,18 @@
 				CA58DA592F815CAE000D87A4 /* Session */,
 				CA58DA5C2F815CAE000D87A4 /* Utilities */,
 			);
-			path = Shared;
+			path = App;
 			sourceTree = "<group>";
 		};
 		CA58DA602F815CAE000D87A4 /* MobileMessengerIOS */ = {
 			isa = PBXGroup;
 			children = (
 				CA58DA1D2F815CAE000D87A4 /* Configurations */,
+				CA58DA5D2F815CAE000D87A4 /* App */,
 				CA58DA282F815CAE000D87A4 /* Data */,
 				CA58DA372F815CAE000D87A4 /* Domain */,
 				CA58DA492F815CAE000D87A4 /* Presentation */,
 				CA58DA4C2F815CAE000D87A4 /* Preview Content */,
-				CA58DA5D2F815CAE000D87A4 /* Shared */,
 				CA58DA5E2F815CAE000D87A4 /* Assets.xcassets */,
 				CA58DA5F2F815CAE000D87A4 /* Info.plist */,
 			);
@@ -853,7 +853,7 @@
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/Shared/Utilities/MobileMessengerIOS.Free.entitlements;
+				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/App/Utilities/MobileMessengerIOS.Free.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
@@ -925,7 +925,7 @@
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/Shared/Utilities/MobileMessengerIOS.Free.entitlements;
+				CODE_SIGN_ENTITLEMENTS = MobileMessengerIOS/App/Utilities/MobileMessengerIOS.Free.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
