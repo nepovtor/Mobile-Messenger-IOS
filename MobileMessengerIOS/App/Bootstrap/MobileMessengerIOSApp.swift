@@ -1,20 +1,38 @@
 import SwiftUI
 import UserNotifications
 
+private enum AppLaunchContext {
+    static var isUnitTestHost: Bool {
+        #if DEBUG
+        // Hosted unit tests instantiate their own dependencies. Starting the
+        // application container here would contact the configured live backend.
+        return NSClassFromString("XCTestCase") != nil
+        #else
+        return false
+        #endif
+    }
+}
+
 @main
 struct MobileMessengerIOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     init() {
         configureAppearance()
-        Task { @MainActor in
-            PushNotificationManager.shared.installNotificationDelegate()
+        if !AppLaunchContext.isUnitTestHost {
+            Task { @MainActor in
+                PushNotificationManager.shared.installNotificationDelegate()
+            }
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if AppLaunchContext.isUnitTestHost {
+                EmptyView()
+            } else {
+                ContentView()
+            }
         }
     }
 
@@ -59,8 +77,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        Task { @MainActor in
-            PushNotificationManager.shared.installNotificationDelegate()
+        if !AppLaunchContext.isUnitTestHost {
+            Task { @MainActor in
+                PushNotificationManager.shared.installNotificationDelegate()
+            }
         }
         return true
     }

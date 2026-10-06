@@ -8,8 +8,9 @@ remaining release gates are recorded in
 [MATRIX_E2EE_MIGRATION.md](./MATRIX_E2EE_MIGRATION.md). This does not change
 the blocked production status.
 This is a source review and local verification, not an independent audit.
-The submitted task ends during library evaluation item 3; remaining requirements
-must be recovered before a transport redesign is finalized.
+The original submitted task ended during library evaluation item 3. Subsequent
+instructions selected Matrix, revised the group PCS objective and retained OTP
+through an OIDC bridge; the migration document records that agreed direction.
 
 ## Architecture evidence
 
@@ -187,3 +188,52 @@ No production database or deployment was touched. The backend
 legacy mutation boundary is prepared for the next client E2EE integration
 stage, subject to applying the new migration. The messenger remains blocked
 from a production E2EE claim.
+
+## Follow-up: tested Matrix identity boundary — 2026-10-06
+
+The separate `oidc-bridge/` now uses pinned `oidc-provider` 9.12.2 with private,
+encrypted PostgreSQL persistence. Dedicated, disabled-by-default NestJS routes
+reuse existing OTP consumption and account authorization without issuing NestJS
+tokens. The bridge provides the existing immutable UUID to MAS, which derives
+the Matrix localpart from that UUID and refuses automatic account collision
+linking. S256 PKCE, exact callbacks, one-use interaction CSRF, atomic code
+consumption, active-account rechecks and durable rate limits are tested.
+
+An account-login review also fixed stale entity saves that could overwrite a
+concurrent block or password change. Timestamp writes check active status;
+profile updates change only intended columns and password rehashes use a
+compare-and-swap on the previous hash.
+
+The disposable PostgreSQL 16 bridge tests passed all 15 tests (one configuration
+and 14 integration tests). The real OTP -> OIDC -> MAS -> Synapse smoke test
+passed for two synthetic accounts/devices: the official Web Rust crypto SDK
+encrypted a room event, the recipient decrypted it, and a raw homeserver read
+returned ciphertext without the message body. This is a Node-driven protocol
+test, not real browser or iOS acceptance and not product chat integration.
+Backend tests passed 149/149, Web 91/91 and the generated contract now covers
+77 synchronized operations. The PostgreSQL 16 migration/concurrency CI job,
+bridge, backend, Web, container and secret-scan jobs passed for commit `ee4c8b5`.
+
+The previous iOS CI run hung because the fake socket acknowledged a message
+before its send continuation was registered. The test now waits for the actual
+socket send and bounds acknowledgement waits. Fake receive events are enqueued
+in explicit async order, heartbeat sleeps yield, and services are stopped after
+tests. The Debug unit-test host skips the application container and push setup,
+so test startup does not contact the live backend. Release startup retains its
+ordinary application path.
+
+After this fix, the complete iOS simulator suite passed 85/85 tests with zero
+failures and the Release build passed. All eight realtime tests also passed ten
+iterations each (80 executions, zero failures). The hosted test log contains no
+application backend health request. Reproduce the stress check with
+`xcodebuild -project MobileMessengerIOS.xcodeproj -scheme MobileMessengerIOS
+-destination 'id=<simulator-uuid>'
+-only-testing:MobileMessengerIOSTests/RealtimeServiceTests -test-iterations 10
+CODE_SIGNING_ALLOWED=NO test`.
+
+Production E2EE remains blocked. In particular, NestJS blocking/logout does not
+yet revoke already-issued MAS sessions. Reviewed cross-service revocation, TLS
+deployment, signing/storage key rotation and restore, actual iOS/Web chat
+integration, verification/recovery, encrypted media and groups, legacy migration
+and independent cryptographic review are still required. No production data,
+deployment or plaintext-retention policy was changed.

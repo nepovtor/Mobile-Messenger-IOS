@@ -6,10 +6,11 @@ final class RealtimeServiceTests: XCTestCase {
     func testWebSocketEventDecodingWorks() async {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
+        defer { service.deactivate() }
         let chatID = UUID()
 
-        socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
-        socket.enqueue(text: #"{"event":"typing.started","data":{"chatID":"\#(chatID.uuidString)","userID":"11111111-2222-3333-4444-555555555555","displayName":"Анна","isTyping":true,"typingParticipants":["Анна"]}}"#)
+        await socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await socket.enqueue(text: #"{"event":"typing.started","data":{"chatID":"\#(chatID.uuidString)","userID":"11111111-2222-3333-4444-555555555555","displayName":"Анна","isTyping":true,"typingParticipants":["Анна"]}}"#)
 
         let stream = service.observeAllEvents()
         service.activate()
@@ -26,12 +27,13 @@ final class RealtimeServiceTests: XCTestCase {
     func testMessageCreatedDecodeWorks() async {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
+        defer { service.deactivate() }
         let chatID = UUID()
         let serverID = UUID()
         let clientMessageID = UUID()
 
-        socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
-        socket.enqueue(text: #"{"event":"message.created","data":{"chatID":"\#(chatID.uuidString)","message":{"id":"\#(serverID.uuidString)","messageID":"\#(clientMessageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"Привет","mediaID":null,"mediaURL":null,"status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
+        await socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await socket.enqueue(text: #"{"event":"message.created","data":{"chatID":"\#(chatID.uuidString)","message":{"id":"\#(serverID.uuidString)","messageID":"\#(clientMessageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"Привет","mediaID":null,"mediaURL":null,"status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
 
         let stream = service.observeAllEvents()
         service.activate()
@@ -48,13 +50,22 @@ final class RealtimeServiceTests: XCTestCase {
     }
 
     func testMessageAckMarksPendingMessageSent() async throws {
-        let socket = FakeRealtimeSocketTask()
+        let requestSent = expectation(description: "Message reached the socket")
+        let acknowledged = expectation(description: "Acknowledgement resolved the pending send")
+        let socket = FakeRealtimeSocketTask { message in
+            guard case let .string(text) = message,
+                  let data = text.data(using: .utf8),
+                  let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  envelope["event"] as? String == "message.send" else { return }
+            requestSent.fulfill()
+        }
         let service = makeRealtimeService(socket: socket)
+        defer { service.deactivate() }
         let chatID = UUID()
         let serverID = UUID()
         let clientMessageID = UUID()
 
-        socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
         service.activate()
         _ = await nextState(from: service.observeConnectionState(), matching: { state in
             if case .connected = state { return true }
@@ -62,7 +73,8 @@ final class RealtimeServiceTests: XCTestCase {
         })
 
         let sendTask = Task {
-            try await service.sendMessage(
+            defer { acknowledged.fulfill() }
+            return try await service.sendMessage(
                 chatID: chatID,
                 kind: .text,
                 text: "Привет",
@@ -71,8 +83,14 @@ final class RealtimeServiceTests: XCTestCase {
             )
         }
 
-        socket.enqueue(text: #"{"event":"message.send.ack","data":{"chatID":"\#(chatID.uuidString)","clientMessageId":"\#(clientMessageID.uuidString)","message":{"id":"\#(serverID.uuidString)","messageID":"\#(clientMessageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"Привет","mediaID":null,"mediaURL":null,"status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
+        // A real server cannot acknowledge a request before the socket sends it.
+        // Waiting here also ensures the service registered its continuation.
+        await fulfillment(of: [requestSent], timeout: 5)
+        await socket.enqueue(text: #"{"event":"message.send.ack","data":{"chatID":"\#(chatID.uuidString)","clientMessageId":"\#(clientMessageID.uuidString)","message":{"id":"\#(serverID.uuidString)","messageID":"\#(clientMessageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"Привет","mediaID":null,"mediaURL":null,"status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
 
+        await fulfillment(of: [acknowledged], timeout: 5)
+        // Resolve a pending continuation even if an expectation timed out.
+        service.deactivate()
         let message = try await sendTask.value
         XCTAssertEqual(message.id.messageID, serverID)
         XCTAssertEqual(message.localID, clientMessageID)
@@ -82,7 +100,8 @@ final class RealtimeServiceTests: XCTestCase {
     func testLogoutClosesRealtimeConnection() async {
         let socket = FakeRealtimeSocketTask()
         let service = makeRealtimeService(socket: socket)
-        socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        defer { service.deactivate() }
+        await socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
 
         service.activate()
         _ = await nextState(from: service.observeConnectionState(), matching: { state in
@@ -103,7 +122,7 @@ final class RealtimeServiceTests: XCTestCase {
             factoryCalls += 1
             return socket
         }
-        socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await socket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
 
         service.activate()
         _ = await nextState(from: service.observeConnectionState(), matching: { state in
@@ -142,8 +161,9 @@ final class RealtimeServiceTests: XCTestCase {
                 return factoryCalls == 0 ? firstSocket : secondSocket
             }
         )
+        defer { service.deactivate() }
 
-        firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
         service.activate()
         _ = await nextState(from: service.observeConnectionState(), matching: { state in
             if case .connected = state { return true }
@@ -151,7 +171,7 @@ final class RealtimeServiceTests: XCTestCase {
         })
 
         service.handleLogout()
-        firstSocket.enqueue(error: AppError.network(description: "late disconnect"))
+        await firstSocket.enqueue(error: AppError.network(description: "late disconnect"))
         try? await Task.sleep(nanoseconds: 200_000_000)
         let firstCancelCount = await firstSocket.cancelCount
         let secondCancelCount = await secondSocket.cancelCount
@@ -165,7 +185,7 @@ final class RealtimeServiceTests: XCTestCase {
         let firstSocket = FakeRealtimeSocketTask()
         firstSocket.pingError = AppError.network(description: "Ping failed")
         let secondSocket = FakeRealtimeSocketTask()
-        secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
 
         var factoryCalls = 0
         let service = try DefaultChatRealtimeService(
@@ -189,8 +209,9 @@ final class RealtimeServiceTests: XCTestCase {
                 return factoryCalls == 0 ? firstSocket : secondSocket
             }
         )
+        defer { service.deactivate() }
 
-        firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
 
         service.activate()
         let reconnectedState = await nextState(from: service.observeConnectionState(), matching: { state in
@@ -223,17 +244,20 @@ final class RealtimeServiceTests: XCTestCase {
             ),
             maxReconnectDelay: 0.01,
             heartbeatInterval: 10,
-            sleep: { _ in },
+            sleep: { nanoseconds in
+                try? await Task.sleep(nanoseconds: min(nanoseconds, 20_000_000))
+            },
             socketFactory: { _ in
                 defer { factoryCalls += 1 }
                 return factoryCalls == 0 ? firstSocket : secondSocket
             }
         )
+        defer { service.deactivate() }
 
-        firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
-        firstSocket.enqueue(error: AppError.network(description: "Connection lost"))
-        secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
-        secondSocket.enqueue(text: #"{"event":"message.created","data":{"chatID":"\#(chatID.uuidString)","message":{"id":"\#(messageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"После reconnect","status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
+        await firstSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await firstSocket.enqueue(error: AppError.network(description: "Connection lost"))
+        await secondSocket.enqueue(text: #"{"event":"connection.ready","data":{"userID":"11111111-2222-3333-4444-555555555555"}}"#)
+        await secondSocket.enqueue(text: #"{"event":"message.created","data":{"chatID":"\#(chatID.uuidString)","message":{"id":"\#(messageID.uuidString)","chatID":"\#(chatID.uuidString)","authorID":"11111111-2222-3333-4444-555555555555","authorName":"Анна Demo","kind":"text","text":"После reconnect","status":"delivered","createdAt":"2026-04-24T12:00:00.000Z"}}}"#)
 
         service.connect(to: chatID)
         let stream = service.observeEvents(for: chatID)
@@ -262,7 +286,9 @@ final class RealtimeServiceTests: XCTestCase {
                 isMediaEnabled: true,
                 isLoggingVerbose: false
             ),
-            sleep: { _ in },
+            sleep: { nanoseconds in
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            },
             socketFactory: factory ?? { _ in socket }
         )
     }
