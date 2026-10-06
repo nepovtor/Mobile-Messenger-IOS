@@ -1,0 +1,26 @@
+{
+  "name": "mobile-messenger-oidc-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "migrate": "node src/migrate.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:integration": "node --test test/*.integration.mjs",
+    "test:matrix": "node scripts/matrix-stack-smoke.mjs",
+    "format:check": "prettier --check 'src/**/*.mjs' 'test/**/*.mjs' 'scripts/**/*.mjs' package.json",
+    "check": "node --check src/main.mjs && node --check src/migrate.mjs && node --check src/config.mjs && node --check src/provider.mjs && node --check src/adapter.mjs && node --check src/interactions.mjs && node --check scripts/matrix-stack-smoke.mjs"
+  },
+  "dependencies": {
+    "oidc-provider": "9.12.2",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "jose": "6.2.12",
+    "prettier": "3.8.3"
+  }
+}

@@ -2193,6 +2193,291 @@
           }
         ]
       }
+    },
+    "/api/auth/oidc/request": {
+      "post": {
+        "operationId": "requestOidcBridgeCode",
+        "tags": [
+          "auth"
+        ],
+        "x-internal": true,
+        "description": "Request OTP using existing delivery and rate limits. Development codes are never returned. Server-to-server only; requests with Origin or Sec-Fetch-Site are rejected.",
+        "security": [
+          {
+            "oidcBridgeSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OidcBridgeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identity bridge request succeeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcBridgeCodeRequested"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bridge request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid bridge credential, account or OTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Browser request or inactive account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bridge disabled or secret misconfigured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing OTP request or attempt limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oidc/verify": {
+      "post": {
+        "operationId": "verifyOidcBridgeCode",
+        "tags": [
+          "auth"
+        ],
+        "x-internal": true,
+        "description": "Consume OTP and return the active account identity without creating a Nest session or returning tokens. Server-to-server only; requests with Origin or Sec-Fetch-Site are rejected.",
+        "security": [
+          {
+            "oidcBridgeSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OidcBridgeVerify"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identity bridge request succeeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcBridgeIdentity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bridge request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid bridge credential, account or OTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Browser request or inactive account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bridge disabled or secret misconfigured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing OTP request or attempt limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oidc/account": {
+      "post": {
+        "operationId": "resolveOidcBridgeAccount",
+        "tags": [
+          "auth"
+        ],
+        "x-internal": true,
+        "description": "Revalidate that the immutable account UUID remains active before issuing OIDC identity claims. Server-to-server only; requests with Origin or Sec-Fetch-Site are rejected.",
+        "security": [
+          {
+            "oidcBridgeSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OidcBridgeAccount"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identity bridge request succeeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcBridgeAccount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bridge request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid bridge credential, account or OTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Browser request or inactive account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bridge disabled or secret misconfigured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing OTP request or attempt limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2201,6 +2486,12 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "oidcBridgeSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-OIDC-Bridge-Secret",
+        "description": "Internal server-to-server credential: canonical base64url encoding of 32 random bytes. Never place in iOS, web bundles, cookies, or user JWTs. Requires OIDC_BRIDGE_ENABLED=true and private network access."
       }
     },
     "schemas": {
@@ -2439,6 +2730,139 @@
           },
           "isSharing": {
             "type": "boolean"
+          }
+        }
+      },
+      "OidcBridgeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "phone",
+          "deviceUuid",
+          "ipAddress"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 32
+          },
+          "deviceUuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Bridge-generated stable random UUID v4 for the browser session."
+          },
+          "ipAddress": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "ipv4"
+              },
+              {
+                "type": "string",
+                "format": "ipv6"
+              }
+            ],
+            "description": "Client address resolved by the trusted bridge; never trust arbitrary forwarded browser headers."
+          }
+        }
+      },
+      "OidcBridgeVerify": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "phone",
+          "deviceUuid",
+          "ipAddress",
+          "code"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 32
+          },
+          "deviceUuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Bridge-generated stable random UUID v4 for the browser session."
+          },
+          "ipAddress": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "ipv4"
+              },
+              {
+                "type": "string",
+                "format": "ipv6"
+              }
+            ],
+            "description": "Client address resolved by the trusted bridge; never trust arbitrary forwarded browser headers."
+          },
+          "code": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 12
+          }
+        }
+      },
+      "OidcBridgeAccount": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Immutable existing users.id UUID, normalized to lowercase. Never derive from phone or email."
+          }
+        }
+      },
+      "OidcBridgeIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "authTime"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Immutable existing users.id UUID, normalized to lowercase. Never derive from phone or email."
+          },
+          "authTime": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Unix seconds at successful OTP authentication."
+          }
+        }
+      },
+      "OidcBridgeCodeRequested": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "delivery",
+          "resendAfterSeconds",
+          "expiresIn"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "code_sent"
+          },
+          "delivery": {
+            "type": "string"
+          },
+          "resendAfterSeconds": {
+            "type": "integer"
+          },
+          "expiresIn": {
+            "type": "integer"
           }
         }
       }

@@ -248,6 +248,44 @@ export class AuthService implements OnModuleInit {
     dto: VerifyAuthDto,
     requestContext: SessionRequestContext,
   ): Promise<AuthResult> {
+    const user = await this.verifyCodeIdentity(dto);
+    return this.buildAuthResult(user, requestContext);
+  }
+
+  async verifyCodeForOidc(
+    dto: VerifyAuthDto,
+    requestContext: SessionRequestContext,
+  ): Promise<{ subject: string; authTime: number }> {
+    const user = await this.verifyCodeIdentity(dto);
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException("Account is not active");
+    }
+    const authenticatedAt = new Date();
+    await this.recordAuthenticationTime(user, authenticatedAt);
+    await this.recordLogin(
+      user,
+      requestContext,
+      SecurityAuditOutcome.SUCCESS,
+      "oidc",
+    );
+    return {
+      subject: user.id.toLowerCase(),
+      authTime: Math.floor(authenticatedAt.getTime() / 1000),
+    };
+  }
+
+  async getOidcAccount(subject: string): Promise<{ subject: string }> {
+    const user = await this.usersRepository.findOneBy({
+      id: subject.toLowerCase() as UserEntity["id"],
+      status: UserStatus.ACTIVE,
+    });
+    if (!user) {
+      throw new UnauthorizedException("Account is not active");
+    }
+    return { subject: user.id.toLowerCase() };
+  }
+
+  private async verifyCodeIdentity(dto: VerifyAuthDto): Promise<UserEntity> {
     const phone = this.resolvePhone(dto);
     await this.consumeVerificationCode(phone, dto.code.trim());
     const telegramLink = await this.telegramLinksRepository.findOne({
@@ -270,7 +308,7 @@ export class AuthService implements OnModuleInit {
       await this.telegramLinksRepository.save(telegramLink);
     }
 
-    return this.buildAuthResult(user, requestContext);
+    return user;
   }
 
   async login(
@@ -465,32 +503,29 @@ export class AuthService implements OnModuleInit {
       }
     }
 
-    let shouldSave = false;
+    const updates: Partial<UserEntity> = {};
     if (method === AuthMethod.PHONE && user.phone !== contact) {
-      user.phone = contact;
-      shouldSave = true;
+      updates.phone = contact;
     }
     if (
       syncExistingDisplayName &&
       preferredDisplayName &&
       user.displayName !== preferredDisplayName
     ) {
-      user.displayName = preferredDisplayName;
-      shouldSave = true;
+      updates.displayName = preferredDisplayName;
     }
     if (telegramLink) {
       if (user.telegramChatId !== telegramLink.chatId) {
-        user.telegramChatId = telegramLink.chatId;
-        shouldSave = true;
+        updates.telegramChatId = telegramLink.chatId;
       }
       if (user.telegramUsername !== telegramLink.username) {
-        user.telegramUsername = telegramLink.username;
-        shouldSave = true;
+        updates.telegramUsername = telegramLink.username;
       }
     }
 
-    if (shouldSave) {
-      return this.usersRepository.save(user);
+    if (Object.keys(updates).length > 0) {
+      await this.usersRepository.update({ id: user.id }, updates);
+      Object.assign(user, updates);
     }
 
     return user;
@@ -529,8 +564,7 @@ export class AuthService implements OnModuleInit {
     if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException("Account is not active");
     }
-    user.lastLoginAt = new Date();
-    await this.usersRepository.save(user);
+    await this.recordAuthenticationTime(user, new Date());
     const issued = await this.sessionService.issueSession(
       SessionPrincipalType.USER,
       user.id,
@@ -546,6 +580,22 @@ export class AuthService implements OnModuleInit {
       displayName: user.displayName,
       phone: user.phone ?? user.contact,
     };
+  }
+
+  private async recordAuthenticationTime(
+    user: UserEntity,
+    authenticatedAt: Date,
+  ): Promise<void> {
+    // Never save a loaded account snapshot: a concurrent administrator may
+    // have blocked it after identity verification. Update only the timestamp,
+    // conditional on the account still being active at the database boundary.
+    const updated = await this.usersRepository.update(
+      { id: user.id, status: UserStatus.ACTIVE },
+      { lastLoginAt: authenticatedAt },
+    );
+    if (updated.affected !== 1) {
+      throw new ForbiddenException("Account is not active");
+    }
   }
 
   private async authenticateUserByLogin(
@@ -578,8 +628,19 @@ export class AuthService implements OnModuleInit {
       throw new ForbiddenException("Account is not active");
     }
     if (user.passwordHash.startsWith("$2")) {
-      user.passwordHash = await this.hashPassword(password);
-      await this.usersRepository.save(user);
+      const migratedPasswordHash = await this.hashPassword(password);
+      const updated = await this.usersRepository.update(
+        {
+          id: user.id,
+          status: UserStatus.ACTIVE,
+          passwordHash: user.passwordHash,
+        },
+        { passwordHash: migratedPasswordHash },
+      );
+      if (updated.affected !== 1) {
+        throw new UnauthorizedException("Account credentials changed");
+      }
+      user.passwordHash = migratedPasswordHash;
     }
 
     return user;
@@ -756,6 +817,7 @@ export class AuthService implements OnModuleInit {
     user: UserEntity,
     context: SessionRequestContext,
     outcome: SecurityAuditOutcome,
+    authenticationTransport?: "oidc",
   ): Promise<void> {
     await this.securityAuditService.record({
       eventType: "auth.user.login",
@@ -766,6 +828,7 @@ export class AuthService implements OnModuleInit {
       metadata: {
         method: user.method,
         platform: context.platform,
+        ...(authenticationTransport ? { authenticationTransport } : {}),
       },
     });
   }

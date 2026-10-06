@@ -55,6 +55,8 @@ export const apiOperations = {
   rejectContactRequest: "/contacts/requests/{requestID}/reject",
   requestEncryptedMediaUpload: "/media/encrypted/upload-url",
   requestMediaUpload: "/media/upload-url",
+  requestOidcBridgeCode: "/auth/oidc/request",
+  resolveOidcBridgeAccount: "/auth/oidc/account",
   revokeAdminSession: "/admin/sessions/{sessionId}",
   revokeAuthSession: "/auth/sessions/{sessionId}",
   revokeDevice: "/devices/{deviceID}/revoke",
@@ -74,6 +76,7 @@ export const apiOperations = {
   updateMyLocation: "/location/me",
   updateProfile: "/users/me/profile",
   uploadVoiceMedia: "/media/voice",
+  verifyOidcBridgeCode: "/auth/oidc/verify",
   version: "/version",
 } as const;
 

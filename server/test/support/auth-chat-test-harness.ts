@@ -119,6 +119,8 @@ export type TestAppOptions = {
   telegramAllowRelink?: boolean;
   webAppUrl?: string | null;
   e2eeRequired?: boolean;
+  oidcBridgeEnabled?: boolean;
+  oidcBridgeSharedSecret?: string;
   postgresUrl?: string;
   beforeInit?: (app: INestApplication) => Promise<void> | void;
 };
@@ -127,6 +129,14 @@ export async function createTestApp(
   options: TestAppOptions = {},
 ): Promise<INestApplication> {
   process.env["NODE_ENV"] = "test";
+  process.env["OIDC_BRIDGE_ENABLED"] = options.oidcBridgeEnabled
+    ? "true"
+    : "false";
+  if (options.oidcBridgeSharedSecret) {
+    process.env["OIDC_BRIDGE_SHARED_SECRET"] = options.oidcBridgeSharedSecret;
+  } else {
+    delete process.env["OIDC_BRIDGE_SHARED_SECRET"];
+  }
   process.env["JWT_SECRET"] = "test-jwt-secret";
   process.env["JWT_EXPIRES_IN"] = "7d";
   process.env["DB_SYNCHRONIZE"] = "true";

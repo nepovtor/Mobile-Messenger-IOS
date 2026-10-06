@@ -57,6 +57,8 @@ public enum GeneratedAPIContract {
         case rejectContactRequest
         case requestEncryptedMediaUpload
         case requestMediaUpload
+        case requestOidcBridgeCode
+        case resolveOidcBridgeAccount
         case revokeAdminSession
         case revokeAuthSession
         case revokeDevice
@@ -76,6 +78,7 @@ public enum GeneratedAPIContract {
         case updateMyLocation
         case updateProfile
         case uploadVoiceMedia
+        case verifyOidcBridgeCode
         case version
     }
 
@@ -138,6 +141,8 @@ public enum GeneratedAPIContract {
         case .rejectContactRequest: "contacts/requests/{requestID}/reject"
         case .requestEncryptedMediaUpload: "media/encrypted/upload-url"
         case .requestMediaUpload: "media/upload-url"
+        case .requestOidcBridgeCode: "auth/oidc/request"
+        case .resolveOidcBridgeAccount: "auth/oidc/account"
         case .revokeAdminSession: "admin/sessions/{sessionId}"
         case .revokeAuthSession: "auth/sessions/{sessionId}"
         case .revokeDevice: "devices/{deviceID}/revoke"
@@ -157,6 +162,7 @@ public enum GeneratedAPIContract {
         case .updateMyLocation: "location/me"
         case .updateProfile: "users/me/profile"
         case .uploadVoiceMedia: "media/voice"
+        case .verifyOidcBridgeCode: "auth/oidc/verify"
         case .version: "version"
         }
         return parameters.reduce(template) { result, entry in

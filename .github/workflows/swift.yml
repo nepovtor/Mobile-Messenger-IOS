@@ -19,6 +19,7 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-latest
+    timeout-minutes: 25
     env:
       SCHEME: MobileMessengerIOS
       PROJECT: MobileMessengerIOS.xcodeproj
@@ -248,6 +249,54 @@ jobs:
           export AUTH_ALLOW_TEST_CODE=false
           export COOKIE_SECURE=true
           node -e 'require("./dist/modules/common/runtime-config.js").validateRuntimeConfig()'
+
+  oidc-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            oidc-bridge/package-lock.json
+            web/package-lock.json
+
+      - name: Install locked backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install locked OIDC bridge dependencies
+        working-directory: oidc-bridge
+        run: npm ci
+
+      - name: Install locked Matrix SDK test dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Verify OIDC bridge registry signatures
+        working-directory: oidc-bridge
+        run: npm audit signatures
+
+      - name: Audit OIDC bridge production dependencies
+        working-directory: oidc-bridge
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify OIDC bridge formatting
+        working-directory: oidc-bridge
+        run: npm run format:check
+
+      - name: Test OTP identity boundary and OIDC on isolated PostgreSQL
+        run: Scripts/test-oidc-bridge.sh
+
+      - name: Test OTP login through isolated Matrix and MAS
+        run: node oidc-bridge/scripts/matrix-stack-smoke.mjs
 
   web:
     runs-on: ubuntu-latest

@@ -40,8 +40,9 @@ security claim and an independent design review.
 | --- | --- | --- | --- |
 | `matrix-js-sdk` | 43.0.0 in `web/package-lock.json` | React/Vite TypeScript production build and browser bundle; Rust crypto wrapper tests | Real homeserver sync, recovery, device verification and interop |
 | `MatrixRustSDK` Swift package | 26.10.02 tag, resolved commit `55650a2320cc6e3264c1d5508a5094f8dd7e51a5` | Xcode 26.3 iOS simulator build and 85 tests | Authenticated session restore, room/timeline integration and interop |
-| Synapse | 1.162.0, image digest `sha256:6b84a7bbac36f080b2d2e51e0289cf1b08b349598ea44a558df38d558f2c2311` in the smoke harness | Isolated loopback Web-to-Web encrypted room roundtrip | Test MAS/OIDC and disposable PostgreSQL; validate deployment image policy |
-| MAS | Candidate 1.26.0 | Official upstream OIDC and Synapse integration researched | Pin container digest, configure and test OTP bridge |
+| Synapse | 1.162.0, image digest `sha256:6b84a7bbac36f080b2d2e51e0289cf1b08b349598ea44a558df38d558f2c2311` | Password and OTP/MAS-authenticated encrypted room roundtrips on disposable PostgreSQL | Reviewed TLS deployment, restore/revocation and client acceptance tests |
+| MAS | 1.26.0, image digest `sha256:e089f1048a1d4a9a492ed17b9fe759100f1bd619407b001f5927928d88b780c4` | Real upstream OTP/OIDC login, UUID localpart and Matrix token/device introspection | Coordinated account/session revocation, TLS and production operations |
+| OTP OIDC bridge | `oidc-provider` 9.12.2, `pg` 8.23.1, exact lockfile | Real NestJS OTP and PostgreSQL tests; signature/claims/S256/CSRF/restart/concurrency; full MAS/Synapse encrypted SDK roundtrip | Independent identity-boundary review, browser/iOS login, key rotation and revocation |
 
 The Swift package manifest pins a checksum for its XCFramework. The iOS
 `MatrixClientFactory` requires HTTPS and passes a random 32-byte Keychain key
@@ -68,16 +69,70 @@ Sources: [Matrix JS SDK crypto initialization](https://github.com/matrix-org/mat
 [MAS upstream OIDC](https://element-hq.github.io/matrix-authentication-service/setup/sso.html),
 [Synapse MAS integration](https://element-hq.github.io/matrix-authentication-service/setup/homeserver.html).
 
+## OTP/OIDC integration implemented
+
+The separate [OIDC bridge](../oidc-bridge/README.md) uses the supported official
+`oidc-provider` authorization server; NestJS does not implement the OIDC protocol.
+The backend service boundary `/api/auth/oidc/{request,verify,account}` is disabled
+by default and requires an independent 256-bit service secret. Browser requests
+and ordinary NestJS JWTs do not authorize those routes. OTP consumption,
+authorization checks and rate limits share the existing AuthService. Verification
+returns only the existing immutable UUID and authentication time, without NestJS
+sessions/tokens, a phone number or debug OTP. Existing contact-only legacy accounts
+retain their UUID.
+
+The bridge registers only the confidential MAS client with an exact callback;
+it requires code flow, S256 PKCE, query response mode, an exact Origin, signed
+interaction cookies and a one-use CSRF nonce. It uses encrypted private PostgreSQL
+artifacts, hashed/index-bound identifiers, conditional atomic code consumption,
+checked TTLs and a durable rate limit shared between bridge instances. It rechecks
+active backend accounts before OIDC token issuance and userinfo. A review also
+found and fixed stale account saves which could overwrite an administrator's
+concurrent block during ordinary or OIDC login; updates now touch only intended
+columns and check active status at the timestamp write.
+
+`Scripts/test-oidc-bridge.sh` runs a disposable PostgreSQL 16 database with real
+NestJS migrations and HTTP OTP/OIDC exchanges. On Node.js 22 LTS it passed one
+configuration test and all 14 integration tests, including restart recovery,
+ID-token signature/issuer/audience/nonce, blocking after OTP, CSRF, wrong PKCE,
+storage tampering and concurrent authorization-code redemption. Exactly one of
+eight simultaneous HTTP code exchanges succeeds; storage-level contention also
+tests 24 concurrent consumers. Backend verification passed 149 tests; Web passed
+91 tests; iOS simulator passed 85 tests. Formatting/lint/build and the synchronized
+77-operation OpenAPI contract also passed.
+
+`node oidc-bridge/scripts/matrix-stack-smoke.mjs` starts the pinned bridge, MAS,
+Synapse and PostgreSQL with synthetic accounts, random temporary credentials,
+component-specific database roles and loopback published ports. It passed actual
+OTP -> OIDC -> MAS -> Synapse login for two devices, checks Matrix IDs derived from
+their original NestJS UUIDs, and completes an official-SDK encrypted room exchange.
+The recipient decrypts the message; the raw homeserver event contains ciphertext
+without its body. MAS imports a required UUID-derived localpart with
+`on_conflict=fail`, never an automatic link based on phone/name. Temporary files,
+containers and the generated test image are removed on exit.
+
+This is a test deployment and protocol proof. The HTTP loopback issuer and MAS
+`discovery_mode=insecure` are deliberately restricted to the disposable harness;
+the bridge rejects these settings in production. No production configuration,
+database, account, deployment or plaintext-retention setting was changed.
+
+**Release blocker:** blocking/logging out in NestJS does not currently revoke
+already-issued MAS/Matrix sessions. Active-account checks prevent future OIDC
+issuance but are not cross-service revocation. A reviewed logout/deactivation/
+device-revocation flow and backchannel logout remain mandatory. Signing/cookie
+rotation, storage-key migration/restore, actual TLS/proxy deployment and real
+browser/iOS authorization-session acceptance also remain gates. Database storage
+encryption cannot prevent an administrator rolling back consumed/expiry state.
+
 ## Required work before the first encrypted product message
 
-1. Build the OTP-to-OIDC bridge with a mature OIDC provider library, persistent
-   authorization-code/session storage, PKCE, exact redirect allowlists, CSRF
-   protection, key rotation, stable non-phone `sub`, logout and session
-   revocation. Test MAS `sub`/localpart mapping and account collision handling.
-   Do not automatically link accounts by display name or phone number.
-2. Start isolated Synapse, MAS and PostgreSQL using pinned image digests and
-   test TLS/proxy, signing secrets, backup/restore, rate limits, federation
-   policy and nonpublic admin endpoints. No production credentials are needed.
+1. Complete the bridge release gates: coordinated NestJS/OIDC/MAS logout,
+   account/device revocation and backchannel logout; key rotation/storage-key
+   migration and restore; real browser/iOS login. Independently review the
+   tested UUID mapping and account collision handling.
+2. Promote the tested disposable Synapse/MAS/PostgreSQL stack to a separately
+   reviewed deployment configuration: TLS/proxy, signing secrets, backup/restore,
+   rate limits, federation policy, runtime roles and nonpublic admin endpoints.
 3. Complete web and iOS login, secure session storage, crypto-store restore,
    secret storage/recovery, cross-signing, device verification and visible
    identity-change warnings. Do not send into a room until the clients confirm
