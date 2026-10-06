@@ -9,11 +9,6 @@ MATRIX_SMOKE_CONTAINER="mm-matrix-smoke-$$"
 
 cleanup() {
   docker rm -f "$MATRIX_SMOKE_CONTAINER" >/dev/null 2>&1 || true
-  if docker info >/dev/null 2>&1 && docker image inspect "$SYNAPSE_IMAGE" >/dev/null 2>&1; then
-    docker run --rm --user 0 \
-      --mount "type=bind,src=$MATRIX_SMOKE_DIR,dst=/data" \
-      "$SYNAPSE_IMAGE" chown -R "$(id -u):$(id -g)" /data >/dev/null 2>&1 || true
-  fi
   rm -rf "$MATRIX_SMOKE_DIR" "$MATRIX_SMOKE_CREDENTIAL_DIR"
 }
 trap cleanup EXIT
@@ -41,6 +36,8 @@ PY
 
 docker run --rm \
   --mount "type=bind,src=$MATRIX_SMOKE_DIR,dst=/data" \
+  -e UID="$(id -u)" \
+  -e GID="$(id -g)" \
   -e SYNAPSE_SERVER_NAME=localhost \
   -e SYNAPSE_REPORT_STATS=no \
   "$SYNAPSE_IMAGE" generate >/dev/null
@@ -49,6 +46,8 @@ docker run -d --rm \
   --name "$MATRIX_SMOKE_CONTAINER" \
   --mount "type=bind,src=$MATRIX_SMOKE_DIR,dst=/data" \
   --mount "type=bind,src=$MATRIX_SMOKE_CREDENTIAL_DIR,dst=/creds,readonly" \
+  -e UID="$(id -u)" \
+  -e GID="$(id -g)" \
   -p 127.0.0.1::8008 \
   "$SYNAPSE_IMAGE" >/dev/null
 
