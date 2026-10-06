@@ -1,3 +1,4 @@
+import { MatrixLifecycleModule } from "../matrix/matrix-lifecycle.module";
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -11,6 +12,7 @@ import { SessionService } from "./session.service";
     JwtModule.register({}),
     TypeOrmModule.forFeature([AuthSessionEntity, RefreshTokenEntity]),
     SecurityModule,
+    MatrixLifecycleModule,
   ],
   providers: [SessionService],
   exports: [JwtModule, SessionService, TypeOrmModule],

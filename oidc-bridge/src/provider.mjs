@@ -66,11 +66,30 @@ export async function createBridge({ config, pool, backendFetch = fetch }) {
     interactions: {
       url: (_ctx, interaction) => `/interaction/${interaction.uid}`,
     },
-    async findAccount(_ctx, subject) {
+    async extraTokenClaims(ctx, token) {
+      if (token.kind !== "AccessToken") return undefined;
+      const authTime = ctx.oidc.authorizationCode?.authTime;
+      if (!Number.isInteger(authTime))
+        throw new Error("Authenticated OTP time missing");
+      // Persist the grant's original authentication time. Reauthenticating a
+      // browser session must not revive one of its old opaque access tokens.
+      return { otp_auth_time: authTime };
+    },
+    async findAccount(ctx, subject, source) {
       if (!validSubject(subject)) return undefined;
       try {
         const account = await backend("account", { subject });
         if (account.subject !== subject) return undefined;
+        if (account.notBefore !== undefined) {
+          if (!Number.isInteger(account.notBefore)) return undefined;
+          // Use the provider's authenticated code/session timestamps, never
+          // a browser parameter. Opaque tokens retain the original OTP time.
+          const authTime = source
+            ? (source.authTime ?? source.extra?.otp_auth_time)
+            : ctx.oidc.session?.authTime();
+          if (!Number.isInteger(authTime) || authTime <= account.notBefore)
+            return undefined;
+        }
       } catch {
         return undefined;
       }

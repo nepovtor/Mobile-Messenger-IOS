@@ -41,8 +41,8 @@ security claim and an independent design review.
 | `matrix-js-sdk` | 43.0.0 in `web/package-lock.json` | React/Vite TypeScript production build and browser bundle; Rust crypto wrapper tests | Real homeserver sync, recovery, device verification and interop |
 | `MatrixRustSDK` Swift package | 26.10.02 tag, resolved commit `55650a2320cc6e3264c1d5508a5094f8dd7e51a5` | Xcode 26.3 iOS simulator build and 85 tests | Authenticated session restore, room/timeline integration and interop |
 | Synapse | 1.162.0, image digest `sha256:6b84a7bbac36f080b2d2e51e0289cf1b08b349598ea44a558df38d558f2c2311` | Password and OTP/MAS-authenticated encrypted room roundtrips on disposable PostgreSQL | Reviewed TLS deployment, restore/revocation and client acceptance tests |
-| MAS | 1.26.0, image digest `sha256:e089f1048a1d4a9a492ed17b9fe759100f1bd619407b001f5927928d88b780c4` | Real upstream OTP/OIDC login, UUID localpart and Matrix token/device introspection | Coordinated account/session revocation, TLS and production operations |
-| OTP OIDC bridge | `oidc-provider` 9.12.2, `pg` 8.23.1, exact lockfile | Real NestJS OTP and PostgreSQL tests; signature/claims/S256/CSRF/restart/concurrency; full MAS/Synapse encrypted SDK roundtrip | Independent identity-boundary review, browser/iOS login, key rotation and revocation |
+| MAS | 1.26.0, image digest `sha256:e089f1048a1d4a9a492ed17b9fe759100f1bd619407b001f5927928d88b780c4` | Real upstream OTP/OIDC login, UUID localpart, admin session revocation and fresh-OTP re-admission | Reviewed device mapping/restore, TLS and production operations |
+| OTP OIDC bridge | `oidc-provider` 9.12.2, `pg` 8.23.1, exact lockfile | Real NestJS OTP and PostgreSQL tests; signature/claims/S256/CSRF/restart/concurrency; full MAS/Synapse encrypted SDK roundtrip | Independent identity/lifecycle review, browser/iOS login, key rotation and restore |
 
 The Swift package manifest pins a checksum for its XCFramework. The iOS
 `MatrixClientFactory` requires HTTPS and passes a random 32-byte Keychain key
@@ -116,13 +116,26 @@ This is a test deployment and protocol proof. The HTTP loopback issuer and MAS
 the bridge rejects these settings in production. No production configuration,
 database, account, deployment or plaintext-retention setting was changed.
 
-**Release blocker:** blocking/logging out in NestJS does not currently revoke
-already-issued MAS/Matrix sessions. Active-account checks prevent future OIDC
-issuance but are not cross-service revocation. A reviewed logout/deactivation/
-device-revocation flow and backchannel logout remain mandatory. Signing/cookie
-rotation, storage-key migration/restore, actual TLS/proxy deployment and real
-browser/iOS authorization-session acceptance also remain gates. Database storage
-encryption cannot prevent an administrator rolling back consumed/expiry state.
+The next lifecycle increment adds transactional MAS revocation and immutable
+room registration with the existing plaintext fence. See
+[audit evidence and limits](./MATRIX_AUDIT_READINESS.md) and the
+[isolated sslip.io TLS staging runbook](../ops/matrix-staging/README.md).
+The real stack test now rejects the blocked user's old Matrix access/refresh
+tokens, preserves a second user's session, and admits fresh OTP after account
+reactivation/quarantine; reactivation alone never restores old tokens.
+A revocation-time fence also invalidates old upstream authorization codes and
+opaque tokens, including after browser reauthentication. Any Nest user/device
+revocation conservatively revokes all Matrix sessions. MAS failures return pending
+503; the global logout/recovery UI still needs integration. Signed upstream tokens
+require a 360-second quarantine before automatic fresh-OTP unlock.
+
+**Deployment blocker:** SSH access on the supplied Cloudways account was verified,
+but Docker/Podman are absent and sudo is explicitly denied. No packages, virtual
+hosts, databases or production services were changed remotely. Generated staging
+configurations passed local Compose/MAS/Synapse/Nginx checks; no Lets Encrypt
+certificate or remote Matrix service exists yet. Actual product chats, recovery,
+verification, groups/attachments, backup retention and external audit remain
+release gates.
 
 ## Required work before the first encrypted product message
 

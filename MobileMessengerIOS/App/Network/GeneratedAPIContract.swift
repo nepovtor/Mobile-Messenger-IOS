@@ -11,6 +11,7 @@ public enum GeneratedAPIContract {
         case authRequest
         case authTelegramPairing
         case authVerify
+        case bindMatrixChatRoom
         case blockContact
         case claimDeviceKeyBundles
         case confirmEncryptedMediaUpload
@@ -26,6 +27,9 @@ public enum GeneratedAPIContract {
         case deletePushSubscriptionFallback
         case getEncryptedMediaDownload
         case getEncryptedMessageInbox
+        case getMatrixChatDescriptor
+        case getMatrixConfiguration
+        case getMatrixRevocationStatus
         case getMyLocation
         case getOneTimePrekeyStatus
         case getPushStatus
@@ -95,6 +99,7 @@ public enum GeneratedAPIContract {
         case .authRequest: "auth/request"
         case .authTelegramPairing: "auth/telegram/pairing"
         case .authVerify: "auth/verify"
+        case .bindMatrixChatRoom: "matrix/chats/{chatID}"
         case .blockContact: "contacts/{userID}/block"
         case .claimDeviceKeyBundles: "devices/key-bundles/{userID}"
         case .confirmEncryptedMediaUpload: "media/encrypted/{attachmentID}/confirm"
@@ -110,6 +115,9 @@ public enum GeneratedAPIContract {
         case .deletePushSubscriptionFallback: "push/subscriptions/delete"
         case .getEncryptedMediaDownload: "media/encrypted/{attachmentID}/download-url"
         case .getEncryptedMessageInbox: "encrypted-messages/inbox"
+        case .getMatrixChatDescriptor: "matrix/chats/{chatID}"
+        case .getMatrixConfiguration: "matrix/config"
+        case .getMatrixRevocationStatus: "matrix/revocation"
         case .getMyLocation: "location/me"
         case .getOneTimePrekeyStatus: "devices/current/prekeys"
         case .getPushStatus: "push/status"

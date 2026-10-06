@@ -16,6 +16,7 @@ async function main() {
     postgresUrl: process.env["OIDC_TEST_DATABASE_URL"],
     enableDemoAccounts: false,
     allowTestCode: false,
+    authCodeResendCooldownSeconds: 1,
     e2eeRequired: true,
     oidcBridgeEnabled: true,
     oidcBridgeSharedSecret: bridgeSecret,
@@ -28,6 +29,12 @@ async function main() {
             response.status(404).end();
             return;
           }
+          response.on("finish", () => {
+            if (response.statusCode >= 400)
+              console.error(
+                `Isolated OIDC boundary ${request.path}: HTTP ${response.statusCode}`,
+              );
+          });
           next();
         },
       );

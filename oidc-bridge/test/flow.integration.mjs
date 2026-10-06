@@ -103,7 +103,19 @@ test(
         ],
       },
     };
-    let app = await createBridge({ config, pool });
+    let notBefore;
+    const backendFetch = async (input, init) => {
+      const response = await fetch(input, init);
+      if (
+        notBefore !== undefined &&
+        String(input).endsWith("/account") &&
+        response.ok
+      ) {
+        return Response.json({ ...(await response.json()), notBefore });
+      }
+      return response;
+    };
+    let app = await createBridge({ config, pool, backendFetch });
     app.server.listen(new URL(issuer).port, "127.0.0.1");
     await once(app.server, "listening");
     t.after(() => app.close());
@@ -195,7 +207,7 @@ test(
       );
       // Store and signed cookies must survive a process restart.
       await app.close();
-      app = await createBridge({ config, pool });
+      app = await createBridge({ config, pool, backendFetch });
       app.server.listen(new URL(issuer).port, "127.0.0.1");
       await once(app.server, "listening");
       const code = await otp(phone);
@@ -307,6 +319,38 @@ test(
           "+15552004002",
         ]);
         assert.equal((await token(auth.code, auth.verifier)).status, 400);
+      },
+    );
+    await t.test(
+      "revocation timestamp rejects old codes and userinfo even while the account is active",
+      async () => {
+        const issued = await authorize("+15552004004");
+        const tokens = await (await token(issued.code, issued.verifier)).json();
+        assert.equal(typeof tokens.access_token, "string");
+        const outstanding = await authorize("+15552004005");
+        notBefore = Math.floor(Date.now() / 1000);
+        try {
+          assert.equal(
+            (await token(outstanding.code, outstanding.verifier)).status,
+            400,
+          );
+          const old = await app.provider.AccessToken.find(tokens.access_token);
+          assert.ok(old?.sessionUid);
+          const session = await app.provider.Session.findByUid(old.sessionUid);
+          assert.ok(session);
+          session.loginTs = notBefore + 60;
+          await session.save(3600);
+          assert.equal(
+            (
+              await fetch(`${issuer}/me`, {
+                headers: { Authorization: `Bearer ${tokens.access_token}` },
+              })
+            ).status,
+            401,
+          );
+        } finally {
+          notBefore = undefined;
+        }
       },
     );
     await t.test(

@@ -295,6 +295,12 @@ jobs:
       - name: Test OTP identity boundary and OIDC on isolated PostgreSQL
         run: Scripts/test-oidc-bridge.sh
 
+      - name: Test Matrix binding and revocation transactions on isolated PostgreSQL
+        run: Scripts/test-matrix-lifecycle.sh
+
+      - name: Validate isolated staging configuration
+        run: python3 -m unittest discover -s ops/matrix-staging -p 'test_*.py'
+
       - name: Test OTP login through isolated Matrix and MAS
         run: node oidc-bridge/scripts/matrix-stack-smoke.mjs
 

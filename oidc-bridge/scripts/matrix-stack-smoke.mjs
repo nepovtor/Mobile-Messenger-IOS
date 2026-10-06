@@ -23,6 +23,7 @@ const masImage =
 const synapseImage =
   "ghcr.io/element-hq/synapse@sha256:6b84a7bbac36f080b2d2e51e0289cf1b08b349598ea44a558df38d558f2c2311";
 const providerID = "01K6Y0TP000000000000000001";
+const adminID = "01K6Y0TP000000000000000003";
 const downstreamID = "01K6Y0TP000000000000000002";
 const random = () => randomBytes(32).toString("base64url");
 const secret = async (name, value) => {
@@ -102,12 +103,8 @@ for (const signal of ["SIGINT", "SIGTERM"])
   });
 
 try {
-  const [masPort, bridgePort, synapsePort, pgPort] = await Promise.all([
-    port(),
-    port(),
-    port(),
-    port(),
-  ]);
+  const [masPort, bridgePort, synapsePort, pgPort, adminPort] =
+    await Promise.all([port(), port(), port(), port(), port()]);
   const masURL = `http://127.0.0.1:${masPort}`;
   const issuer = `http://127.0.0.1:${bridgePort}`;
   const synapseURL = `http://127.0.0.1:${synapsePort}`;
@@ -116,6 +113,8 @@ try {
   const bridgeSecret = random();
   const clientSecret = random();
   const matrixSecret = random();
+  const adminSecret = random();
+  await secret("admin.secret", adminSecret);
   await secret(
     "postgres.env",
     `POSTGRES_PASSWORD=${password}\nPOSTGRES_INITDB_ARGS=--locale=C --encoding=UTF8\n`,
@@ -136,6 +135,8 @@ try {
     `127.0.0.1:${bridgePort}:${bridgePort}`,
     "-p",
     `127.0.0.1:${synapsePort}:${synapsePort}`,
+    "-p",
+    `127.0.0.1:${adminPort}:${adminPort}`,
     postgresImage,
   ]);
   await waitFor(async () => {
@@ -173,10 +174,22 @@ try {
       ...process.env,
       OIDC_TEST_DATABASE_URL: backendDatabase,
       OIDC_TEST_SHARED_SECRET: bridgeSecret,
+      MATRIX_ENABLED: "true",
+      MATRIX_ALLOW_INSECURE_LOCAL: "true",
+      MATRIX_HOMESERVER_URL: synapseURL,
+      MATRIX_ISSUER_URL: masURL,
+      MATRIX_SERVER_NAME: "localhost",
+      MATRIX_WEB_CLIENT_ID: downstreamID,
+      MATRIX_MAS_CLIENT_ID: adminID,
+      MATRIX_MAS_ADMIN_URL: `http://127.0.0.1:${adminPort}`,
+      MATRIX_MAS_CLIENT_SECRET_FILE: join(temporary, "admin.secret"),
     },
   });
   backend.stdout.resume();
-  backend.stderr.resume();
+  backend.stderr.on("data", (chunk) => {
+    for (const line of chunk.toString().split("\n"))
+      if (line.startsWith("Isolated OIDC boundary")) console.error(line);
+  });
   const ready = await Promise.race([
     once(backend, "message").then(([message]) => message),
     once(backend, "exit").then(() => {
@@ -273,6 +286,11 @@ try {
           ],
           binds: [{ address: `0.0.0.0:${masPort}` }],
         },
+        {
+          name: "internal",
+          resources: [{ name: "adminapi" }],
+          binds: [{ address: `0.0.0.0:${adminPort}` }],
+        },
       ],
     },
     database: { uri: `postgresql://mas:${passwords.mas}@127.0.0.1:5432/mas` },
@@ -286,7 +304,13 @@ try {
       keys: [{ key: masKey }],
     },
     passwords: { enabled: false },
+    policy: { data: { admin_clients: [adminID] } },
     clients: [
+      {
+        client_id: adminID,
+        client_auth_method: "client_secret_basic",
+        client_secret: adminSecret,
+      },
       {
         client_id: downstreamID,
         client_auth_method: "none",
@@ -526,6 +550,11 @@ try {
     });
     assert.equal(exchanged.status, 200);
     const tokens = await exchanged.json();
+    assert.equal(
+      typeof tokens.refresh_token,
+      "string",
+      "MAS must issue a refresh token for the lifecycle test",
+    );
     const who = await fetch(`${synapseURL}/_matrix/client/v3/account/whoami`, {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
@@ -544,15 +573,92 @@ try {
       `@u_${subject.replaceAll("-", "")}:localhost`,
     );
     assert.equal(matrixAccount.device_id, deviceID);
-    return { ...tokens, ...matrixAccount };
+    return { ...tokens, ...matrixAccount, subject };
   }
   const alice = await login("+15552999001", "OIDCSMOKETEST01");
   const bob = await login("+15552999002", "OIDCSMOKETEST02");
   const { assertEncryptedRoundtrip } =
     await import("../../web/scripts/matrix-encrypted-roundtrip.mjs");
   await assertEncryptedRoundtrip(synapseURL, alice, bob);
+  // A real backend block must finish MAS sessions, not just deny future OIDC.
+  const db = new pg.Pool({ connectionString: backendDatabase });
+  try {
+    await db.query(
+      "UPDATE users SET status='blocked', session_version=session_version+1 WHERE id=$1",
+      [alice.subject],
+    );
+    await waitFor(async () => {
+      const result = await db.query(
+        "SELECT generation=completed_generation AS done FROM matrix_lifecycle.revocation_outbox WHERE principal_id=$1",
+        [alice.subject],
+      );
+      return result.rows[0]?.done === true;
+    }, "MAS durable revocation");
+    const denied = await fetch(
+      `${synapseURL}/_matrix/client/v3/account/whoami`,
+      { headers: { Authorization: `Bearer ${alice.access_token}` } },
+    );
+    assert.equal(denied.status, 401);
+    const refresh = await fetch(discovery.token_endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: downstreamID,
+        refresh_token: alice.refresh_token,
+      }),
+    });
+    assert.equal(refresh.status, 400);
+    const live = await fetch(`${synapseURL}/_matrix/client/v3/account/whoami`, {
+      headers: { Authorization: `Bearer ${bob.access_token}` },
+    });
+    assert.equal(live.status, 200);
+    // Unblocking the source account alone must never revive old tokens.
+    await db.query("UPDATE users SET status='active' WHERE id=$1", [
+      alice.subject,
+    ]);
+    await waitFor(
+      async () =>
+        (
+          await db.query(
+            "SELECT generation=completed_generation AS done FROM matrix_lifecycle.revocation_outbox WHERE principal_id=$1",
+            [alice.subject],
+          )
+        ).rows[0]?.done === true,
+      "unblock revocation fence",
+    );
+    assert.equal(
+      (
+        await fetch(`${synapseURL}/_matrix/client/v3/account/whoami`, {
+          headers: { Authorization: `Bearer ${alice.access_token}` },
+        })
+      ).status,
+      401,
+    );
+    // Advance only this disposable database fixture past the signed-token
+    // quarantine; production has no bypass flag and waits 360 seconds.
+    await db.query(
+      "UPDATE matrix_lifecycle.revocation_outbox SET quarantine_until=clock_timestamp()-interval '1 second' WHERE principal_id=$1",
+      [alice.subject],
+    );
+    const fence = (
+      await db.query(
+        "SELECT floor(extract(epoch FROM requested_at)) AS fence FROM matrix_lifecycle.revocation_outbox WHERE principal_id=$1",
+        [alice.subject],
+      )
+    ).rows[0].fence;
+    await waitFor(
+      async () => Math.floor(Date.now() / 1000) > Number(fence),
+      "fresh OTP timestamp after the revocation fence",
+    );
+    const renewed = await login("+15552999001", "OIDCSMOKETEST03");
+    assert.equal(renewed.user_id, alice.user_id);
+    assert.notEqual(renewed.access_token, alice.access_token);
+  } finally {
+    await db.end();
+  }
   console.log(
-    "OTP -> OIDC -> MAS -> Synapse passed: stable UUID/device mapping and encrypted SDK delivery verified.",
+    "OTP -> OIDC -> MAS -> Synapse passed: durable revocation, rejected access/refresh and stable UUID/device mapping and encrypted SDK delivery verified.",
   );
 } finally {
   await cleanup();

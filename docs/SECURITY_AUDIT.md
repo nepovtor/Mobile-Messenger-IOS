@@ -11,6 +11,10 @@ fail-closed production configuration, session/device and opaque-delivery
 schema, administrator CLI provisioning, safer transport/logging/client token
 handling, default-deny Supabase access, migration tests, and CI security gates.
 
+Matrix lifecycle addendum (2026-10-06): [implemented boundary, test evidence and
+external audit gates](./MATRIX_AUDIT_READINESS.md). This is internal engineering
+verification; no independent audit has been performed.
+
 Production E2EE is **not complete**. Client cryptography is blocked by the
 library/support/license decision in
 [E2EE_ARCHITECTURE.md](./E2EE_ARCHITECTURE.md). The server boundary must stay

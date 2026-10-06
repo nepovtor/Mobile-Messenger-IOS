@@ -1,3 +1,4 @@
+import { MatrixRevocationWorker } from "../matrix/matrix-revocation.worker";
 import {
   BadRequestException,
   HttpException,
@@ -131,6 +132,7 @@ export class AuthService implements OnModuleInit {
     @InjectRepository(TelegramLinkEntity)
     private readonly telegramLinksRepository: Repository<TelegramLinkEntity>,
     private readonly dataSource: DataSource,
+    private readonly matrixRevocations: MatrixRevocationWorker,
     private readonly sessionService: SessionService,
     private readonly securityAuditService: SecurityAuditService,
     private readonly authRateLimitService: AuthRateLimitService,
@@ -260,6 +262,7 @@ export class AuthService implements OnModuleInit {
     if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException("Account is not active");
     }
+    await this.matrixRevocations.admitFreshLogin(user.id);
     const authenticatedAt = new Date();
     await this.recordAuthenticationTime(user, authenticatedAt);
     await this.recordLogin(
@@ -274,7 +277,9 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async getOidcAccount(subject: string): Promise<{ subject: string }> {
+  async getOidcAccount(
+    subject: string,
+  ): Promise<{ subject: string; notBefore?: number }> {
     const user = await this.usersRepository.findOneBy({
       id: subject.toLowerCase() as UserEntity["id"],
       status: UserStatus.ACTIVE,
@@ -282,7 +287,14 @@ export class AuthService implements OnModuleInit {
     if (!user) {
       throw new UnauthorizedException("Account is not active");
     }
-    return { subject: user.id.toLowerCase() };
+    await this.matrixRevocations.requireSettled(user.id);
+    const notBefore = await this.matrixRevocations.authenticationNotBefore(
+      user.id,
+    );
+    return {
+      subject: user.id.toLowerCase(),
+      ...(notBefore === null ? {} : { notBefore }),
+    };
   }
 
   private async verifyCodeIdentity(dto: VerifyAuthDto): Promise<UserEntity> {

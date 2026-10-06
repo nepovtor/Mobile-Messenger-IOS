@@ -23,6 +23,7 @@ import { PushSubscriptionEntity } from "../../src/entities/push-subscription.ent
 import { TelegramLinkEntity } from "../../src/entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../../src/entities/telegram-pairing-token.entity";
 import { UserEntity } from "../../src/entities/user.entity";
+import { MatrixModule } from "../../src/modules/matrix/matrix.module";
 import { AuthModule } from "../../src/modules/auth/auth.module";
 import { ChatModule } from "../../src/modules/chat/chat.module";
 import { MediaModule } from "../../src/modules/media/media.module";
@@ -249,6 +250,7 @@ export async function createTestApp(
       }),
       RealtimeModule,
       AuthModule,
+      MatrixModule,
       HealthModule,
       UsersModule,
       MediaModule,

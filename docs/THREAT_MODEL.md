@@ -9,8 +9,11 @@ that require independent review before rollout.
 The OTP/OIDC bridge now uses an existing UUID as subject, a separate backend
 service credential, S256 code flow and encrypted PostgreSQL artifacts. These
 controls were exercised through a disposable MAS/Synapse encrypted SDK exchange.
-NestJS account blocking/logging out still does not revoke existing Matrix sessions;
-coordinated revocation remains a release blocker. The provider database is trusted
+When MATRIX_ENABLED is configured, NestJS account/session revocations now enqueue
+transactional MAS lock/all-session revocation, with pending acknowledgements,
+upstream authentication-time fences and a signed-token quarantine before fresh-OTP
+admission. This is tested infrastructure; product UI/device mapping, restore and
+independent review remain release gates. See [audit evidence](./MATRIX_AUDIT_READINESS.md). The provider database is trusted
 for replay-state integrity; at-rest encryption does not prevent database rollback.
 Scope: iOS app, web app, NestJS API, WebSocket transport, PostgreSQL,
 S3-compatible storage, push providers, Telegram/SMS verification, CI/CD, and
