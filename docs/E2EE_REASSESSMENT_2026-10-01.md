@@ -1,6 +1,12 @@
 # E2EE reassessment — 2026-10-01
 
 Status: **blocked; no production E2EE or cross-platform cryptographic implementation**.
+
+On 2026-10-06 the product owner chose a Matrix-compatible migration with
+existing OTP login via a separate OIDC bridge. The SDK compatibility spike and
+remaining release gates are recorded in
+[MATRIX_E2EE_MIGRATION.md](./MATRIX_E2EE_MIGRATION.md). This does not change
+the blocked production status.
 This is a source review and local verification, not an independent audit.
 The submitted task ends during library evaluation item 3; remaining requirements
 must be recovered before a transport redesign is finalized.
@@ -67,7 +73,8 @@ passes these builds or interoperability tests.
 ## Blocking decisions and audit gates
 
 1. Recover the remaining user requirements and select a protocol that satisfies
-   them, including the documented forward secrecy and PCS objectives for groups.
+   them. The later Matrix decision revises the former strict group PCS objective;
+   its limitation requires explicit review and disclosure.
 2. Resolve official browser support for Signal, or choose a reviewed Matrix/MLS
    architecture. Never equate Matrix Olm/Megolm serialization with Signal
    prekeys or the current custom envelope format.

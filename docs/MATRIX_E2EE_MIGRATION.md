@@ -1,0 +1,102 @@
+# Matrix E2EE migration decision
+
+Decision date: 2026-10-06. Status: **implementation in progress; production E2EE blocked**.
+
+The product owner selected a Matrix-compatible transport and explicitly accepted
+revisiting the former group post-compromise-security (PCS) requirement. The
+existing phone OTP login must remain, with a separate OIDC bridge upstream of
+Matrix Authentication Service (MAS). This is an architecture decision, not a
+claim that the current messenger encrypts messages.
+
+## Protocol boundary
+
+Use a self-hosted Matrix homeserver (Synapse) for room state, device lists,
+to-device messages, sync, media and encrypted event delivery. Use MAS for
+Matrix authentication and an independently reviewed OIDC provider backed by
+the existing OTP-authenticated user identity. The NestJS server remains the
+authority for legacy account/profile/product features during migration. It
+must not translate legacy plaintext into Matrix ciphertext, hold Matrix
+private keys, manufacture Matrix access tokens, or implement Olm/Megolm.
+
+The web client uses the official `matrix-js-sdk` Rust/WASM crypto path. The
+iOS client uses the official `MatrixRustSDK` Swift package. Matrix room IDs,
+membership and cryptographic device identities are separate from existing
+NestJS chat IDs, server `membership_epoch`, and custom prekey/envelope rows.
+Do not submit Matrix events through `/encrypted-messages`: that API is not a
+Matrix Client-Server API and lacks its key-query, to-device, sync, room-state
+and signing semantics. The NestJS endpoint now rejects `matrix` protocol
+labels to make that transport boundary explicit.
+
+Matrix's Megolm group sessions do not provide the project's previous strict
+PCS guarantee after a compromised group session until new session keys are
+distributed. Room membership changes require new outbound sessions and
+withholding old room keys from removed members; a server-side membership epoch
+alone does not prove either. This limitation must be part of the product
+security claim and an independent design review.
+
+## Reproducible dependency spike
+
+| Component | Pinned version | Verified here | Remaining gate |
+| --- | --- | --- | --- |
+| `matrix-js-sdk` | 43.0.0 in `web/package-lock.json` | React/Vite TypeScript production build and browser bundle; Rust crypto wrapper tests | Real homeserver sync, recovery, device verification and interop |
+| `MatrixRustSDK` Swift package | 26.10.02 tag, resolved commit `55650a2320cc6e3264c1d5508a5094f8dd7e51a5` | Xcode 26.3 iOS simulator build and 85 tests | Authenticated session restore, room/timeline integration and interop |
+| Synapse | 1.162.0, image digest `sha256:6b84a7bbac36f080b2d2e51e0289cf1b08b349598ea44a558df38d558f2c2311` in the smoke harness | Isolated loopback Web-to-Web encrypted room roundtrip | Test MAS/OIDC and disposable PostgreSQL; validate deployment image policy |
+| MAS | Candidate 1.26.0 | Official upstream OIDC and Synapse integration researched | Pin container digest, configure and test OTP bridge |
+
+The Swift package manifest pins a checksum for its XCFramework. The iOS
+`MatrixClientFactory` requires HTTPS and passes a random 32-byte Keychain key
+to the official encrypted SQLite store. The web startup requires HTTPS (or
+development loopback), a caller-supplied 32-byte IndexedDB wrapping key and a
+cross-tab Web Lock. Neither helper is connected to user messaging yet. The web
+key must come from an approved interactive unlock/recovery flow; it cannot be
+persisted in `localStorage`, an ordinary cookie or a backend table. The iOS
+Keychain item is device-only; loss of that item makes the existing local store
+unreadable. All Matrix tokens/sessions need a separate lifecycle review.
+
+`Scripts/test-matrix-web-smoke.sh` starts a disposable Synapse container bound
+only to loopback, registers random test accounts, creates an encrypted room
+through the official Web SDK, and asserts that Bob decrypts Alice's ciphertext
+event. It deletes the container, database and test credentials on exit. It uses
+temporary password login and in-memory crypto stores solely to exercise the
+protocol; it is **not** the product's OTP/OIDC flow or an iOS↔Web acceptance
+test. The CI Web job runs this harness on Node.js 22.
+
+Sources: [Matrix JS SDK crypto initialization](https://github.com/matrix-org/matrix-js-sdk/tree/v43.0.0#end-to-end-encryption-support),
+[official Swift package](https://github.com/matrix-org/matrix-rust-components-swift/tree/26.10.02),
+[Synapse release](https://github.com/element-hq/synapse/releases/tag/v1.162.0),
+[MAS release](https://github.com/element-hq/matrix-authentication-service/releases/tag/v1.26.0),
+[MAS upstream OIDC](https://element-hq.github.io/matrix-authentication-service/setup/sso.html),
+[Synapse MAS integration](https://element-hq.github.io/matrix-authentication-service/setup/homeserver.html).
+
+## Required work before the first encrypted product message
+
+1. Build the OTP-to-OIDC bridge with a mature OIDC provider library, persistent
+   authorization-code/session storage, PKCE, exact redirect allowlists, CSRF
+   protection, key rotation, stable non-phone `sub`, logout and session
+   revocation. Test MAS `sub`/localpart mapping and account collision handling.
+   Do not automatically link accounts by display name or phone number.
+2. Start isolated Synapse, MAS and PostgreSQL using pinned image digests and
+   test TLS/proxy, signing secrets, backup/restore, rate limits, federation
+   policy and nonpublic admin endpoints. No production credentials are needed.
+3. Complete web and iOS login, secure session storage, crypto-store restore,
+   secret storage/recovery, cross-signing, device verification and visible
+   identity-change warnings. Do not send into a room until the clients confirm
+   encryption and the intended membership/device policy.
+4. Implement a reviewed mapping and migration from each NestJS chat to a Matrix
+   encrypted room. Freeze legacy writes first; preserve a distinct legacy read
+   state. Move text, edits, redactions, reactions, attachments, voice, location
+   and sensitive system events through the Matrix clients, never through
+   server-readable previews or the old media endpoint.
+5. Run iOS-to-web and web-to-iOS interoperability against a disposable Matrix
+   deployment: first contact, offline/out-of-order delivery, duplicate and
+   tampered events, identity changes, multi-device, revoked devices, group
+   membership changes, encrypted attachments, recovery and loss of keys.
+6. Inventory and retire legacy plaintext with an approved backup/restore and
+   retention procedure. The existing database trigger also blocks ordinary
+   deletion after per-chat E2EE enablement, so purge requires a separately
+   reviewed maintenance path that never reopens plaintext writes.
+7. Obtain independent cryptographic and deployment reviews. Keep
+   `E2EE_REQUIRED=true` and fail closed until all release gates pass.
+
+No production database, homeserver, account or deployment was changed by this
+decision or SDK spike.

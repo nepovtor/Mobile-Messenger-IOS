@@ -262,7 +262,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
 
@@ -292,6 +292,10 @@ jobs:
 
       - name: Build web client
         run: npm exec -- vite build
+
+      - name: Test Matrix encrypted delivery on isolated Synapse
+        working-directory: .
+        run: Scripts/test-matrix-web-smoke.sh
 
   migrations:
     runs-on: ubuntu-latest

@@ -8,8 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		11D6DCCADCCD144C3C1F1237 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25ACC1AABD3AC5F12D308989 /* XCTest.framework */; };
+		1365B1EF1F2C1BF2775155F5 /* MatrixClientFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25FBDF647E579333241EE9B0 /* MatrixClientFactoryTests.swift */; };
+		1C9BB009E2FCE32C0F4B8A6C /* MatrixRustSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5C858E40139783ECB118E6D6 /* MatrixRustSDK */; };
 		579479C98A319213F0A5A273 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C60C7925F3F560E1F97B5D83 /* Foundation.framework */; };
-		E10000000000000000000001 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000101 /* LiquidGlass.swift */; };
 		CA58DA612F815CAE000D87A4 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA542F815CAE000D87A4 /* AnalyticsService.swift */; };
 		CA58DA622F815CAE000D87A4 /* ReachabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA5B2F815CAE000D87A4 /* ReachabilityService.swift */; };
 		CA58DA632F815CAE000D87A4 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA4F2F815CAE000D87A4 /* AppContainer.swift */; };
@@ -46,12 +47,6 @@
 		CA58DA832F815CAE000D87A4 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA3E2F815CAE000D87A4 /* AuthViewModel.swift */; };
 		CA58DA842F815CAE000D87A4 /* MessageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA2B2F815CAE000D87A4 /* MessageAttachment.swift */; };
 		CA58DA852F815CAE000D87A4 /* RESTAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA242F815CAE000D87A4 /* RESTAuthService.swift */; };
-		E20000000000000000000001 /* APIResponseParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000101 /* APIResponseParser.swift */; };
-		E20000000000000000000002 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000103 /* AppRouter.swift */; };
-		E20000000000000000000003 /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000104 /* AppSettingsStore.swift */; };
-		E20000000000000000000004 /* ConnectionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000105 /* ConnectionCoordinator.swift */; };
-		E20000000000000000000005 /* AppSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000106 /* AppSessionCoordinator.swift */; };
-		E20000000000000000000006 /* GeneratedAPIContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000107 /* GeneratedAPIContract.swift */; };
 		CA58DA862F815CAE000D87A4 /* ChatRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA58DA212F815CAE000D87A4 /* ChatRealtimeService.swift */; };
 		CA58DA872F815CAE000D87A4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA5E2F815CAE000D87A4 /* Assets.xcassets */; };
 		CA58DA882F815CAE000D87A4 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA58DA4B2F815CAE000D87A4 /* Preview Assets.xcassets */; };
@@ -88,9 +83,13 @@
 		D10000000000000000000017 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000117 /* MapView.swift */; };
 		D10000000000000000000018 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000118 /* MapViewModel.swift */; };
 		D10000000000000000000019 /* MapComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000119 /* MapComponents.swift */; };
-		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift */; };
-		FD728650F5C71B50F190D101 /* MobileMessengerIOSTests/ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */; };
-		FD728651F5C71B50F190D101 /* MobileMessengerIOSTests/AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */; };
+		E10000000000000000000001 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000101 /* LiquidGlass.swift */; };
+		E20000000000000000000001 /* APIResponseParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000101 /* APIResponseParser.swift */; };
+		E20000000000000000000002 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000103 /* AppRouter.swift */; };
+		E20000000000000000000003 /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000104 /* AppSettingsStore.swift */; };
+		E20000000000000000000004 /* ConnectionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000105 /* ConnectionCoordinator.swift */; };
+		E20000000000000000000005 /* AppSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000106 /* AppSessionCoordinator.swift */; };
+		E20000000000000000000006 /* GeneratedAPIContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000107 /* GeneratedAPIContract.swift */; };
 		F30000000000000000000001 /* ChatViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000101 /* ChatViewModelTests.swift */; };
 		F30000000000000000000002 /* ChatListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000102 /* ChatListViewModelTests.swift */; };
 		F30000000000000000000003 /* ContactsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000103 /* ContactsViewModelTests.swift */; };
@@ -99,6 +98,10 @@
 		F30000000000000000000006 /* TransportDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000106 /* TransportDecodingTests.swift */; };
 		F30000000000000000000007 /* RealtimeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000107 /* RealtimeServiceTests.swift */; };
 		F30000000000000000000008 /* ChatStorageAndRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000108 /* ChatStorageAndRepositoryTests.swift */; };
+		FB867F15D0D4B85A9757A3FA /* MatrixClientFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED622AD310AE2E15ADE0745 /* MatrixClientFactory.swift */; };
+		FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */; };
+		FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */; };
+		FD728651F5C71B50F190D101 /* AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72470911DE789761C6C36CB /* AppConfigTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,20 +117,13 @@
 /* Begin PBXFileReference section */
 		1C1C5E882B0B598A00A6A7E5 /* MobileMessengerIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MobileMessengerIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25ACC1AABD3AC5F12D308989 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		25FBDF647E579333241EE9B0 /* MatrixClientFactoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MatrixClientFactoryTests.swift; sourceTree = "<group>"; };
+		5ED622AD310AE2E15ADE0745 /* MatrixClientFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MatrixClientFactory.swift; sourceTree = "<group>"; };
 		7B1BDB0D7A65535E6E00803C /* MobileMessengerIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MobileMessengerIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
-		A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AppConfigTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000101 /* ChatViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000102 /* ChatListViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatListViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000103 /* ContactsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ContactsViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000104 /* MapViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MapViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000105 /* AuthViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AuthViewModelTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000106 /* TransportDecodingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/TransportDecodingTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000107 /* RealtimeServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/RealtimeServiceTests.swift; sourceTree = SOURCE_ROOT; };
-		F30000000000000000000108 /* ChatStorageAndRepositoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatStorageAndRepositoryTests.swift; sourceTree = SOURCE_ROOT; };
+		A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MobileMessengerIOSTests.swift; sourceTree = SOURCE_ROOT; };
+		A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ProfileViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		A72470911DE789761C6C36CB /* AppConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AppConfigTests.swift; sourceTree = SOURCE_ROOT; };
 		C60C7925F3F560E1F97B5D83 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		E10000000000000000000101 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		CA58DA1B2F815CAE000D87A4 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CA58DA1C2F815CAE000D87A4 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		CA58DA1E2F815CAE000D87A4 /* ChatLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalStore.swift; sourceTree = "<group>"; };
@@ -135,12 +131,6 @@
 		CA58DA212F815CAE000D87A4 /* ChatRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRealtimeService.swift; sourceTree = "<group>"; };
 		CA58DA222F815CAE000D87A4 /* DefaultChatRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultChatRealtimeService.swift; sourceTree = "<group>"; };
 		CA58DA242F815CAE000D87A4 /* RESTAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTAuthService.swift; sourceTree = "<group>"; };
-		E20000000000000000000101 /* APIResponseParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponseParser.swift; sourceTree = "<group>"; };
-		E20000000000000000000103 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
-		E20000000000000000000104 /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
-		E20000000000000000000105 /* ConnectionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCoordinator.swift; sourceTree = "<group>"; };
-		E20000000000000000000106 /* AppSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionCoordinator.swift; sourceTree = "<group>"; };
-		E20000000000000000000107 /* GeneratedAPIContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedAPIContract.swift; sourceTree = "<group>"; };
 		CA58DA262F815CAE000D87A4 /* DefaultChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultChatRepository.swift; sourceTree = "<group>"; };
 		CA58DA292F815CAE000D87A4 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
 		CA58DA2A2F815CAE000D87A4 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
@@ -211,6 +201,21 @@
 		D10000000000000000000117 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
 		D10000000000000000000118 /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
 		D10000000000000000000119 /* MapComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapComponents.swift; sourceTree = "<group>"; };
+		E10000000000000000000101 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
+		E20000000000000000000101 /* APIResponseParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponseParser.swift; sourceTree = "<group>"; };
+		E20000000000000000000103 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		E20000000000000000000104 /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
+		E20000000000000000000105 /* ConnectionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCoordinator.swift; sourceTree = "<group>"; };
+		E20000000000000000000106 /* AppSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionCoordinator.swift; sourceTree = "<group>"; };
+		E20000000000000000000107 /* GeneratedAPIContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedAPIContract.swift; sourceTree = "<group>"; };
+		F30000000000000000000101 /* ChatViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000102 /* ChatListViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatListViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000103 /* ContactsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ContactsViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000104 /* MapViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/MapViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000105 /* AuthViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/AuthViewModelTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000106 /* TransportDecodingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/TransportDecodingTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000107 /* RealtimeServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/RealtimeServiceTests.swift; sourceTree = SOURCE_ROOT; };
+		F30000000000000000000108 /* ChatStorageAndRepositoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MobileMessengerIOSTests/ChatStorageAndRepositoryTests.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -218,6 +223,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1C9BB009E2FCE32C0F4B8A6C /* MatrixRustSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -237,13 +243,13 @@
 			isa = PBXGroup;
 			children = (
 				CA58DA602F815CAE000D87A4 /* MobileMessengerIOS */,
-				1C1C5E872B0B598A00A6A7E5,
+				1C1C5E872B0B598A00A6A7E5 /*  */,
 				79BFD70436D0191426B2AB6F /* MobileMessengerIOSTests */,
 				DFC3355375C7C36CCE54035B /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
-		1C1C5E872B0B598A00A6A7E5 = {
+		1C1C5E872B0B598A00A6A7E5 /*  */ = {
 			isa = PBXGroup;
 			children = (
 				1C1C5E882B0B598A00A6A7E5 /* MobileMessengerIOS.app */,
@@ -251,12 +257,21 @@
 			);
 			sourceTree = "<group>";
 		};
+		478BA12EF83596E9709D62F9 /* Matrix */ = {
+			isa = PBXGroup;
+			children = (
+				5ED622AD310AE2E15ADE0745 /* MatrixClientFactory.swift */,
+			);
+			name = Matrix;
+			path = Matrix;
+			sourceTree = "<group>";
+		};
 		79BFD70436D0191426B2AB6F /* MobileMessengerIOSTests */ = {
 			isa = PBXGroup;
 			children = (
-				A72470911DE789761C6C36CB /* MobileMessengerIOSTests/AppConfigTests.swift */,
-				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift */,
-				A72470901DE789761C6C36CB /* MobileMessengerIOSTests/ProfileViewModelTests.swift */,
+				A72470911DE789761C6C36CB /* AppConfigTests.swift */,
+				A724708F1DE789761C6C36CB /* MobileMessengerIOSTests.swift */,
+				A72470901DE789761C6C36CB /* ProfileViewModelTests.swift */,
 				F30000000000000000000101 /* ChatViewModelTests.swift */,
 				F30000000000000000000102 /* ChatListViewModelTests.swift */,
 				F30000000000000000000103 /* ContactsViewModelTests.swift */,
@@ -265,6 +280,7 @@
 				F30000000000000000000106 /* TransportDecodingTests.swift */,
 				F30000000000000000000107 /* RealtimeServiceTests.swift */,
 				F30000000000000000000108 /* ChatStorageAndRepositoryTests.swift */,
+				25FBDF647E579333241EE9B0 /* MatrixClientFactoryTests.swift */,
 			);
 			name = MobileMessengerIOSTests;
 			sourceTree = "<group>";
@@ -332,6 +348,7 @@
 				CA58DA232F815CAE000D87A4 /* Realtime */,
 				CA58DA252F815CAE000D87A4 /* Remote */,
 				CA58DA272F815CAE000D87A4 /* Repositories */,
+				478BA12EF83596E9709D62F9 /* Matrix */,
 			);
 			path = Data;
 			sourceTree = "<group>";
@@ -518,15 +535,6 @@
 			path = Session;
 			sourceTree = "<group>";
 		};
-		E20000000000000000000102 /* Network */ = {
-			isa = PBXGroup;
-			children = (
-				E20000000000000000000101 /* APIResponseParser.swift */,
-				E20000000000000000000107 /* GeneratedAPIContract.swift */,
-			);
-			path = Network;
-			sourceTree = "<group>";
-		};
 		CA58DA5C2F815CAE000D87A4 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
@@ -609,6 +617,15 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		E20000000000000000000102 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000101 /* APIResponseParser.swift */,
+				E20000000000000000000107 /* GeneratedAPIContract.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -625,6 +642,9 @@
 			dependencies = (
 			);
 			name = MobileMessengerIOS;
+			packageProductDependencies = (
+				5C858E40139783ECB118E6D6 /* MatrixRustSDK */,
+			);
 			productName = MobileMessengerIOS;
 			productReference = 1C1C5E882B0B598A00A6A7E5 /* MobileMessengerIOS.app */;
 			productType = "com.apple.product-type.application";
@@ -675,7 +695,10 @@
 				Base,
 			);
 			mainGroup = 1C1C5E7F2B0B598A00A6A7E5;
-			productRefGroup = 1C1C5E872B0B598A00A6A7E5;
+			packageReferences = (
+				3AAF0E41B7A1095F1371C1B5 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */,
+			);
+			productRefGroup = 1C1C5E872B0B598A00A6A7E5 /*  */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -786,6 +809,7 @@
 				CA58DA8E2F815CAE000D87A4 /* CreateChatUseCase.swift in Sources */,
 				CA58DA8F2F815CAE000D87A4 /* SendImageMessageUseCase.swift in Sources */,
 				CA58DA902F815CAE000D87A4 /* SetTypingUseCase.swift in Sources */,
+				FB867F15D0D4B85A9757A3FA /* MatrixClientFactory.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -793,9 +817,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FD728651F5C71B50F190D101 /* MobileMessengerIOSTests/AppConfigTests.swift in Sources */,
-				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests/MobileMessengerIOSTests.swift in Sources */,
-				FD728650F5C71B50F190D101 /* MobileMessengerIOSTests/ProfileViewModelTests.swift in Sources */,
+				FD728651F5C71B50F190D101 /* AppConfigTests.swift in Sources */,
+				FD72864FF5C71B50F190D101 /* MobileMessengerIOSTests.swift in Sources */,
+				FD728650F5C71B50F190D101 /* ProfileViewModelTests.swift in Sources */,
 				F30000000000000000000001 /* ChatViewModelTests.swift in Sources */,
 				F30000000000000000000002 /* ChatListViewModelTests.swift in Sources */,
 				F30000000000000000000003 /* ContactsViewModelTests.swift in Sources */,
@@ -804,6 +828,7 @@
 				F30000000000000000000006 /* TransportDecodingTests.swift in Sources */,
 				F30000000000000000000007 /* RealtimeServiceTests.swift in Sources */,
 				F30000000000000000000008 /* ChatStorageAndRepositoryTests.swift in Sources */,
+				1365B1EF1F2C1BF2775155F5 /* MatrixClientFactoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1166,6 +1191,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		3AAF0E41B7A1095F1371C1B5 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/matrix-org/matrix-rust-components-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 26.10.02;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5C858E40139783ECB118E6D6 /* MatrixRustSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3AAF0E41B7A1095F1371C1B5 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */;
+			productName = MatrixRustSDK;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1C1C5E802B0B598A00A6A7E5 /* Project object */;
 }

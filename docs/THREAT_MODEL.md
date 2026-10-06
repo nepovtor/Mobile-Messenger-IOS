@@ -1,6 +1,11 @@
 # Threat Model
 
 Review date: 2026-07-31
+Matrix migration addendum: [2026-10-06 decision](./MATRIX_E2EE_MIGRATION.md).
+The revised group design uses Matrix Megolm and does not promise strict group
+post-compromise security. The OTP-to-OIDC bridge and Matrix homeserver add
+separate account-linking, token, room-state and signing-key trust boundaries
+that require independent review before rollout.
 Scope: iOS app, web app, NestJS API, WebSocket transport, PostgreSQL,
 S3-compatible storage, push providers, Telegram/SMS verification, CI/CD, and
 Cloudways operations.
