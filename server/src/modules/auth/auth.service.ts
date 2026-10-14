@@ -435,6 +435,13 @@ export class AuthService implements OnModuleInit {
   ): Promise<UserEntity> {
     let user = await this.findUserByMethodAndContact(method, contact);
 
+    // Fallback: find by contact for users created before the phone column existed
+    if (!user && method === AuthMethod.PHONE) {
+      user = await this.usersRepository.findOne({
+        where: { method, contact },
+      });
+    }
+
     const displayName =
       preferredDisplayName ?? buildDisplayName(method, contact);
 
@@ -463,6 +470,11 @@ export class AuthService implements OnModuleInit {
           throw new BadRequestException("Failed to create user");
         }
       }
+    }
+
+    // Backfill phone column for legacy users
+    if (method === AuthMethod.PHONE && !user.phone) {
+      user.phone = contact;
     }
 
     let shouldSave = false;
