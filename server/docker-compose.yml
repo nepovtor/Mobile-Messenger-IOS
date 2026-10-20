@@ -24,7 +24,7 @@ services:
     command:
       - sh
       - -ec
-      - npm run migration:run:dist && exec npm run start
+      - node ./node_modules/typeorm/cli.js -d dist/database/data-source.js migration:run && exec node dist/main.js
     ports:
       - "127.0.0.1:${PORT:-3001}:${PORT:-3001}"
     tmpfs:

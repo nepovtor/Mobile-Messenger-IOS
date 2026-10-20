@@ -104,7 +104,7 @@ DOTENV_CONFIG_PATH=/secure/config/mobile-messenger.production.env \
 pm2 save
 ```
 
-For a zero-downtime reload after the process exists:
+To reload after the process exists (the single-process setup may interrupt service):
 
 ```bash
 cd /home/master/Mobile-Messenger-IOS/server
@@ -118,10 +118,14 @@ pm2 save
 
 ```bash
 pm2 status
-ss -ltnp | grep '127.0.0.1:3001'
+ss -ltnp | grep ':3001'
 curl --fail --silent http://127.0.0.1:3001/api/health
 curl --fail --silent https://phpstack-1634854-6489525.cloudwaysapps.com/api/health
 ```
+
+The current Node listener binds `0.0.0.0`, so the socket listing alone does not
+prove isolation. Verify host firewall rules and test externally that port 3001
+is unreachable; only the HTTPS reverse proxy should be public.
 
 Also execute every post-deployment control in
 [SECURITY_DEPLOYMENT.md](./SECURITY_DEPLOYMENT.md), including rejected

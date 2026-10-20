@@ -24,8 +24,10 @@ Configure these outside Git:
 - TLS certificate and HTTPS redirect; TLS 1.2+ only.
 - HSTS after every required subdomain is HTTPS.
 - Host firewall exposing only 80/443 and restricted administration access.
-- Backend listens on loopback (`127.0.0.1:3001`); reverse proxy is the only
-  public entry.
+- The reverse proxy must be the only public backend entry. Production Compose
+  publishes the container port on `127.0.0.1:3001`. The current Node listener
+  binds `0.0.0.0`; a direct PM2 deployment therefore requires host firewall
+  isolation and verification that the backend port cannot be reached externally.
 - `/realtime` proxies WebSocket upgrade and preserves the `Origin` header.
 - Managed PostgreSQL requires TLS (`sslmode=require`) and a dedicated
   least-privilege application user.
@@ -102,12 +104,11 @@ PUSH_ALLOW_TEST_ENDPOINT=false
 `CORS_ORIGINS` and `WS_ORIGINS` are explicit comma-separated HTTPS origins;
 wildcards are forbidden.
 
-For this private repository, GitHub CodeQL upload and Dependency Review require
-GitHub Advanced Security. After enabling it in repository settings, create the
-repository variables `CODEQL_ENABLED=true` and
-`DEPENDENCY_REVIEW_ENABLED=true`. The workflows remain skipped until both the
-feature and their corresponding variables are enabled; backend and web package
-audits continue to run unconditionally.
+CodeQL and Dependency Review are opt-in in the checked-in workflows. Enable
+and verify the corresponding GitHub repository features before setting
+`CODEQL_ENABLED=true` and `DEPENDENCY_REVIEW_ENABLED=true`. Confirm their actual
+job results; skipped jobs do not establish a completed analysis. Backend and
+web package audits run independently of these optional jobs.
 
 ## 4. Build and configuration checks
 
@@ -139,12 +140,11 @@ npm run build
 Never run `npm audit fix --force` in production. Review and update each
 dependency through a normal PR and lockfile.
 
-The web audit has one narrow, expiring exception for
-`GHSA-qwww-vcr4-c8h2`: the application is a static SPA and does not enable
-React Server Components or server actions, which are the affected mode.
-`Scripts/audit-web-dependencies.mjs` rejects every other advisory and expires
-the exception on 2026-08-08. Upgrade React Router and remove the exception as
-soon as a patched release is published.
+The web audit policy lives in `Scripts/audit-web-dependencies.mjs`. It contains
+a historical conditional exception for `GHSA-qwww-vcr4-c8h2` that expired on
+2026-08-08. If that advisory is present, the expired exception must fail; do not
+extend it or infer a clean audit from an older document. Run the audit against
+the locked dependencies and review its current result.
 
 Validate Compose without printing its rendered environment:
 

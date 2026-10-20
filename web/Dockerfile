@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 
 ARG VITE_API_BASE_URL
@@ -18,7 +18,7 @@ COPY web/ ./
 COPY MobileMessengerIOS/Assets.xcassets/AppIcon.appiconset /app/MobileMessengerIOS/Assets.xcassets/AppIcon.appiconset
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 

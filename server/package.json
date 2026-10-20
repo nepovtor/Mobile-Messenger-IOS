@@ -1,7 +1,7 @@
 {
   "name": "mobile-messenger-backend",
   "version": "0.1.0",
-  "description": "Minimal backend scaffold for Mobile Messenger iOS client integration",
+  "description": "NestJS API and WebSocket backend for Mobile Messenger iOS and web clients",
   "license": "MIT",
   "type": "commonjs",
   "scripts": {

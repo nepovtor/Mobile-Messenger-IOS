@@ -17,6 +17,7 @@ build-ios/
 build-ios-device/
 build-ios-sim/
 DerivedData/
+.derivedData/
 *.build/
 *.xcresult/
 *.xcuserstate
@@ -27,6 +28,7 @@ xcuserdata/
 
 # Local runtime artifacts
 .voice-messages-backup/
+web-dist-cloudways-*.zip
 .cloudflared.log
 .cloudflared.pid
 .server.log
