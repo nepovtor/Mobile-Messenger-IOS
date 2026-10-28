@@ -543,7 +543,7 @@ export function SystemPage() {
                 Admin Console
               </p>
               <h1 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">
-                Mobile Messenger Admin
+                ОМА для сотрудников — администрирование
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
                 Separate workspace for backend health, auth configuration,

@@ -18,7 +18,7 @@ export class TwilioSmsProvider implements SmsService {
     const body = new URLSearchParams({
       To: phone,
       From: this.config.from || getSmsFrom(),
-      Body: `Your Mobile Messenger verification code is: ${code}`,
+      Body: `Код входа в «ОМА для сотрудников»: ${code}`,
     });
 
     const auth = Buffer.from(

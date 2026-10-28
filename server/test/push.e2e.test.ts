@@ -702,7 +702,7 @@ test("push: telegram notifications are preferred for linked recipients", async (
   assert.equal(firstTelegramDelivery.chatId, "telegram-chat-1");
   assert.match(
     firstTelegramDelivery.text,
-    /Новое сообщение в Mobile Messenger/,
+    /Новое сообщение в «ОМА для сотрудников»/,
   );
   assert.doesNotMatch(firstTelegramDelivery.text, /Author/);
   assert.doesNotMatch(

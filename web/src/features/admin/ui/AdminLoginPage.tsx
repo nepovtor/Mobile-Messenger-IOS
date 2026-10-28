@@ -28,7 +28,7 @@ export function AdminLoginPage() {
 
             <div className="space-y-3">
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Mobile Messenger Admin
+                ОМА для сотрудников — администрирование
               </h1>
               <p className="max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
                 Отдельная control plane-зона для системного статуса, логов,

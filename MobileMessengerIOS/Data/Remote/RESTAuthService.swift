@@ -9,7 +9,7 @@ public protocol AuthNetworking: Sendable {
 
 public struct RESTAuthService: AuthNetworking {
     public static let clientPlatform = "ios"
-    public static let genericDeviceName = "Mobile Messenger iOS"
+    public static let genericDeviceName = "OMA Employees iOS"
 
     private let baseURL: URL
     private let session: URLSession

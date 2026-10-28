@@ -415,7 +415,7 @@ function buildGenericPushPayload(badge?: number): GenericPushPayload {
 }
 
 function buildTelegramNotificationText(buttonUrl: string | null): string {
-  const summary = "Новое сообщение в Mobile Messenger";
+  const summary = "Новое сообщение в «ОМА для сотрудников»";
 
   if (!buttonUrl) {
     return summary;

@@ -66,7 +66,7 @@ function bridgeContext(dto: OidcBridgeRequestDto): SessionRequestContext {
   // generated once per browser session and IP comes from its trusted proxy.
   return {
     deviceUuid: dto.deviceUuid.toLowerCase(),
-    deviceName: "Mobile Messenger OIDC",
+    deviceName: "OMA Employees OIDC",
     platform: SessionPlatform.WEB,
     ipAddress: dto.ipAddress,
     userAgent: null,

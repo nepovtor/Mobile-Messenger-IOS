@@ -149,7 +149,7 @@ final class TransportDecodingTests: XCTestCase {
             )
             XCTAssertEqual(
                 request.value(forHTTPHeaderField: "X-Device-Name"),
-                "Mobile Messenger iOS"
+                "OMA Employees iOS"
             )
         }
     }

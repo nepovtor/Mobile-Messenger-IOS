@@ -15,7 +15,7 @@ export function WorkspaceSwitcher() {
         }
       >
         <MessageSquareText className="h-4 w-4" />
-        Messenger
+        Чаты
       </NavLink>
       <NavLink
         to="/map"
@@ -28,7 +28,7 @@ export function WorkspaceSwitcher() {
         }
       >
         <MapPinned className="h-4 w-4" />
-        Map
+        Карта
       </NavLink>
     </div>
   );

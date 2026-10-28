@@ -885,7 +885,7 @@ test("/auth/request sends code when TelegramLink exists", async (t) => {
     (item) => item["chat_id"] === "999",
   );
   assert.ok(sendMessagePayload);
-  assert.match(String(sendMessagePayload?.["text"]), /Mobile Messenger/);
+  assert.match(String(sendMessagePayload?.["text"]), /ОМА для сотрудников/);
   assert.match(String(sendMessagePayload?.["text"]), /123456/);
 });
 

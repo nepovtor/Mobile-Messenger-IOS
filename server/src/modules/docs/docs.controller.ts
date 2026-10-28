@@ -464,7 +464,7 @@ function buildLandingPage(input: {
   <body>
     <main class="shell">
       <section class="hero">
-        <div class="eyebrow">Mobile Messenger API</div>
+        <div class="eyebrow">ОМА для сотрудников API</div>
         <h1>Локальный backend для iOS-мессенджера</h1>
         <p class="lead">
           Здесь живут авторизация, список контактов, чаты, история сообщений,

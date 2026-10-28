@@ -112,7 +112,7 @@ struct AuthView: View {
                 .shadow(color: AppTheme.primary.opacity(0.40), radius: 18, y: 8)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("Вход в Mobile Messenger")
+                Text("ОМА для сотрудников")
                     .font(.system(size: 27, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)

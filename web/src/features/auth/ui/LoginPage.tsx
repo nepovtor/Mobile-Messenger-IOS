@@ -55,7 +55,7 @@ export function LoginPage() {
             draggable={false}
           />
           <div className="text-lg font-semibold tracking-[-0.02em] text-white">
-            Mobile Messenger
+            ОМА для сотрудников
           </div>
         </motion.header>
 

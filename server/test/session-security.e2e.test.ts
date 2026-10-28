@@ -69,7 +69,7 @@ test("refresh-token reuse revokes the whole token family", async (t) => {
   const headers = {
     "X-Client-Platform": "ios",
     "X-Device-ID": "ios-device-security-test",
-    "X-Device-Name": "Mobile Messenger iOS",
+    "X-Device-Name": "OMA Employees iOS",
   };
 
   await client

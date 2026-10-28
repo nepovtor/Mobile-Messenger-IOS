@@ -170,7 +170,7 @@ export function TelegramSubscriptionPage() {
             <div className="flex flex-wrap gap-2">
               <Badge tone="success">Telegram Mini App</Badge>
               <Badge tone="warning">Access tiers</Badge>
-              <Badge tone="neutral">Mobile Messenger Plus</Badge>
+              <Badge tone="neutral">ОМА для сотрудников Плюс</Badge>
             </div>
 
             <div className="space-y-3">

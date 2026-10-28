@@ -219,7 +219,7 @@ export class TelegramBotService
 
     await this.callTelegram("sendMessage", {
       chat_id: link.chatId,
-      text: `Ваш код входа в Mobile Messenger: ${code}. Код действует ${Math.ceil(
+      text: `Ваш код входа в «ОМА для сотрудников»: ${code}. Код действует ${Math.ceil(
         getAuthCodeTTLSeconds() / 60,
       )} минут.`,
     });
@@ -785,7 +785,7 @@ export class TelegramBotService
     const lines = [
       planLabel
         ? `План ${planLabel} уже открыт в demo mini app подписки.`
-        : "Откройте demo mini app подписки Mobile Messenger Plus.",
+        : "Откройте демо mini app подписки «ОМА для сотрудников Плюс».",
       "",
       "Что внутри:",
       "• Starter, Team и Business тарифы",

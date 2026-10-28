@@ -33,9 +33,9 @@ export function buildSessionRequestContext(
   const suppliedDeviceName = getSingleHeader(request, "x-device-name");
   const fallbackName =
     platform === SessionPlatform.IOS
-      ? "Mobile Messenger iOS"
+      ? "OMA Employees iOS"
       : platform === SessionPlatform.WEB
-        ? "Mobile Messenger Web"
+        ? "OMA Employees Web"
         : "Unknown client";
   const deviceName = suppliedDeviceName ?? fallbackName;
   if (!DEVICE_NAME_PATTERN.test(deviceName)) {

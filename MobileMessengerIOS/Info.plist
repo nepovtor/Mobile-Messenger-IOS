@@ -6,6 +6,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>ОМА для сотрудников</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -48,12 +50,12 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Нужно для выбора фотографии и отправки ее в чат.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Микрофон используется для записи и отправки голосовых сообщений.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Нужно, чтобы по вашему запросу показать вас на карте и поделиться локацией с контактами.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон используется для записи и отправки голосовых сообщений.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Нужно для выбора фотографии и отправки ее в чат.</string>
 	<key>REST_BASE_URL</key>
 	<string>$(REST_BASE_URL)</string>
 	<key>TELEGRAM_BOT_USERNAME</key>
