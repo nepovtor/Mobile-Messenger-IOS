@@ -48,7 +48,7 @@ The Swift package manifest pins a checksum for its XCFramework. The iOS
 `MatrixClientFactory` requires HTTPS and passes a random 32-byte Keychain key
 to the official encrypted SQLite store. The web startup requires HTTPS (or
 development loopback), a caller-supplied 32-byte IndexedDB wrapping key and a
-cross-tab Web Lock. As of 2026-11-21 the Web workspace has OAuth, SDK timeline and encrypted outbox integration in source; the native workspace also has OAuth/restore/sync/timeline source integration, with current Xcode/runtime verification still pending. Real-stack acceptance of the new workspace remains open. The web
+cross-tab Web Lock. As of 2026-11-21 the Web workspace has OAuth, SDK timeline and encrypted outbox integration in source; the native workspace also has OAuth/restore/sync/timeline source integration, with Xcode simulator tests (94) and Release build passing; cross-platform runtime acceptance is still pending. Real-stack acceptance of the new workspace remains open. The web
 key must come from an approved interactive unlock/recovery flow; it cannot be
 persisted in `localStorage`, an ordinary cookie or a backend table. The iOS
 Keychain item is device-only; loss of that item makes the existing local store

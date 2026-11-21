@@ -125,7 +125,7 @@ and an external audit were not performed.
    Verify the pinned provider/SDK/image versions and SBOM against their advisories.
 2. Finish real iOS and Web OIDC login, secure token vault/Keychain, long-running
    sync, SDK timeline routing, idempotent send/retry, session refresh and logout.
-   The Web workspace is now connected in source; the native workspace now has source integration for OAuth/restore/sync/timeline and all chat entry routes, but its current Xcode build is unverified. November browser behavior needs real-stack acceptance.
+   The Web workspace is now connected in source; the native workspace now has source integration for OAuth/restore/sync/timeline and all chat entry routes, and its current Xcode simulator build/tests now pass; real cross-platform UI acceptance is still open. November browser behavior needs real-stack acceptance.
 3. Implement SAS/cross-signing verification, identity-change warnings, recovery/
    secret storage and usable lost-key behavior. Audit key-sharing policy and
    malicious homeserver/device-list/membership races.
@@ -148,3 +148,5 @@ See [the six-stage implementation plan](IMPLEMENTATION_PLAN_2026-11-20.md) for c
 Unit/component tests cover these boundaries with controlled doubles; they do not replace testing real MAS, the Rust crypto store, device verification or iOS interoperability. Existing signing identities and plaintext history are not reset or migrated automatically. No deployment or production-data operation was performed.
 
 Native source checkpoint: the app uses a single Matrix workspace per Nest session, a fenced `ClientSessionDelegate` in Keychain, encrypted per-device SQLite, explicit identity-based key sharing and disabled automatic cross-signing setup. Legacy chat screens are instantiated only after the metadata endpoint explicitly reports Matrix disabled. Native registration is separate from Web/admin. SDK send-queue restart/membership behavior, OAuth metadata/session lifecycle, first-device setup, SAS and actual iOS↔Web traffic still require review and runtime acceptance. Syntax/project parsing is not a native build.
+
+CI checkpoint `a4d697d` (2026-11-21): iOS 94/94 plus Release simulator build, Web 115/115, backend 155/155, migrated PostgreSQL checks, OTP/OIDC/MAS/Synapse smoke, container and secret scan passed in [run #255](https://github.com/nepovtor/Mobile-Messenger-IOS/actions/runs/44902469682). The native Keychain test required an ad-hoc-signed simulator test host; its initial unsigned-host failure was resolved by signing the test build. This does not prove physical-device Keychain/backup behavior or real iOS↔Web messaging. CodeQL and dependency-review were skipped by workflow conditions. No independent audit is implied.
