@@ -85,6 +85,10 @@ describe("recovery preserves existing identity", () => {
       existingStorage: true,
     });
     await session.recover(encodeRecoveryKey(new Uint8Array(32).fill(7))!);
+    expect(api.userHasCrossSigningKeys).toHaveBeenCalledWith(
+      "@alice:matrix.example",
+      true,
+    );
     expect(api.bootstrapCrossSigning).toHaveBeenCalledExactlyOnceWith({});
     expect(api.restoreKeyBackup).toHaveBeenCalledOnce();
     expect(api.createRecoveryKeyFromPassphrase).not.toHaveBeenCalled();

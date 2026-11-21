@@ -1,5 +1,6 @@
 import {
   ClientEvent,
+  PendingEventOrdering,
   SyncState,
   createClient,
   type MatrixClient,
@@ -312,7 +313,10 @@ export class MatrixSession {
               client.on(ClientEvent.Sync, onSync);
             });
             void synced.catch(() => undefined);
-            await client.startClient({ initialSyncLimit: 100 });
+            await client.startClient({
+              initialSyncLimit: 100,
+              pendingEventOrdering: PendingEventOrdering.Detached,
+            });
             await synced;
             if (!this.active) throw new Error("Сессия закрыта");
             await this.save();
@@ -460,6 +464,11 @@ export class MatrixSession {
       keyID = await client.secretStorage.getDefaultKeyId();
       this.requireActive();
       if (!keyID) throw new Error("Восстановление ещё не настроено");
+      if (!(await api.userHasCrossSigningKeys(this.record.userID, true)))
+        throw new Error(
+          "Публичные ключи аккаунта недоступны. Восстановление приостановлено",
+        );
+      this.requireActive();
       this.recoveryKeys.set(keyID, decodeRecoveryKey(recoveryKey));
       // bootstrapCrossSigning creates a new identity if any private key is missing.
       // Verify that all existing secrets can be read before allowing the SDK call.

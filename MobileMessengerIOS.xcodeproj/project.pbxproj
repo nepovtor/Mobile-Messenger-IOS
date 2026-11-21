@@ -105,6 +105,7 @@
 		4E9236A15C2163F36E2EE1D2 /* MatrixMetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872EED3AEC04E527B6FD2863 /* MatrixMetadataService.swift */; };
 		144F7D42051E0386C90FD65A /* MatrixSessionKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D16EBA8250D496260EEF85 /* MatrixSessionKeychain.swift */; };
 		A555860CF2B78FDED0E07B73 /* NativeMatrixWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5008D1B18DEC63D8B0AB3129 /* NativeMatrixWorkspace.swift */; };
+		D46591363506B01A06D8947F /* MatrixInteroperabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD1ED26D2A9860D6340978B1 /* MatrixInteroperabilityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -222,6 +223,7 @@
 		872EED3AEC04E527B6FD2863 /* MatrixMetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixMetadataService.swift; sourceTree = "<group>"; };
 		B4D16EBA8250D496260EEF85 /* MatrixSessionKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixSessionKeychain.swift; sourceTree = "<group>"; };
 		5008D1B18DEC63D8B0AB3129 /* NativeMatrixWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMatrixWorkspace.swift; sourceTree = "<group>"; };
+		BD1ED26D2A9860D6340978B1 /* MatrixInteroperabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatrixInteroperabilityTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -290,6 +292,7 @@
 				F30000000000000000000107 /* RealtimeServiceTests.swift */,
 				F30000000000000000000108 /* ChatStorageAndRepositoryTests.swift */,
 				25FBDF647E579333241EE9B0 /* MatrixClientFactoryTests.swift */,
+				BD1ED26D2A9860D6340978B1 /* MatrixInteroperabilityTests.swift */,
 			);
 			name = MobileMessengerIOSTests;
 			sourceTree = "<group>";
@@ -841,6 +844,7 @@
 				F30000000000000000000007 /* RealtimeServiceTests.swift in Sources */,
 				F30000000000000000000008 /* ChatStorageAndRepositoryTests.swift in Sources */,
 				1365B1EF1F2C1BF2775155F5 /* MatrixClientFactoryTests.swift in Sources */,
+				D46591363506B01A06D8947F /* MatrixInteroperabilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

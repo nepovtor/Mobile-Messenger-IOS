@@ -22,7 +22,8 @@ public actor MatrixClientFactory {
     }
 
     public func makeClient(homeserverURL: URL, userID: String, deviceID: String,
-                           sessionDelegate: ClientSessionDelegate? = nil) async throws -> Client {
+                           sessionDelegate: ClientSessionDelegate? = nil,
+                           trustedRootCertificates: [Data] = []) async throws -> Client {
         guard homeserverURL.scheme == "https", homeserverURL.host != nil,
               homeserverURL.user == nil, homeserverURL.password == nil,
               ["", "/"].contains(homeserverURL.path),
@@ -58,6 +59,7 @@ public actor MatrixClientFactory {
             .autoEnableCrossSigning(autoEnableCrossSigning: false)
             .roomKeyRecipientStrategy(strategy: .identityBasedStrategy)
             .sqliteStore(config: store)
+        if !trustedRootCertificates.isEmpty { builder = builder.addRootCertificates(certificates: trustedRootCertificates) }
         if let sessionDelegate { builder = builder.setSessionDelegate(sessionDelegate: sessionDelegate) }
         return try await builder.build()
     }
