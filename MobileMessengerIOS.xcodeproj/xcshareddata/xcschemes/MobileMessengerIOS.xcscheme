@@ -41,9 +41,6 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "NO">
-      <EnvironmentVariables>
-         <EnvironmentVariable key="MATRIX_INTEROP_MANIFEST" value="$(MATRIX_INTEROP_MANIFEST)" isEnabled="YES"/>
-      </EnvironmentVariables>
       <Testables>
          <TestableReference
             skipped = "NO">

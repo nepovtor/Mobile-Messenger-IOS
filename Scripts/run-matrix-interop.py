@@ -106,8 +106,9 @@ def main():
             else:
                 subprocess.run(['xcodebuild', '-project', 'MobileMessengerIOS.xcodeproj', '-scheme', 'MobileMessengerIOS',
                                 '-destination', 'id=' + args.simulator, '-only-testing:MobileMessengerIOSTests/MatrixInteroperabilityTests',
-                                'MATRIX_INTEROP_MANIFEST=' + str(manifest), 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
-                                'CODE_SIGN_STYLE=Manual', 'test'], cwd=repo, check=True)
+                                'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
+                                'CODE_SIGN_STYLE=Manual', 'test'], cwd=repo, check=True,
+                               env={**env, 'TEST_RUNNER_MATRIX_INTEROP_MANIFEST': str(manifest)})
             if not state_file.exists() or json.loads(state_file.read_text()).get('completed') is not True:
                 raise RuntimeError('The SDK driver did not complete the interop assertions; a skipped XCTest is not acceptance')
             print('Official SDK interop acceptance passed (' + ('JS fixture self-check' if args.web_only else 'iOS Simulator ↔ JS') + ').')
