@@ -1,5 +1,6 @@
 import {
   ClientEvent,
+  HttpApiEvent,
   PendingEventOrdering,
   SyncState,
   createClient,
@@ -170,6 +171,8 @@ export class MatrixSession {
   transport?: MatrixRoomTransport;
   verification?: MatrixVerificationController;
   outbox?: SecureMessageOutbox;
+  revoked = false;
+  private removeAuthListener?: () => void;
   private removeSyncListener?: () => void;
   private active = true;
   private releaseLock?: () => void;
@@ -266,6 +269,18 @@ export class MatrixSession {
               },
             });
             this.client = client;
+            const revoked = () => {
+              if (!this.active) return;
+              this.revoked = true;
+              void this.close();
+              this.onError(
+                "Сессия устройства отозвана. Войдите на новом устройстве и восстановите ключи",
+                true,
+              );
+            };
+            client.on(HttpApiEvent.SessionLoggedOut, revoked);
+            this.removeAuthListener = () =>
+              client.removeListener(HttpApiEvent.SessionLoggedOut, revoked);
             const identity = await client.whoami();
             if (!this.active) throw new Error("Сессия закрыта");
             if (
@@ -509,23 +524,11 @@ export class MatrixSession {
     }
   }
 
-  async logout(): Promise<void> {
-    try {
-      await this.client?.logout(true);
-    } catch {
-      await this.close();
-      throw new Error(
-        "Сервер не подтвердил выход. Повторите отзыв устройства после восстановления соединения",
-      );
-    }
-    await this.close();
-    await this.saves.catch(() => undefined);
-    await writeSealedSession(this.record.userID, null);
-  }
-
   async close(): Promise<void> {
     this.active = false;
     this.outbox?.close();
+    this.removeAuthListener?.();
+    this.removeAuthListener = undefined;
     this.removeSyncListener?.();
     this.verification?.close();
     this.transport?.close();

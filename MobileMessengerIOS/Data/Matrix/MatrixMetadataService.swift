@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-struct NativeMatrixConfig: Decodable, Sendable {
+struct NativeMatrixConfig: Codable, Sendable {
     let homeserverURL: URL
     let issuerURL: URL
     let serverName: String

@@ -1,9 +1,13 @@
 // @vitest-environment node
+import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   UnlockedSessionVault,
   encodeBytes,
+  readSealedSession,
+  writeSealedSession,
+  retireSealedSessions,
   type StoredMatrixSession,
 } from "./sessionVault";
 
@@ -81,5 +85,51 @@ describe("Matrix session vault", () => {
     ).rejects.toThrow();
     vault.lock();
     await expect(vault.seal(record)).rejects.toThrow("Сессия закрыта");
+  });
+  it("retires acknowledged credentials atomically while retaining encrypted drafts and foreign accounts", async () => {
+    vi.stubGlobal("indexedDB", new IDBFactory());
+    const id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const scopedOwner = "@u_aaaaaaaabbbbccccddddeeeeeeeeeeee:matrix.example";
+    const vault = await UnlockedSessionVault.create(passphrase, scopedOwner);
+    const originalRecord = { ...record, userID: scopedOwner };
+    const sealed = await vault.seal(originalRecord);
+    await writeSealedSession(scopedOwner, sealed);
+    const otherOwner = "@u_ffffffffbbbbccccddddeeeeeeeeeeee:matrix.example";
+    await writeSealedSession(otherOwner, sealed);
+    await retireSealedSessions(id);
+    expect(await readSealedSession(scopedOwner)).toBeUndefined();
+    expect(await readSealedSession(otherOwner)).toEqual(sealed);
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("mobile-messenger-matrix-session-v1", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const keys = await new Promise<IDBValidKey[]>((resolve) => {
+      const request = db
+        .transaction("sessions")
+        .objectStore("sessions")
+        .getAllKeys();
+      request.onsuccess = () => resolve(request.result);
+    });
+    db.close();
+    const archivedKey = keys.find(
+      (key) =>
+        typeof key === "string" && key.startsWith(scopedOwner + "\0retired/"),
+    );
+    expect(archivedKey).toBeDefined();
+    const archived = await readSealedSession(archivedKey as string);
+    expect(archived).toEqual(sealed);
+    const restored = await UnlockedSessionVault.unlock(
+      passphrase,
+      scopedOwner,
+      archived!,
+    );
+    expect(restored.session.pendingMessages).toEqual(
+      originalRecord.pendingMessages,
+    );
+    expect(JSON.stringify(archived)).not.toContain("Unsent private text");
+    restored.vault.lock();
+    vault.lock();
+    vi.unstubAllGlobals();
   });
 });

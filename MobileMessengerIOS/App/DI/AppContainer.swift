@@ -92,9 +92,26 @@ public final class AppContainer: ObservableObject {
 
     func makeNativeMatrixWorkspace() -> NativeMatrixWorkspaceModel {
         if let nativeMatrixWorkspace { return nativeMatrixWorkspace }
-        let model = NativeMatrixWorkspaceModel(container: self)
+        let model = NativeMatrixWorkspaceModel(container: self) { [weak self] config in
+            guard let self, let owner = self.sessionStore.currentUserID,
+                  (try? config.validate(owner: owner)) != nil,
+                  let data = try? JSONEncoder().encode(config) else { return }
+            self.defaults.set(data, forKey: self.matrixConfigurationKey(owner: owner))
+        }
         nativeMatrixWorkspace = model
         return model
+    }
+
+    private func matrixConfigurationKey(owner: UUID) -> String {
+        "matrix.last-config.v1.\(configService.restBaseURL.absoluteString).\(owner.uuidString)"
+    }
+
+    private func matrixSessionForLogout() throws -> MatrixSessionKeychain? {
+        guard let owner = sessionStore.currentUserID,
+              let data = defaults.data(forKey: matrixConfigurationKey(owner: owner)) else { return nil }
+        let config = try JSONDecoder().decode(NativeMatrixConfig.self, from: data)
+        try config.validate(owner: owner)
+        return try MatrixSessionKeychain(config: config, onFailure: {})
     }
 
     func makeMatrixMetadataService() -> MatrixMetadataService {
@@ -313,7 +330,7 @@ public final class AppContainer: ObservableObject {
                 self?.isPushFeatureEnabled ?? false
             },
             isSessionAuthenticated: { [weak self] in
-                self?.sessionStore.authToken != nil
+                (self?.sessionStore.authToken != nil) && (self?.sessionStore.isLogoutPending == false)
             },
             routeHandler: { [weak self] chatID in
                 self?.router.openChatFromPush(chatID: chatID)
@@ -329,11 +346,14 @@ public final class AppContainer: ObservableObject {
     }
 
     private func configureCoordinators() {
+        let namespace = sessionStore.cacheNamespace
         connectionCoordinator.configure(
             realtimeService: realtimeService,
             foregroundRefresh: { [weak self] in
-                guard let self, self.sessionStore.authToken != nil else { return }
+                guard let self, self.sessionStore.authToken != nil, !self.sessionStore.isLogoutPending,
+                      self.sessionStore.cacheNamespace == namespace else { return }
                 await self.notificationManager.syncAuthorizedStateForCurrentSession()
+                guard !self.sessionStore.isLogoutPending, self.sessionStore.cacheNamespace == namespace else { return }
                 self.realtimeService.activate()
                 await self.chatRepository.refreshForForeground()
             }
@@ -436,6 +456,9 @@ public final class AppContainer: ObservableObject {
                 if let refreshToken {
                     try await RESTAuthService(baseURL: baseURL).logout(refreshToken: refreshToken)
                 }
+                // Pending logout blocks new authentication. Retire only the
+                // current credential after acknowledgement; retain SDK stores.
+                try self.matrixSessionForLogout()?.remove()
             }
         } catch {
             logoutError = "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход."

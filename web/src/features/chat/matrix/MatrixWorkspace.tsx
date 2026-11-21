@@ -15,6 +15,7 @@ import type { PendingSecureMessage } from "./messageOutbox";
 import {
   UnlockedSessionVault,
   readSealedSession,
+  retireSealedSessions,
   type SealedSession,
 } from "./sessionVault";
 
@@ -34,6 +35,7 @@ export function MatrixWorkspace({
   const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [revokedDevice, setRevokedDevice] = useState(false);
   const [connectedSession, setConnectedSession] =
     useState<MatrixSession | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +119,7 @@ export function MatrixWorkspace({
           if (generation.current !== current) return;
           setError(message);
           if (fatal) {
+            setRevokedDevice(runtime.current?.revoked === true);
             setReady(false);
             setGeneratedRecovery(null);
             setRecovery("");
@@ -262,6 +265,32 @@ export function MatrixWorkspace({
             ? "Введите пароль локального хранилища, чтобы открыть ключи этого устройства"
             : "Задайте пароль для ключей на этом устройстве. Затем подтвердите вход своим номером телефона"}
         </p>
+        {revokedDevice && (
+          <div className="space-y-3">
+            <p className="text-sm">
+              Прежняя очередь останется зашифрованной на этом устройстве и не
+              будет отправлена повторно.
+            </p>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void retireSealedSessions(user.userID)
+                  .then(() => {
+                    setStored(null);
+                    setRevokedDevice(false);
+                    setError(null);
+                  })
+                  .catch(() =>
+                    setError("Не удалось закрыть локальную сессию устройства"),
+                  )
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Подготовить вход на новом устройстве
+            </Button>
+          </div>
+        )}
         <form onSubmit={(event) => void connect(event)} className="space-y-4">
           <label className="block text-sm">
             Пароль локального хранилища

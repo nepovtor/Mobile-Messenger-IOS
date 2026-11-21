@@ -255,3 +255,42 @@ export async function writeSealedSession(
     db.close();
   }
 }
+
+/** Retire revoked credentials without deleting encrypted unsent drafts or old SDK stores. */
+export async function retireSealedSessions(
+  applicationUserID: string,
+): Promise<void> {
+  const normalized = applicationUserID.replaceAll("-", "").toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(normalized) || typeof indexedDB === "undefined")
+    return;
+  const prefix = `@u_${normalized}:`;
+  const db = await database();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction("sessions", "readwrite");
+      const store = transaction.objectStore("sessions");
+      const cursor = store.openCursor();
+      cursor.onsuccess = () => {
+        const entry = cursor.result;
+        if (!entry) return;
+        if (
+          typeof entry.key === "string" &&
+          entry.key.startsWith(prefix) &&
+          !entry.key.includes("\0")
+        ) {
+          store.put(
+            entry.value,
+            `${entry.key}\0retired/${crypto.randomUUID()}`,
+          );
+          entry.delete();
+        }
+        entry.continue();
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = transaction.onabort = () =>
+        reject(new Error("Не удалось закрыть локальную сессию устройства"));
+    });
+  } finally {
+    db.close();
+  }
+}

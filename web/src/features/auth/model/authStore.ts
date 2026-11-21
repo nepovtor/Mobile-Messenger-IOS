@@ -20,7 +20,9 @@ const logoutReceiptKey = "mobile-messenger.logout-pending.v1";
 
 function hasPendingLogout(): boolean {
   try {
-    return localStorage.getItem(logoutReceiptKey) === "pending";
+    return (
+      localStorage.getItem(logoutReceiptKey)?.startsWith("pending") === true
+    );
   } catch {
     return false;
   }
@@ -39,6 +41,7 @@ type AuthStore = {
   verifyCode: (phone: string, code: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
+  observeLogoutReceipt: (marker: string | null) => void;
   restoreSession: () => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<void>;
   handleUnauthorized: (message: string) => void;
@@ -128,15 +131,29 @@ export const authStore = create<AuthStore>((set, get) => ({
     ++authGeneration;
     const operation = (async () => {
       set({ logoutPending: true, logoutError: null });
+      let pendingUserID = get().currentUser?.userID;
+      try {
+        pendingUserID ??= localStorage.getItem(logoutReceiptKey)?.split(":")[1];
+      } catch {
+        /* No persistent storage. */
+      }
       // Only a receipt marker is persisted. The HttpOnly refresh cookie remains
       // available to the idempotent logout endpoint until remote acknowledgement.
       try {
-        localStorage.setItem(logoutReceiptKey, "pending");
+        localStorage.setItem(
+          logoutReceiptKey,
+          pendingUserID ? `pending:${pendingUserID}` : "pending",
+        );
       } catch {
         /* Still try to settle online. */
       }
       try {
         await authApi.logout();
+        if (pendingUserID) {
+          const { retireSealedSessions } =
+            await import("@/features/chat/matrix/sessionVault");
+          await retireSealedSessions(pendingUserID);
+        }
       } catch (error) {
         set({
           logoutError:
@@ -165,6 +182,23 @@ export const authStore = create<AuthStore>((set, get) => ({
       await operation;
     } finally {
       if (logoutOperation === operation) logoutOperation = undefined;
+    }
+  },
+  observeLogoutReceipt(marker) {
+    ++authGeneration;
+    if (marker?.startsWith("pending")) {
+      set({ logoutPending: true, logoutError: null });
+    } else {
+      clearLegacyAccessToken();
+      set({
+        logoutPending: false,
+        logoutError: null,
+        currentUser: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+        telegramStartUrl: null,
+      });
     }
   },
   async restoreSession() {

@@ -8,6 +8,13 @@ import MatrixRustSDK
 import SwiftUI
 import UIKit
 
+final class MatrixAuthenticationObserver: ClientDelegate, @unchecked Sendable {
+    private let revoked: @Sendable () -> Void
+    init(revoked: @escaping @Sendable () -> Void) { self.revoked = revoked }
+    func didReceiveAuthError(isSoftLogout: Bool) { revoked() }
+    func onBackgroundTaskErrorReport(taskName: String, error: BackgroundTaskFailureReason) {}
+}
+
 private final class MatrixRecoveryProgressObserver: EnableRecoveryProgressListener, @unchecked Sendable {
     func onUpdate(status: EnableRecoveryProgress) {}
 }
@@ -55,6 +62,7 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
     @Published var legacy = false
     @Published var busy = false
     @Published var ready = false
+    @Published var revokedDevice = false
     @Published var error: String?
     @Published var chats: [ServerChat] = []
     @Published var messages: [NativeMatrixMessage] = []
@@ -68,7 +76,10 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
     @Published var editing: EventOrTransactionId?
     private let metadata: MatrixMetadataService
     private let owner: UUID
+    private let rememberConfiguration: (NativeMatrixConfig) -> Void
     private let factory = MatrixClientFactory()
+    private var authObserver: MatrixAuthenticationObserver?
+    private var authHandle: TaskHandle?
     private var client: Client?
     private var keychain: MatrixSessionKeychain?
     private var sync: SyncService?
@@ -82,7 +93,8 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
     private var generation = UUID()
     private var selectionGeneration = UUID()
 
-    init(container: AppContainer) {
+    init(container: AppContainer, rememberConfiguration: @escaping (NativeMatrixConfig) -> Void = { _ in }) {
+        self.rememberConfiguration = rememberConfiguration
         metadata = container.makeMatrixMetadataService()
         owner = container.sessionStore.currentUserID ?? SessionStore.Constants.defaultUserID
         super.init()
@@ -93,6 +105,7 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         do {
             let result = try await metadata.config(owner: owner)
             guard generation == current else { return }
+            if let result { rememberConfiguration(result) }
             config = result
             legacy = result == nil
         } catch { if generation == current { self.error = error.localizedDescription } }
@@ -119,6 +132,15 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
                 userID: config.expectedUserID, deviceID: vault.deviceID, sessionDelegate: vault)
             guard generation == current else { vault.close(); return }
             client = next
+            let authObserver = MatrixAuthenticationObserver { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.generation == current else { return }
+                    self.close(); self.revokedDevice = true
+                    self.error = "Сессия устройства отозвана. Выполните вход на новом устройстве и восстановите ключи"
+                }
+            }
+            self.authObserver = authObserver
+            authHandle = try next.setDelegate(delegate: authObserver)
             if let restored = vault.restoredSession {
                 try await next.restoreSession(session: restored)
             } else {
@@ -168,10 +190,25 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
             if generation == current {
                 let message = error.localizedDescription
                 close()
+                if let failure = error as? ClientError, case .MatrixApi(_, let code, _, _) = failure, code == "M_UNKNOWN_TOKEN" {
+                    revokedDevice = true
+                }
                 self.error = message
             }
         }
         if generation == current { busy = false }
+    }
+
+    func replaceRevokedDevice() async {
+        guard revokedDevice, !ready, !busy, let config else { return }
+        do {
+            // A confirmed SDK auth error is required. Keep the old encrypted
+            // store and unsent queue; a new device never replays them silently.
+            let old = try MatrixSessionKeychain(config: config, onFailure: {})
+            try old.remove()
+            revokedDevice = false
+            await connect()
+        } catch { self.error = "Не удалось закрыть учётные данные прежнего устройства" }
     }
 
     func open(chatID: UUID) async {
@@ -405,6 +442,7 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         browser?.cancel(); browser = nil
         browserContinuation?.resume(throwing: MatrixWorkspaceError.sessionClosed); browserContinuation = nil
         authorization = nil
+        authHandle?.cancel(); authHandle = nil; authObserver = nil
         keychain?.close(); keychain = nil
         deviceVerification?.close(); deviceVerification = nil; showDeviceVerification = false; showRecoverySettings = false
         timelineHandle?.cancel(); timelineHandle = nil; timelineObserver = nil
@@ -549,7 +587,12 @@ struct MatrixChatEntryView: View {
                             if model.config != nil {
                                 Text("Подтвердите вход своим номером. Сессия устройства хранится в Связке ключей.")
                                     .font(.body).foregroundStyle(.secondary)
-                                Button("Открыть переписку") { Task { await model.connect() } }.disabled(model.busy)
+                                if model.revokedDevice {
+                                    Text("Неотправленные сообщения остаются в хранилище прежнего устройства и не будут отправлены повторно.").font(.footnote)
+                                    Button("Войти на новом устройстве") { Task { await model.replaceRevokedDevice() } }.disabled(model.busy)
+                                } else {
+                                    Button("Открыть переписку") { Task { await model.connect() } }.disabled(model.busy)
+                                }
                             } else if model.error == nil { ProgressView("Проверяем настройки переписки") }
                             if let error = model.error { Text(error).foregroundStyle(.red).accessibilityLabel("Ошибка: \(error)") }
                         }.padding(24)

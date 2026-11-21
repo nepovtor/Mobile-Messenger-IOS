@@ -108,7 +108,7 @@ describe("authStore", () => {
     expect(authStore.getState().logoutPending).toBe(true);
     expect(authStore.getState().currentUser?.userID).toBe("user-1");
     expect(localStorage.getItem("mobile-messenger.logout-pending.v1")).toBe(
-      "pending",
+      "pending:user-1",
     );
     expect(chatStore.getState().chats).toHaveLength(0);
     authStore.getState().handleUnauthorized("Expired");
@@ -147,6 +147,15 @@ describe("authStore", () => {
     await restore;
     expect(authStore.getState().isAuthenticated).toBe(false);
     expect(authStore.getState().currentUser).toBeNull();
+  });
+
+  it("locks another tab on pending logout and accepts its settled receipt without another logout request", () => {
+    authStore.getState().observeLogoutReceipt("pending:user-1");
+    expect(authStore.getState().logoutPending).toBe(true);
+    authStore.getState().observeLogoutReceipt(null);
+    expect(authStore.getState().isAuthenticated).toBe(false);
+    expect(authStore.getState().logoutPending).toBe(false);
+    expect(authApi.logout).not.toHaveBeenCalled();
   });
 
   it("establishes a cookie session before requesting the current user", async () => {
