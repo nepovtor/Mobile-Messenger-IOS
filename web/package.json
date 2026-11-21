@@ -9,8 +9,8 @@
     "audit:security": "node ../Scripts/audit-web-dependencies.mjs",
     "contract:check": "node ../Scripts/generate-api-contract.mjs --check",
     "preview": "vite preview",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.ts\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"*.ts\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.{js,mjs}\" \"*.ts\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.{js,mjs}\" \"*.ts\"",
     "lint": "eslint .",
     "test": "vitest run"
   },
@@ -23,6 +23,7 @@
     "framer-motion": "^12.23.24",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.511.0",
+    "matrix-js-sdk": "43.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-leaflet": "^5.0.0",

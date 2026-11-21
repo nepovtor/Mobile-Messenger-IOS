@@ -5,6 +5,15 @@ import UIKit
 
 @MainActor
 struct DialogueView: View {
+    let chat: ChatListItem
+    @ObservedObject private var container: AppContainer
+    init(chat: ChatListItem) { self.init(chat: chat, container: .shared) }
+    init(chat: ChatListItem, container: AppContainer) { self.chat = chat; self.container = container }
+    var body: some View { MatrixChatEntryView(container: container, initialChat: chat) }
+}
+
+@MainActor
+struct LegacyDialogueView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var container: AppContainer
     let chat: ChatListItem

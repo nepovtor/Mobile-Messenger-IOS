@@ -56,6 +56,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private let sleep: @Sendable (UInt64) async -> Void
     private let maxReconnectDelay: TimeInterval
     private let heartbeatInterval: TimeInterval
+    private let sendTimeout: TimeInterval
 
     private let stateQueue = DispatchQueue(label: "realtime.state.queue")
     private var state: ChatRealtimeConnectionState = .disconnected
@@ -69,6 +70,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private var heartbeatTask: Task<Void, Never>?
     private var socket: RealtimeSocketTask?
     private var pendingSends: [UUID: CheckedContinuation<Message, Error>] = [:]
+    private var pendingSendTimeouts: [UUID: Task<Void, Never>] = [:]
     private var connectionGeneration: UInt64 = 0
 
     init(
@@ -80,6 +82,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         featureFlags: FeatureFlags,
         maxReconnectDelay: TimeInterval = 15,
         heartbeatInterval: TimeInterval = 15,
+        sendTimeout: TimeInterval = 20,
         sleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
             try? await Task.sleep(nanoseconds: nanoseconds)
         },
@@ -92,6 +95,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
         self.featureFlags = featureFlags
         self.maxReconnectDelay = maxReconnectDelay
         self.heartbeatInterval = heartbeatInterval
+        self.sendTimeout = max(0.01, sendTimeout)
         self.sleep = sleep
         self.socketFactory = socketFactory ?? { request in
             URLSessionRealtimeSocketTask(task: session.webSocketTask(with: request))
@@ -239,9 +243,26 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
                     return
                 }
 
+                guard self.pendingSends[clientMessageID] == nil else {
+                    continuation.resume(throwing: AppError.network(description: "Сообщение уже отправляется"))
+                    return
+                }
                 self.pendingSends[clientMessageID] = continuation
+                let timeout = self.sendTimeout
+                self.pendingSendTimeouts[clientMessageID] = Task { [weak self] in
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    } catch {
+                        return
+                    }
+                    self?.failPendingSend(
+                        clientMessageID: clientMessageID,
+                        error: AppError.network(description: "Сервер не подтвердил отправку. Повторите попытку")
+                    )
+                }
                 guard let socket = self.socket else {
                     self.pendingSends.removeValue(forKey: clientMessageID)
+                    self.pendingSendTimeouts.removeValue(forKey: clientMessageID)?.cancel()
                     continuation.resume(
                         throwing: AppError.network(description: "WebSocket disconnected")
                     )
@@ -513,6 +534,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private func resolvePendingSend(clientMessageID: UUID, message: ServerMessage) {
         stateQueue.async { [weak self] in
             guard let continuation = self?.pendingSends.removeValue(forKey: clientMessageID) else { return }
+            self?.pendingSendTimeouts.removeValue(forKey: clientMessageID)?.cancel()
             continuation.resume(
                 returning: message
                     .asDomainMessage(localID: clientMessageID)
@@ -524,6 +546,7 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
     private func failPendingSend(clientMessageID: UUID, error: Error) {
         stateQueue.async { [weak self] in
             guard let continuation = self?.pendingSends.removeValue(forKey: clientMessageID) else { return }
+            self?.pendingSendTimeouts.removeValue(forKey: clientMessageID)?.cancel()
             continuation.resume(throwing: error)
         }
     }
@@ -533,6 +556,8 @@ public final class DefaultChatRealtimeService: ChatRealtimeService, @unchecked S
             guard let self else { return }
             let continuations = pendingSends.values
             pendingSends.removeAll()
+            pendingSendTimeouts.values.forEach { $0.cancel() }
+            pendingSendTimeouts.removeAll()
             continuations.forEach { $0.resume(throwing: error) }
         }
     }

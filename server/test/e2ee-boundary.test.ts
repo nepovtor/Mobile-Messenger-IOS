@@ -552,6 +552,14 @@ test("encrypted submission stores only opaque envelopes and is idempotent", asyn
     })),
   };
 
+  await assert.rejects(
+    service.submit(user, {
+      ...dto,
+      protocolVersion: "matrix-v1",
+    }),
+    BadRequestException,
+  );
+
   const first = await service.submit(user, dto);
   const repeated = await service.submit(user, dto);
 

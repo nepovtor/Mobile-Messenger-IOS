@@ -30,12 +30,10 @@ public final class AppContainer: ObservableObject {
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
-    private lazy var authTokenProvider: @Sendable () async -> String? = { [weak self] in
-        await self?.validAuthToken()
-    }
     private var refreshTask: Task<AuthVerifyResponse, Error>?
-    private let chatStore: ChatLocalStore
+    private var chatStore: ChatLocalStore
     private var chatRepository: ChatRepository!
+    private var nativeMatrixWorkspace: NativeMatrixWorkspaceModel?
     private var chatService: ChatNetworking!
     private var contactsService: ContactsNetworking!
     private var profileService: ProfileNetworking!
@@ -79,12 +77,29 @@ public final class AppContainer: ObservableObject {
             router: router,
             connectionCoordinator: connectionCoordinator
         )
-        chatStore = SwiftDataChatStore()
+        chatStore = SwiftDataChatStore(namespace: sessionStore.cacheNamespace)
         notificationManager = PushNotificationManager.shared
         configureNetworkingServices()
         configureCoordinators()
+        sessionStore.sessionBoundaryHandler = { [weak self] in
+            self?.replaceSessionServices()
+        }
         bindChildState()
         runDebugBackendHealthCheck()
+    }
+
+    func makeNativeMatrixWorkspace() -> NativeMatrixWorkspaceModel {
+        if let nativeMatrixWorkspace { return nativeMatrixWorkspace }
+        let model = NativeMatrixWorkspaceModel(container: self)
+        nativeMatrixWorkspace = model
+        return model
+    }
+
+    func makeMatrixMetadataService() -> MatrixMetadataService {
+        let namespace = sessionStore.cacheNamespace
+        return MatrixMetadataService(baseURL: configService.restBaseURL, token: { [weak self] in
+            await self?.validAuthToken(namespace: namespace)
+        })
     }
 
     public func updateAppearanceMode(_ mode: AppearanceMode) {
@@ -236,40 +251,37 @@ public final class AppContainer: ObservableObject {
     }
 
     private func configureNetworkingServices() {
+        let namespace = sessionStore.cacheNamespace
+        let authTokenProvider: @Sendable () async -> String? = { [weak self] in
+            await self?.validAuthToken(namespace: namespace)
+        }
+        let unauthorizedHandler: @Sendable () async -> Void = { [weak self] in
+            await self?.handleUnauthorizedSessionReset(namespace: namespace)
+        }
         chatService = RESTChatService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         contactsService = RESTContactsService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         profileService = RESTProfileService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         locationService = RESTLocationService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         pushService = RESTPushDeviceService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         contactsRepository = DefaultContactsRepository(service: contactsService)
         profileRepository = DefaultProfileRepository(service: profileService)
@@ -286,7 +298,8 @@ public final class AppContainer: ObservableObject {
             remote: chatService,
             realtime: realtimeService,
             analytics: analytics,
-            reachability: reachability
+            reachability: reachability,
+            attachmentNamespace: namespace
         )
         notificationManager.configure(
             pushService: pushService,
@@ -313,10 +326,6 @@ public final class AppContainer: ObservableObject {
             }
         )
         sessionCoordinator.configure(
-            realtimeService: realtimeService,
-            resetLocalState: { [weak self] in
-                await self?.chatRepository?.resetLocalState()
-            },
             syncNotifications: { [weak self] in
                 await self?.notificationManager.syncAuthorizedStateForCurrentSession()
             },
@@ -337,13 +346,26 @@ public final class AppContainer: ObservableObject {
     }
 
     private func applyConfigurationChange() {
-        configureNetworkingServices()
-        configureCoordinators()
-        configurationRevision += 1
+        sessionStore.logout()
         runDebugBackendHealthCheck()
         if connectionCoordinator.isSceneActive {
             Task { await connectionCoordinator.refresh() }
         }
+    }
+
+    private func replaceSessionServices() {
+        nativeMatrixWorkspace?.close()
+        nativeMatrixWorkspace = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        realtimeService?.handleLogout()
+        let previousRepository = chatRepository as? DefaultChatRepository
+        previousRepository?.invalidateSession()
+        Task { await previousRepository?.resetLocalState() }
+        chatStore = SwiftDataChatStore(namespace: sessionStore.cacheNamespace)
+        configureNetworkingServices()
+        configureCoordinators()
+        configurationRevision += 1
     }
 
     private func runDebugBackendHealthCheck() {
@@ -411,11 +433,13 @@ public final class AppContainer: ObservableObject {
         router.clearPendingPushChatNavigation()
     }
 
-    private func handleUnauthorizedSessionReset() async {
+    private func handleUnauthorizedSessionReset(namespace: UUID) async {
+        guard namespace == sessionStore.cacheNamespace else { return }
         sessionCoordinator.handleUnauthorized()
     }
 
-    private func validAuthToken() async -> String? {
+    private func validAuthToken(namespace: UUID) async -> String? {
+        guard namespace == sessionStore.cacheNamespace else { return nil }
         guard let accessToken = sessionStore.authToken else {
             return nil
         }
@@ -441,6 +465,7 @@ public final class AppContainer: ObservableObject {
 
         do {
             let response = try await task.value
+            guard namespace == sessionStore.cacheNamespace, !Task.isCancelled else { return nil }
             refreshTask = nil
             sessionStore.updateCredentials(
                 accessToken: response.token,
@@ -448,6 +473,7 @@ public final class AppContainer: ObservableObject {
             )
             return response.token
         } catch {
+            guard namespace == sessionStore.cacheNamespace else { return nil }
             refreshTask = nil
             if let expiration = Self.jwtExpiration(accessToken),
                expiration > Date() {

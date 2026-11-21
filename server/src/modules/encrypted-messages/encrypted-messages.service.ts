@@ -138,6 +138,13 @@ export class EncryptedMessagesService {
     dto: SubmitEncryptedMessageDto,
   ): Promise<EncryptedMessageReceipt> {
     this.consumeRateLimit(user, "submit", 120);
+    // Matrix events require room state, sync and to-device key exchange from a
+    // Matrix homeserver. This older opaque-envelope API cannot provide them.
+    if (/^matrix(?:$|[._-])/i.test(dto.protocolVersion)) {
+      throw new BadRequestException(
+        "Matrix messages must use the Matrix homeserver",
+      );
+    }
     const clientTimestamp = this.parseClientTimestamp(dto.clientTimestamp);
     const decodedEnvelopes = this.decodeEnvelopes(dto.envelopes);
     await this.devicesService.requireCurrentDevice(user);
@@ -164,7 +171,7 @@ export class EncryptedMessagesService {
         const chats = manager.getRepository(ChatEntity);
         const chat = await chats.findOne({
           where: { id: dto.chatID },
-          lock: { mode: "pessimistic_read" },
+          lock: { mode: "pessimistic_write" },
         });
         if (!chat) {
           throw new NotFoundException("Chat not found");

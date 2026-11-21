@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common";
+import { HttpException, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
   ConnectedSocket,
@@ -133,10 +133,10 @@ export class RealtimeGateway
     @MessageBody() body: MessageSendPayload,
   ) {
     const user = this.requireUser(client);
-    this.requireEventQuota(client, "message.send", user.sub);
-    this.assertMessageSendPayload(body);
 
     try {
+      this.requireEventQuota(client, "message.send", user.sub);
+      this.assertMessageSendPayload(body);
       const message = await this.chatService.addRealtimeMessage(
         body.chatID,
         body,
@@ -152,7 +152,16 @@ export class RealtimeGateway
       };
     } catch (error) {
       const reason =
-        error instanceof Error ? error.message : "Failed to send message";
+        error instanceof HttpException || error instanceof WsException
+          ? error.message
+          : "Failed to send message";
+      if (
+        !body ||
+        typeof body.clientMessageId !== "string" ||
+        body.clientMessageId.length > 128
+      ) {
+        throw new WsException("Invalid message payload");
+      }
 
       this.realtimeService.sendToUser(user.sub, {
         event: "message.failed",

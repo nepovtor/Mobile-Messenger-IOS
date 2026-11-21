@@ -18,4 +18,9 @@ public protocol ChatLocalStore: Sendable {
     func allPendingMessages() async throws -> [Message]
     func purgeMessages(olderThan date: Date) async throws
     func reset() async throws
+    func invalidate() async throws
+}
+
+public extension ChatLocalStore {
+    func invalidate() async throws { try await reset() }
 }

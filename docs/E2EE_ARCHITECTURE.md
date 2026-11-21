@@ -7,6 +7,9 @@ Follow-up: [2026-10-01 reassessment](./E2EE_REASSESSMENT_2026-10-01.md)
 updates library release research and records a stored-chat plaintext-policy fix.
 The historical dependency decision below is not a current version recommendation.
 
+The 2026-10-06 [Matrix migration decision](./MATRIX_E2EE_MIGRATION.md)
+supersedes the candidate selection below. Production E2EE remains blocked.
+
 This document separates the opaque-delivery server work in this branch from
 the client cryptography that is still missing. The project must not advertise
 end-to-end encryption or enable a public production rollout until every exit
@@ -77,12 +80,14 @@ cryptographic primitives:
 - one-time prekeys for asynchronous first contact;
 - authenticated session establishment;
 - a fresh message key for every message;
-- forward secrecy and post-compromise security;
+- forward secrecy, with group post-compromise limitations explicitly reviewed
+  and disclosed as decided in the Matrix migration record;
 - replay protection and bounded skipped-key handling;
 - out-of-order delivery;
 - explicit multi-device fan-out;
 - visible identity-key changes and verified-contact safety state;
-- a supported group mechanism with epoch/key rotation on membership changes;
+- a supported group mechanism with outbound session rotation on membership
+  changes; the server `membership_epoch` is not a cryptographic epoch;
 - deterministic cross-platform serialization and official test vectors.
 
 Text, replies, edits, deletes, reactions, attachments, voice, documents,

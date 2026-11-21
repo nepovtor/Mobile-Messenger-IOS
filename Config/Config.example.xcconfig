@@ -11,3 +11,7 @@ FEATURE_REALTIME = YES
 FEATURE_PUSH = YES
 FEATURE_MEDIA = NO
 FEATURE_VERBOSE_LOGGING = YES
+
+// Public MAS native client ID; register mobilemessenger://matrix/callback.
+// Leave empty until that isolated server/client is configured. Never reuse the web/admin client.
+MATRIX_IOS_CLIENT_ID =

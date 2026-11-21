@@ -14,6 +14,11 @@ const AdminLoginPage = lazy(async () => ({
   default: (await import("@/features/admin/ui/AdminLoginPage")).AdminLoginPage,
 }));
 
+const MatrixCallbackPage = lazy(async () => ({
+  default: (await import("@/features/chat/matrix/MatrixCallbackPage"))
+    .MatrixCallbackPage,
+}));
+
 const MapPage = lazy(async () => ({
   default: (await import("@/features/location/ui/MapPage")).MapPage,
 }));
@@ -126,6 +131,14 @@ export default function App() {
 
   return (
     <Routes>
+      <Route
+        path="/matrix/callback"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <MatrixCallbackPage />
+          </Suspense>
+        }
+      />
       <Route
         path="/"
         element={

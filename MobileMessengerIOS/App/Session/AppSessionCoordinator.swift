@@ -7,9 +7,7 @@ public final class AppSessionCoordinator {
     private let router: AppRouter
     private let connectionCoordinator: ConnectionCoordinator
     private var stateCancellable: AnyCancellable?
-    private var lastAuthenticatedUserID: UUID?
-    private var realtimeService: ChatRealtimeService?
-    private var resetLocalState: (@MainActor () async -> Void)?
+    private var authenticationTask: Task<Void, Never>?
     private var syncNotifications: (@MainActor () async -> Void)?
     private var sessionEnded: (@MainActor () -> Void)?
     private var detachNotifications: (@MainActor () async -> Void)?
@@ -26,14 +24,10 @@ public final class AppSessionCoordinator {
     }
 
     public func configure(
-        realtimeService: ChatRealtimeService,
-        resetLocalState: @escaping @MainActor () async -> Void,
         syncNotifications: @escaping @MainActor () async -> Void,
         sessionEnded: @escaping @MainActor () -> Void,
         detachNotifications: @escaping @MainActor () async -> Void
     ) {
-        self.realtimeService = realtimeService
-        self.resetLocalState = resetLocalState
         self.syncNotifications = syncNotifications
         self.sessionEnded = sessionEnded
         self.detachNotifications = detachNotifications
@@ -57,24 +51,26 @@ public final class AppSessionCoordinator {
             guard let self else { return }
             switch state {
             case .authenticated(_, let userID, _):
-                let previousUserID = lastAuthenticatedUserID
-                lastAuthenticatedUserID = userID
-                Task {
-                    if previousUserID != nil, previousUserID != userID {
-                        self.realtimeService?.handleLogout()
-                        await self.resetLocalState?()
-                    }
+                authenticationTask?.cancel()
+                let namespace = sessionStore.cacheNamespace
+                authenticationTask = Task { [weak self] in
+                    guard let self, !Task.isCancelled,
+                          self.sessionStore.cacheNamespace == namespace,
+                          self.sessionStore.currentUserID == userID else { return }
                     await self.syncNotifications?()
+                    guard !Task.isCancelled,
+                          self.sessionStore.cacheNamespace == namespace,
+                          self.sessionStore.currentUserID == userID else { return }
                     if self.connectionCoordinator.isSceneActive {
                         await self.connectionCoordinator.refresh()
                     }
                 }
             case .unauthenticated:
-                lastAuthenticatedUserID = nil
+                authenticationTask?.cancel()
+                authenticationTask = nil
                 connectionCoordinator.sessionEnded()
                 sessionEnded?()
                 router.resetForLoggedOutSession()
-                Task { await self.resetLocalState?() }
             }
         }
     }

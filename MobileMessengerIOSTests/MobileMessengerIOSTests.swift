@@ -154,7 +154,12 @@ final class FakeRealtimeSocketTask: RealtimeSocketTask {
     }
 
     private let state = State()
+    private let onSend: (@Sendable (URLSessionWebSocketTask.Message) -> Void)?
     var pingError: Error?
+
+    init(onSend: (@Sendable (URLSessionWebSocketTask.Message) -> Void)? = nil) {
+        self.onSend = onSend
+    }
 
     var cancelCount: Int {
         get async { await state.cancelCount }
@@ -164,16 +169,12 @@ final class FakeRealtimeSocketTask: RealtimeSocketTask {
         get async { await state.pingCount }
     }
 
-    func enqueue(text: String) {
-        Task {
-            await state.enqueue(.success(.string(text)))
-        }
+    func enqueue(text: String) async {
+        await state.enqueue(.success(.string(text)))
     }
 
-    func enqueue(error: Error) {
-        Task {
-            await state.enqueue(.failure(error))
-        }
+    func enqueue(error: Error) async {
+        await state.enqueue(.failure(error))
     }
 
     func resume() {}
@@ -185,7 +186,7 @@ final class FakeRealtimeSocketTask: RealtimeSocketTask {
     }
 
     func send(_ message: URLSessionWebSocketTask.Message) async throws {
-        _ = message
+        onSend?(message)
     }
 
     func receive() async throws -> URLSessionWebSocketTask.Message {

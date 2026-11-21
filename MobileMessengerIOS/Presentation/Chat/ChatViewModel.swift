@@ -120,6 +120,10 @@ public final class ChatViewModel: ObservableObject {
     public func sendMessage() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        guard trimmed.utf16.count <= 4_000 else {
+            banner = .error("Максимальная длина сообщения — 4000 символов")
+            return
+        }
         inputText = ""
         scheduleTypingUpdate(isTyping: false)
 
