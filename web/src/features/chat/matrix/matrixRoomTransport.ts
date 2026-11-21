@@ -46,6 +46,7 @@ export function assertRoomMembership(
 
 export class MatrixRoomTransport {
   private active = true;
+  private readonly opening = new Map<string, Promise<Room>>();
   constructor(readonly client: MatrixClient) {}
   close(): void {
     this.active = false;
@@ -55,6 +56,19 @@ export class MatrixRoomTransport {
   }
 
   async open(chatID: string): Promise<Room> {
+    this.requireActive();
+    const current = this.opening.get(chatID);
+    if (current) return current;
+    const opening = this.openValidated(chatID);
+    this.opening.set(chatID, opening);
+    try {
+      return await opening;
+    } finally {
+      if (this.opening.get(chatID) === opening) this.opening.delete(chatID);
+    }
+  }
+
+  private async openValidated(chatID: string): Promise<Room> {
     this.requireActive();
     const ownID = this.client.getUserId();
     if (!ownID) throw new Error("Войдите в защищённую переписку");
@@ -236,6 +250,7 @@ export class MatrixRoomTransport {
         replacement.getSender() !== event.getSender())
         ? event.getOriginalContent()
         : event.getContent();
+    if (content.msgtype === "m.key.verification.request") return null;
     if (content["m.relates_to"]?.rel_type === "m.replace") return null;
     return {
       id: event.getId() ?? "",

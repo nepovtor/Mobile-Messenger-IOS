@@ -5,6 +5,10 @@ import MatrixRustSDK
 import SwiftUI
 import UIKit
 
+private final class MatrixRecoveryProgressObserver: EnableRecoveryProgressListener, @unchecked Sendable {
+    func onUpdate(status: EnableRecoveryProgress) {}
+}
+
 private final class MatrixTimelineObserver: TimelineListener, @unchecked Sendable {
     let update: @Sendable ([TimelineDiff]) -> Void
     init(_ update: @escaping @Sendable ([TimelineDiff]) -> Void) { self.update = update }
@@ -35,6 +39,10 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
     @Published var selected: UUID?
     @Published var text = ""
     @Published var recoveryKey = ""
+    @Published var generatedRecoveryKey: String?
+    @Published var deviceVerification: MatrixDeviceVerification?
+    @Published var showDeviceVerification = false
+    @Published var showRecoverySettings = false
     @Published var editing: EventOrTransactionId?
     private let metadata: MatrixMetadataService
     private let owner: UUID
@@ -120,10 +128,16 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
                 throw MatrixWorkspaceError.invalidConfiguration
             }
             try vault.save(session)
+            await next.encryption().waitForE2eeInitializationTasks()
+            guard generation == current else { throw MatrixWorkspaceError.sessionClosed }
             await next.enableAllSendQueues(enable: false)
             let service = try await next.syncService().withOfflineMode().finish()
             guard generation == current else { await service.stop(); return }
             sync = service
+            deviceVerification = try await MatrixDeviceVerification.open(client: next, ownUserID: config.expectedUserID) { [weak self] in
+                guard let self, self.generation == current else { return }
+                if !self.showRecoverySettings { self.showDeviceVerification = true }
+            }
             await service.start()
             let list = try await metadata.chats()
             guard generation == current else { return }
@@ -254,6 +268,44 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         } catch { if generation == current { self.error = error.localizedDescription } }
     }
 
+    func requestDeviceVerification(peer: Bool = false) async {
+        guard let deviceVerification, !busy else { return }
+        if deviceVerification.isPending { showDeviceVerification = true; return }
+        let current = generation
+        do {
+            var userID: String?
+            if peer {
+                guard let chatID = selected, let client, let config else { throw MatrixWorkspaceError.roomChanged }
+                _ = try await protectedRoom(chatID: chatID, client: client, config: config, generation: current)
+                let descriptor = try await metadata.descriptor(chatID: chatID)
+                try descriptor.validate(chatID: chatID, owner: config.expectedUserID)
+                let peers = descriptor.participants.filter { $0.matrixUserID != config.expectedUserID }
+                guard peers.count == 1 else { throw MatrixWorkspaceError.roomChanged }
+                userID = peers[0].matrixUserID
+            }
+            guard generation == current else { return }
+            showDeviceVerification = true
+            try await deviceVerification.request(userID: userID)
+        } catch { if generation == current { self.error = error.localizedDescription } }
+    }
+
+    func setupRecovery() async {
+        guard let client, let config, !busy else { return }
+        let current = generation; busy = true
+        defer { if generation == current { busy = false } }
+        do {
+            let encryption = client.encryption()
+            await encryption.waitForE2eeInitializationTasks()
+            guard generation == current else { return }
+            guard encryption.recoveryState() == .disabled,
+                  let identity = try await encryption.userIdentity(userId: config.expectedUserID, fallbackToServer: true), identity.isVerified() else {
+                throw NSError(domain: "Matrix", code: 3, userInfo: [NSLocalizedDescriptionKey: "У аккаунта уже есть ключи или устройство не подтверждено. Восстановите существующий ключ либо проверьте устройство"])
+            }
+            let key = try await encryption.enableRecovery(waitForBackupsToUpload: true, passphrase: nil, progressListener: MatrixRecoveryProgressObserver())
+            if generation == current { generatedRecoveryKey = key }
+        } catch { if generation == current { self.error = error.localizedDescription } }
+    }
+
     func recover() async {
         guard let client, !busy else { return }
         let current = generation; let key = recoveryKey
@@ -275,12 +327,13 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         browserContinuation?.resume(throwing: MatrixWorkspaceError.sessionClosed); browserContinuation = nil
         authorization = nil
         keychain?.close(); keychain = nil
+        deviceVerification?.close(); deviceVerification = nil; showDeviceVerification = false; showRecoverySettings = false
         timelineHandle?.cancel(); timelineHandle = nil; timelineObserver = nil
         let previous = sync; sync = nil
         let previousClient = client
         Task { await previousClient?.enableAllSendQueues(enable: false); await previous?.stop() }
         timeline = nil; timelineItems = []; messages = []; chats = []
-        client = nil; ready = false; busy = false; recoveryKey = ""; text = ""; editing = nil
+        client = nil; ready = false; busy = false; recoveryKey = ""; generatedRecoveryKey = nil; text = ""; editing = nil
     }
 
     private func authenticate(url: URL) async throws -> URL {
@@ -396,7 +449,13 @@ struct MatrixChatEntryView: View {
                             } label: { Text(chat.title) }
                         }
                         .navigationTitle("Сообщения")
-                        .toolbar { Button("Заблокировать") { model.close() } }
+                        .toolbar {
+                            Menu {
+                                Button("Подтвердить устройство") { Task { await model.requestDeviceVerification() } }
+                                Button("Ключи и восстановление") { model.showRecoverySettings = true }
+                                Button("Заблокировать") { model.close() }
+                            } label: { Image(systemName: "ellipsis.circle").accessibilityLabel("Настройки переписки") }
+                        }
                     } else {
                         VStack(spacing: 16) {
                             Text("Защищённая переписка").font(.title2)
@@ -411,6 +470,10 @@ struct MatrixChatEntryView: View {
                 }
             }
         }
+        .sheet(isPresented: $model.showDeviceVerification, onDismiss: { Task { await model.deviceVerification?.cancel() } }) {
+            if let verification = model.deviceVerification { MatrixDeviceVerificationView(verification: verification) }
+        }
+        .sheet(isPresented: $model.showRecoverySettings) { NativeMatrixRecoveryView(model: model) }
         .task { if model.config == nil && !model.legacy { await model.loadConfiguration() } }
     }
 
@@ -447,13 +510,37 @@ struct MatrixChatEntryView: View {
                 TextField("Сообщение", text: $model.text, axis: .vertical).lineLimit(1...5)
                 Button(model.editing == nil ? "Отправить" : "Сохранить") { Task { await model.send() } }.disabled(model.busy || model.text.isEmpty)
             }.padding(16)
-            DisclosureGroup("Восстановить ключи") {
-                SecureField("Ключ восстановления", text: $model.recoveryKey).textContentType(.password)
-                Button("Восстановить") { Task { await model.recover() } }.disabled(model.busy)
-            }.font(.footnote).padding(.horizontal, 16).padding(.bottom, 12)
+            HStack {
+                Button("Подтвердить устройство") { Task { await model.requestDeviceVerification() } }
+                Spacer()
+                Button("Проверить собеседника") { Task { await model.requestDeviceVerification(peer: true) } }
+            }.font(.footnote).padding(.horizontal, 16)
+            DisclosureGroup("Ключи и восстановление") { NativeMatrixRecoveryView(model: model) }
+.font(.footnote).padding(.horizontal, 16).padding(.bottom, 12)
             }
         }
         .navigationTitle(title)
         .task(id: id) { await model.open(chatID: id) }
+    }
+}
+
+
+@MainActor
+private struct NativeMatrixRecoveryView: View {
+    @ObservedObject var model: NativeMatrixWorkspaceModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Ключи и восстановление").font(.title2)
+            Button("Настроить восстановление") { Task { await model.setupRecovery() } }.disabled(model.busy)
+            if let key = model.generatedRecoveryKey {
+                Text("Сохраните ключ вне приложения. Он даёт доступ к истории сообщений")
+                Text(key).font(.body.monospaced()).textSelection(.enabled)
+                Button("Ключ сохранён") { model.generatedRecoveryKey = nil }
+            }
+            SecureField("Ключ восстановления", text: $model.recoveryKey)
+                .textContentType(nil).textInputAutocapitalization(.never).autocorrectionDisabled()
+            Button("Восстановить ключи") { Task { await model.recover() } }.disabled(model.busy)
+            if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
+        }.padding(24)
     }
 }

@@ -5,6 +5,7 @@ import { chatApi } from "@/features/chat/api/chatApi";
 import type { ChatSummary } from "@/features/chat/types/chat";
 import type { CurrentUser } from "@/features/auth/types/auth";
 import { logoutUserSession } from "@/app/sessionCoordinator";
+import { MatrixVerificationPanel } from "./MatrixVerificationPanel";
 import { MatrixSession, authorizeMatrix } from "./matrixSession";
 import type { MatrixBackendConfig } from "./matrixApi";
 import { useMatrixHistory } from "./useMatrixHistory";
@@ -328,6 +329,13 @@ export function MatrixWorkspace({
             </p>
           )}
         </nav>
+        {connectedSession && (
+          <MatrixVerificationPanel
+            session={connectedSession}
+            chatID={selected}
+            onError={setError}
+          />
+        )}
         <details className="border-t border-white/10 pt-4 text-sm">
           <summary className="cursor-pointer">Ключи и восстановление</summary>
           <p className="my-3 text-xs leading-5 text-[#a1a1a6]">

@@ -2,6 +2,10 @@
 import { readFile } from "node:fs/promises";
 import * as matrix from "matrix-js-sdk";
 import {
+  CryptoEvent,
+  VerificationRequestEvent,
+  VerificationPhase,
+  VerifierEvent,
   decodeRecoveryKey,
   OnlySignedDevicesIsolationMode,
 } from "matrix-js-sdk/lib/crypto-api/index.js";
@@ -36,8 +40,8 @@ async function wait(check, label) {
   }
   throw Error(label);
 }
-async function open(credentials) {
-  const key = decodeRecoveryKey(config.recovery);
+async function open(credentials, recoveryKey = config.recovery) {
+  let key = recoveryKey ? decodeRecoveryKey(recoveryKey) : undefined;
   const client = matrix.createClient({
     baseUrl: config.homeserver,
     userId: credentials.user_id,
@@ -45,7 +49,11 @@ async function open(credentials) {
     accessToken: credentials.access_token,
     logger: quiet,
     cryptoCallbacks: {
-      getSecretStorageKey: async ({ keys }) => [Object.keys(keys)[0], key],
+      getSecretStorageKey: async ({ keys }) =>
+        key ? [Object.keys(keys)[0], key] : null,
+      cacheSecretStorageKey: (_id, _info, value) => {
+        key = value;
+      },
     },
   });
   clients.push(client);
@@ -58,16 +66,26 @@ async function open(credentials) {
   client
     .getCrypto()
     .setDeviceIsolationMode(new OnlySignedDevicesIsolationMode());
-  if (
-    !(await client
-      .getCrypto()
-      .userHasCrossSigningKeys(credentials.user_id, true))
-  )
-    throw Error("Public signing identity missing");
-  await client.getCrypto().bootstrapCrossSigning({});
-  await client.getCrypto().loadSessionBackupPrivateKeyFromSecretStorage();
-  await client.getCrypto().restoreKeyBackup();
-  if (!(await client.getCrypto().isCrossSigningReady()))
+  const api = client.getCrypto();
+  if (recoveryKey) {
+    if (!(await api.userHasCrossSigningKeys(credentials.user_id, true)))
+      throw Error("Public signing identity missing");
+    await api.bootstrapCrossSigning({});
+    await api.loadSessionBackupPrivateKeyFromSecretStorage();
+    await api.restoreKeyBackup();
+  } else {
+    const generated = await api.createRecoveryKeyFromPassphrase();
+    key = generated.privateKey;
+    await api.bootstrapCrossSigning({
+      authUploadDeviceSigningKeys: (request) => request(null),
+    });
+    await api.bootstrapSecretStorage({
+      createSecretStorageKey: async () => generated,
+      setupNewKeyBackup: true,
+    });
+    await api.bootstrapCrossSigning({});
+  }
+  if (!(await api.isCrossSigningReady()))
     throw Error("Driver signing keys not restored");
   return client;
 }
@@ -80,6 +98,10 @@ async function read(client) {
 }
 try {
   const client = await open(config.native);
+  let incoming, incomingSas, incomingDone;
+  client.on(CryptoEvent.VerificationRequestReceived, (request) => {
+    incoming = request;
+  });
   const expected = await control("/ready");
   await wait(async () => {
     const events = await read(client);
@@ -114,6 +136,34 @@ try {
     "native-once",
   );
   await control("/received");
+  await control("/verify");
+  await wait(() => Boolean(incoming), "SAS request was not received");
+  incoming.on(VerificationRequestEvent.Change, () => {
+    if (
+      incoming.phase === VerificationPhase.Started &&
+      incoming.verifier &&
+      !incomingDone
+    ) {
+      const verifier = incoming.verifier;
+      verifier.on(VerifierEvent.ShowSas, (value) => {
+        incomingSas = value;
+      });
+      incomingSas = verifier.getShowSasCallbacks() ?? incomingSas;
+      incomingDone = verifier.verify();
+      void incomingDone.catch(() => undefined);
+    }
+  });
+  await incoming.accept();
+  await wait(() => Boolean(incomingSas), "SAS codes were not displayed");
+  const remoteSas = await control("/sas");
+  if (
+    JSON.stringify(incomingSas.sas.emoji?.map((value) => value[0]) ?? []) !==
+    JSON.stringify(remoteSas.emoji)
+  )
+    throw Error("SAS symbols differ");
+  await incomingSas.confirm();
+  await control("/confirm-sas");
+  await incomingDone;
   // Backups are uploaded asynchronously. A fresh device must recover the old inbound session.
   await pause(2000);
   const fresh = await control("/fresh");
@@ -126,6 +176,9 @@ try {
       ),
     "Fresh device did not recover history",
   );
+  const firstDevice = await control("/new-account");
+  await open(firstDevice.native, null);
+  await control("/first-device-check");
   await control("/complete");
   console.log(
     "Fixture self-check: strict signed-device crypto, acknowledgement loss, reordering, tamper and recovery passed.",

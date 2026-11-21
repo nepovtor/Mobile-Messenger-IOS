@@ -56,7 +56,7 @@ public actor MatrixClientFactory {
             .homeserverUrl(url: homeserverURL.absoluteString)
             .disableWellKnownLookup(disableWellKnownLookup: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: UUID().uuidString))
-            .autoEnableCrossSigning(autoEnableCrossSigning: false)
+            .autoEnableCrossSigning(autoEnableCrossSigning: true)
             .roomKeyRecipientStrategy(strategy: .identityBasedStrategy)
             .sqliteStore(config: store)
         if !trustedRootCertificates.isEmpty { builder = builder.addRootCertificates(certificates: trustedRootCertificates) }

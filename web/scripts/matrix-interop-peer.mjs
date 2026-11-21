@@ -7,7 +7,12 @@ import {
 } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import * as matrix from "matrix-js-sdk";
-import { OnlySignedDevicesIsolationMode } from "matrix-js-sdk/lib/crypto-api/index.js";
+import {
+  VerificationPhase,
+  VerificationRequestEvent,
+  VerifierEvent,
+  OnlySignedDevicesIsolationMode,
+} from "matrix-js-sdk/lib/crypto-api/index.js";
 
 const origin = new URL(process.env.MATRIX_INTEROP_HOMESERVER ?? "");
 if (
@@ -35,6 +40,8 @@ const state = {
   receivedNative: false,
   ackLost: false,
   reordered: false,
+  verificationPassed: false,
+  firstDeviceReady: false,
   phase: "setup",
 };
 const results = process.env.MATRIX_INTEROP_RESULT;
@@ -285,7 +292,33 @@ async function deliverScenarios() {
   state.phase = "native-exchange";
   await record();
 }
+let firstCredentials;
 let scenarios;
+let sasCallbacks, verificationDone, verificationRequest;
+async function startVerification() {
+  verificationRequest = await bob.api.requestVerificationDM(
+    native.user_id,
+    roomID,
+  );
+  let started = false;
+  const changed = async () => {
+    if (verificationRequest.phase !== VerificationPhase.Ready || started)
+      return;
+    started = true;
+    const verifier = await verificationRequest.startVerification("m.sas.v1");
+    verifier.on(VerifierEvent.ShowSas, (callbacks) => {
+      sasCallbacks = callbacks;
+    });
+    sasCallbacks = verifier.getShowSasCallbacks() ?? sasCallbacks;
+    verificationDone = verifier.verify();
+    void verificationDone.catch(() => undefined);
+  };
+  verificationRequest.on(VerificationRequestEvent.Change, () => {
+    void changed().catch(() => undefined);
+  });
+  await changed();
+}
+
 const control = createServer(async (request, response) => {
   const authorization = request.headers.authorization ?? "";
   const expected = `Bearer ${controlToken}`;
@@ -318,6 +351,71 @@ const control = createServer(async (request, response) => {
       scenarios ??= deliverScenarios();
       await scenarios;
       return reply({ corruptID, sessionID: originalSessionID, webEventID });
+    }
+    if (path === "/new-account") {
+      await register("interop_first");
+      firstCredentials = await login("interop_first", "FIRST_IOS");
+      return reply({ native: firstCredentials });
+    }
+    if (path === "/first-device-check") {
+      if (!firstCredentials) throw Error("first-device-missing");
+      const headers = {
+        Authorization: `Bearer ${firstCredentials.access_token}`,
+      };
+      const keys = await json("/_matrix/client/v3/keys/query", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          device_keys: { [firstCredentials.user_id]: [] },
+        }),
+      });
+      const defaultKey = await json(
+        `/_matrix/client/v3/user/${encodeURIComponent(firstCredentials.user_id)}/account_data/m.secret_storage.default_key`,
+        { headers },
+      );
+      const stored = await json(
+        `/_matrix/client/v3/user/${encodeURIComponent(firstCredentials.user_id)}/account_data/m.cross_signing.master`,
+        { headers },
+      );
+      const backup = await json("/_matrix/client/v3/room_keys/version", {
+        headers,
+      });
+      if (
+        !keys.master_keys?.[firstCredentials.user_id] ||
+        !defaultKey.key ||
+        !stored.encrypted?.[defaultKey.key]?.ciphertext ||
+        backup.algorithm !== "m.megolm_backup.v1.curve25519-aes-sha2"
+      )
+        throw Error("first-device-not-ready");
+      state.firstDeviceReady = true;
+      await record();
+      return reply({ ready: true });
+    }
+    if (path === "/verify") {
+      await startVerification();
+      return reply({ requested: true });
+    }
+    if (path === "/sas") {
+      await wait(() => Boolean(sasCallbacks), "sas-not-displayed");
+      return reply({
+        emoji: sasCallbacks.sas.emoji?.map((value) => value[0]) ?? [],
+        decimal: sasCallbacks.sas.decimal ?? [],
+      });
+    }
+    if (path === "/confirm-sas") {
+      if (!sasCallbacks || !verificationDone) throw Error("sas-not-started");
+      await sasCallbacks.confirm();
+      await verificationDone;
+      await wait(
+        async () =>
+          (
+            await bob.api.getUserVerificationStatus(native.user_id)
+          ).isVerified(),
+        "sas-did-not-establish-trust",
+      );
+      state.verificationPassed = true;
+      await record();
+      return reply({ verified: true });
     }
     if (path === "/fresh") {
       state.phase = "backup-upload";
@@ -352,6 +450,8 @@ const control = createServer(async (request, response) => {
     }
     if (path === "/complete") {
       if (
+        !state.firstDeviceReady ||
+        !state.verificationPassed ||
         !state.receivedNative ||
         !state.ackLost ||
         !state.reordered ||

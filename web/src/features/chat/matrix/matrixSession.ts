@@ -14,6 +14,7 @@ import type { Logger } from "matrix-js-sdk/lib/logger";
 import { secureOrigin, type MatrixBackendConfig } from "./matrixApi";
 import { pinnedMatrixFetch } from "./pinnedMatrixFetch";
 import { SecureMessageOutbox } from "./messageOutbox";
+import { MatrixVerificationController } from "./matrixVerification";
 import { MatrixRoomTransport } from "./matrixRoomTransport";
 import {
   UnlockedSessionVault,
@@ -167,6 +168,7 @@ export async function authorizeMatrix(
 export class MatrixSession {
   client?: MatrixClient;
   transport?: MatrixRoomTransport;
+  verification?: MatrixVerificationController;
   outbox?: SecureMessageOutbox;
   private removeSyncListener?: () => void;
   private active = true;
@@ -288,6 +290,7 @@ export class MatrixSession {
               new OnlySignedDevicesIsolationMode(),
             );
             this.transport = new MatrixRoomTransport(client);
+            this.verification = new MatrixVerificationController(client);
             const synced = new Promise<void>((resolve, reject) => {
               const timer = window.setTimeout(
                 () =>
@@ -518,6 +521,7 @@ export class MatrixSession {
     this.active = false;
     this.outbox?.close();
     this.removeSyncListener?.();
+    this.verification?.close();
     this.transport?.close();
     this.stopSyncWait?.();
     this.client?.stopClient();

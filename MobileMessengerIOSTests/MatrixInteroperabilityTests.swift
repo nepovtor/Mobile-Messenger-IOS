@@ -21,8 +21,13 @@ final class MatrixInteroperabilityTests: XCTestCase {
         let markers: [String: String]
     }
     private struct Ready: Decodable { let corruptID: String; let sessionID: String; let webEventID: String }
+    private struct Requested: Decodable { let requested: Bool }
+    private struct Sas: Decodable { let emoji: [String]; let decimal: [UInt16] }
+    private struct Verified: Decodable { let verified: Bool }
     private struct Fresh: Decodable { let native: Credentials }
     private struct Receipt: Decodable { let received: Bool }
+    private struct FirstReady: Decodable { let ready: Bool }
+    private final class RecoveryProgress: EnableRecoveryProgressListener, @unchecked Sendable { func onUpdate(status: EnableRecoveryProgress) {} }
     private struct Complete: Decodable { let completed: Bool }
 
     private final class Observer: TimelineListener, @unchecked Sendable {
@@ -89,7 +94,7 @@ final class MatrixInteroperabilityTests: XCTestCase {
         throw NSError(domain: "MatrixInterop", code: 2, userInfo: [NSLocalizedDescriptionKey: description])
     }
 
-    private func open(_ credentials: Credentials, config: Configuration, manifest: Manifest) async throws -> (Client, SyncService) {
+    private func open(_ credentials: Credentials, config: Configuration, manifest: Manifest, waitForRoom: Bool = true) async throws -> (Client, SyncService) {
         guard config.homeserver.scheme == "https", config.homeserver.host == "localhost", config.homeserver.port != nil else {
             throw MatrixWorkspaceError.invalidConfiguration
         }
@@ -101,7 +106,7 @@ final class MatrixInteroperabilityTests: XCTestCase {
             oauthData: nil, slidingSyncVersion: .native))
         let sync = try await client.syncService().withOfflineMode().finish()
         await sync.start()
-        try await wait("Native room did not synchronize") { try client.getRoom(roomId: config.roomID) != nil }
+        if waitForRoom { try await wait("Native room did not synchronize") { try client.getRoom(roomId: config.roomID) != nil } }
         return (client, sync)
     }
 
@@ -130,6 +135,20 @@ final class MatrixInteroperabilityTests: XCTestCase {
         _ = try await timeline.send(msg: content)
         let receipt: Receipt = try await control("received", manifest: manifest)
         XCTAssertTrue(receipt.received, "The JS peer must decrypt a ciphertext-only native event")
+        let verification = try await MatrixDeviceVerification.open(client: active.0, ownUserID: config.native.user_id, onRequest: {})
+        let requested: Requested = try await control("verify", manifest: manifest)
+        XCTAssertTrue(requested.requested)
+        try await wait("The native verifier did not receive the real SDK request") { verification.phase == .requested }
+        try await verification.accept(token: verification.flowToken)
+        try await wait("The native verifier did not display SAS") { verification.phase == .comparing }
+        let remoteSas: Sas = try await control("sas", manifest: manifest)
+        if !verification.symbols.isEmpty { XCTAssertEqual(verification.symbols.map { $0.0 }, remoteSas.emoji) }
+        else { XCTAssertEqual(verification.decimals, remoteSas.decimal) }
+        try await verification.confirm(token: verification.flowToken)
+        let trusted: Verified = try await control("confirm-sas", manifest: manifest)
+        XCTAssertTrue(trusted.verified)
+        try await wait("The native SDK did not finish SAS verification") { verification.phase == .done }
+        verification.close()
         // Stop synchronization and reopen the same encrypted SQLite store/device.
         handle.cancel()
         await active.1.stop()
@@ -158,6 +177,15 @@ final class MatrixInteroperabilityTests: XCTestCase {
         timeline.retryDecryption(sessionIds: [expected.sessionID])
         _ = try await timeline.paginateBackwards(numEvents: 100)
         try await wait("A fresh device could not recover pre-existing history") { events.containing(config.markers["web"]!).count == 1 && events.containing(config.markers["native"]!).count == 1 }
+        let first: Fresh = try await control("new-account", manifest: manifest)
+        let firstSession = try await open(first.native, config: config, manifest: manifest, waitForRoom: false)
+        await firstSession.0.encryption().waitForE2eeInitializationTasks()
+        try await wait("First native device did not bootstrap its new identity") { firstSession.0.encryption().verificationState() == .verified }
+        let recoveryKey = try await firstSession.0.encryption().enableRecovery(waitForBackupsToUpload: true, passphrase: nil, progressListener: RecoveryProgress())
+        XCTAssertFalse(recoveryKey.isEmpty)
+        let firstReady: FirstReady = try await control("first-device-check", manifest: manifest)
+        XCTAssertTrue(firstReady.ready)
+        await firstSession.1.stop()
         let result: Complete = try await control("complete", manifest: manifest)
         XCTAssertTrue(result.completed)
         handle.cancel(); await active.1.stop()
