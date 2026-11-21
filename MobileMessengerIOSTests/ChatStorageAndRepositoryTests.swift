@@ -3,6 +3,23 @@ import XCTest
 
 @MainActor
 final class ChatStorageAndRepositoryTests: XCTestCase {
+    func testMatrixModeRejectsLegacyTextAndAttachmentsBeforeCaching() async throws {
+        let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
+        let repository = DefaultChatRepository(store: store, remote: ChatNetworkingStub(),
+            realtime: RealtimeServiceStub(sendError: nil), analytics: AnalyticsServiceSpy(),
+            reachability: ReachabilityServiceStub(isReachable: true), plaintextAllowed: { false })
+        let chatID = UUID()
+        do { _ = try await repository.sendMessage(chatID: chatID, text: "Must stay private", localID: nil); XCTFail("Legacy text must be blocked") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("защищённую")) }
+        do { _ = try await repository.sendImageMessage(chatID: chatID, imageData: Data([1, 2, 3]), caption: nil, localID: nil); XCTFail("Legacy image must be blocked") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("защищённую")) }
+        do { _ = try await repository.sendAudioMessage(chatID: chatID, audioData: Data([1, 2, 3]), localID: nil); XCTFail("Legacy voice must be blocked") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("защищённую")) }
+        let pending = try await store.pendingMessages(in: chatID)
+        XCTAssertTrue(pending.isEmpty)
+        await repository.resetLocalState()
+    }
+
     func testSessionResetDeletesUnsentAttachmentFiles() async throws {
         let namespace = UUID()
         let localID = UUID()

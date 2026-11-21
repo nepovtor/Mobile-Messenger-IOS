@@ -299,7 +299,11 @@ public final class AppContainer: ObservableObject {
             realtime: realtimeService,
             analytics: analytics,
             reachability: reachability,
-            attachmentNamespace: namespace
+            attachmentNamespace: namespace,
+            plaintextAllowed: { [weak self] in
+                guard let self else { return false }
+                return try await self.legacyMessagingAllowed(namespace: namespace)
+            }
         )
         notificationManager.configure(
             pushService: pushService,
@@ -313,6 +317,13 @@ public final class AppContainer: ObservableObject {
                 self?.router.openChatFromPush(chatID: chatID)
             }
         )
+    }
+
+    private func legacyMessagingAllowed(namespace: UUID) async throws -> Bool {
+        guard namespace == sessionStore.cacheNamespace, let owner = sessionStore.currentUserID else { return false }
+        let config = try await makeMatrixMetadataService().config(owner: owner)
+        guard namespace == sessionStore.cacheNamespace else { return false }
+        return config == nil
     }
 
     private func configureCoordinators() {

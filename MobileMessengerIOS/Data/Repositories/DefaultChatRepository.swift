@@ -8,6 +8,7 @@ public final class DefaultChatRepository: ChatRepository {
     private let reachability: ReachabilityService
     private let fileManager: FileManager
     private let attachmentNamespace: UUID
+    private let plaintextAllowed: @Sendable () async throws -> Bool
     private let lifetime = RepositoryLifetime()
     private let pendingSendCoordinator = PendingSendCoordinator()
     private let activeChatSubscriptions = ActiveChatSubscriptionRegistry()
@@ -23,7 +24,8 @@ public final class DefaultChatRepository: ChatRepository {
         analytics: AnalyticsService,
         reachability: ReachabilityService,
         fileManager: FileManager = .default,
-        attachmentNamespace: UUID = UUID()
+        attachmentNamespace: UUID = UUID(),
+        plaintextAllowed: @escaping @Sendable () async throws -> Bool = { true }
     ) {
         self.store = store
         self.remote = remote
@@ -32,6 +34,7 @@ public final class DefaultChatRepository: ChatRepository {
         self.reachability = reachability
         self.fileManager = fileManager
         self.attachmentNamespace = attachmentNamespace
+        self.plaintextAllowed = plaintextAllowed
 
         reachabilityTask = Task { [weak self] in
             await self?.observeReachability()
@@ -146,7 +149,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message {
-        try lifetime.requireActive()
+        try await requirePlaintextTransport()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               text.utf16.count <= 4_000 else {
             throw AppError.network(description: "Сообщение должно содержать от 1 до 4000 символов")
@@ -171,7 +174,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message {
-        try lifetime.requireActive()
+        try await requirePlaintextTransport()
         let local = localID ?? UUID()
         let localFileURL = try savePendingImage(data: imageData, localID: local)
         let optimistic = Message(
@@ -207,7 +210,7 @@ public final class DefaultChatRepository: ChatRepository {
         audioData: Data,
         localID: UUID?
     ) async throws -> Message {
-        try lifetime.requireActive()
+        try await requirePlaintextTransport()
         guard !audioData.isEmpty, audioData.count <= 20_000_000 else {
             throw AppError.network(description: "Некорректный размер голосового сообщения")
         }
@@ -242,6 +245,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> Message {
+        try await requirePlaintextTransport()
         let updated = try await remote.editMessage(chatID: chatID, messageID: messageID, text: text).asDomainMessage()
         try lifetime.requireActive()
         try await store.append(message: updated, for: chatID)
@@ -249,6 +253,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func deleteMessage(chatID: UUID, messageID: UUID) async throws -> Message {
+        try await requirePlaintextTransport()
         let deleted = try await remote.deleteMessage(chatID: chatID, messageID: messageID).asDomainMessage()
         try lifetime.requireActive()
         try await store.append(message: deleted, for: chatID)
@@ -318,6 +323,14 @@ public final class DefaultChatRepository: ChatRepository {
         try await store.updateStatus(for: messageID, in: chatID, status: status)
     }
 
+    private func requirePlaintextTransport() async throws {
+        try lifetime.requireActive()
+        guard try await plaintextAllowed() else {
+            throw AppError.network(description: "Для этого аккаунта используйте защищённую переписку")
+        }
+        try lifetime.requireActive()
+    }
+
     private func attemptDelivery(of message: Message) async {
         guard lifetime.isActive else { return }
         guard await pendingSendCoordinator.begin(localID: message.localID) else { return }
@@ -328,6 +341,7 @@ public final class DefaultChatRepository: ChatRepository {
         }
 
         do {
+            try await requirePlaintextTransport()
             let deliveredMessage: Message
             switch message.kind {
             case .text:
@@ -355,6 +369,7 @@ public final class DefaultChatRepository: ChatRepository {
                     width: nil,
                     height: nil
                 )
+                try await requirePlaintextTransport()
                 let etag = try await remote.uploadImage(
                     to: upload.uploadURL,
                     data: data,
