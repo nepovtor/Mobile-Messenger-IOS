@@ -1,8 +1,10 @@
+import { validAttachment, type PendingAttachment } from "./encryptedAttachment";
 export type PendingSecureMessage = {
   transactionID: string;
   chatID: string;
   body: string;
   createdAt: number;
+  attachment?: PendingAttachment;
 };
 
 export function assertPendingMessages(
@@ -24,8 +26,12 @@ export function assertPendingMessages(
         !entry.body.trim() ||
         entry.body.length > 4000 ||
         typeof entry.createdAt !== "number" ||
-        !Number.isFinite(entry.createdAt),
+        !Number.isFinite(entry.createdAt) ||
+        (entry.attachment !== undefined &&
+          !validAttachment(entry.attachment, true)),
     ) ||
+    value.reduce((size, entry) => size + (entry.attachment?.size ?? 0), 0) >
+      20 * 1024 * 1024 ||
     new Set(value.map((entry) => entry.transactionID)).size !== value.length
   ) {
     throw new Error("Локальная очередь сообщений повреждена");
@@ -51,11 +57,11 @@ export class SecureMessageOutbox {
     ) => Promise<unknown>,
   ) {
     assertPendingMessages(initial);
-    this.entries = initial.map((entry) => ({ ...entry }));
+    this.entries = structuredClone(initial);
   }
 
   snapshot(): PendingSecureMessage[] {
-    return this.entries.map((entry) => ({ ...entry }));
+    return structuredClone(this.entries);
   }
   get error(): string | undefined {
     return this.failure;
@@ -77,7 +83,7 @@ export class SecureMessageOutbox {
       this.requireActive();
       const entries = next();
       assertPendingMessages(entries);
-      await this.persist(entries.map((entry) => ({ ...entry })));
+      await this.persist(structuredClone(entries));
       this.requireActive();
       this.entries = entries;
       this.emit();
@@ -86,11 +92,21 @@ export class SecureMessageOutbox {
     return operation;
   }
 
-  async enqueue(chatID: string, body: string): Promise<string> {
+  async enqueue(
+    chatID: string,
+    body: string,
+    attachment?: PendingAttachment,
+  ): Promise<string> {
     const transactionID = crypto.randomUUID();
     await this.change(() => [
       ...this.entries,
-      { transactionID, chatID, body, createdAt: Date.now() },
+      {
+        transactionID,
+        chatID,
+        body,
+        createdAt: Date.now(),
+        ...(attachment ? { attachment: structuredClone(attachment) } : {}),
+      },
     ]);
     void this.retry();
     return transactionID;

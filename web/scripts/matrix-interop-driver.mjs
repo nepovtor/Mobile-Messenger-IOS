@@ -1,3 +1,7 @@
+import {
+  encryptAttachment,
+  decryptAttachment,
+} from "matrix-encrypt-attachment";
 // Self-check for the disposable fixture. This is not the Swift/iOS acceptance run.
 import { readFile } from "node:fs/promises";
 import * as matrix from "matrix-js-sdk";
@@ -136,6 +140,72 @@ try {
     "native-once",
   );
   await control("/received");
+  const attachments = await control("/attachments");
+  await wait(async () => {
+    const events = await read(client);
+    return [
+      attachments.imageID,
+      attachments.audioID,
+      attachments.corruptID,
+    ].every((id) =>
+      events.some(
+        (event) => event.getId() === id && event.getType() === "m.room.message",
+      ),
+    );
+  }, "Attachment metadata not decrypted");
+  for (const [id, base64] of [
+    [attachments.imageID, attachments.imageBytesBase64],
+    [attachments.audioID, attachments.audioBytesBase64],
+    [attachments.corruptID, attachments.imageBytesBase64],
+  ]) {
+    const event = (await read(client)).find((value) => value.getId() === id);
+    const file = event.getContent().file;
+    const url = client.mxcUrlToHttp(
+      file.url,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      true,
+    );
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${client.getAccessToken()}` },
+    });
+    const cipher = await response.arrayBuffer();
+    if (id === attachments.corruptID) {
+      let rejected = false;
+      try {
+        await decryptAttachment(cipher, file);
+      } catch {
+        rejected = true;
+      }
+      if (!rejected) throw Error("Corrupt media was accepted");
+    } else if (
+      !Buffer.from(await decryptAttachment(cipher, file)).equals(
+        Buffer.from(base64, "base64"),
+      )
+    )
+      throw Error("Attachment bytes differ");
+  }
+  for (const [base64, name, mime] of [
+    [attachments.imageBytesBase64, "native-image.png", "image/png"],
+    [attachments.audioBytesBase64, "native-audio.wav", "audio/wav"],
+  ]) {
+    const bytes = Buffer.from(base64, "base64");
+    const encrypted = await encryptAttachment(Uint8Array.from(bytes).buffer);
+    const upload = await client.uploadContent(new Uint8Array(encrypted.data), {
+      type: "application/octet-stream",
+      includeFilename: false,
+    });
+    await client.sendMessage(config.roomID, {
+      msgtype: mime.startsWith("image/") ? "m.image" : "m.audio",
+      body: name,
+      file: { ...encrypted.info, url: upload.content_uri },
+      info: { mimetype: mime, size: bytes.length },
+    });
+  }
+  await control("/attachments-received");
   await control("/verify");
   await wait(() => Boolean(incoming), "SAS request was not received");
   incoming.on(VerificationRequestEvent.Change, () => {

@@ -1,7 +1,13 @@
+import MatrixRustSDK
 import XCTest
 @testable import MobileMessengerIOS
 
 final class MatrixClientFactoryTests: XCTestCase {
+    func testNativeAttachmentRejectsPlainMediaEvenInsideEncryptedMessage() throws {
+        let plain = try MediaSource.fromUrl(url: "mxc://matrix.example/media")
+        XCTAssertNil(NativeMatrixAttachment(source: plain, mimetype: "image/png", size: 100, image: true))
+    }
+
     func testRejectsInsecureHomeserverBeforeCreatingStore() async {
         let factory = MatrixClientFactory()
         do {

@@ -1,3 +1,5 @@
+import { prepareAttachment } from "./encryptedAttachment";
+import { MatrixAttachmentView } from "./MatrixAttachmentView";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -196,6 +198,24 @@ export function MatrixWorkspace({
       setError(messageFor(failure));
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendFile(file: File) {
+    const current = generation.current;
+    const chatID = selected;
+    const session = runtime.current;
+    if (!chatID || sending || !session?.outbox) return;
+    setSending(true);
+    setError(null);
+    try {
+      const attachment = await prepareAttachment(file);
+      if (generation.current !== current || runtime.current !== session) return;
+      await session.outbox.enqueue(chatID, attachment.name, attachment);
+    } catch (failure) {
+      if (generation.current === current) setError(messageFor(failure));
+    } finally {
+      if (generation.current === current) setSending(false);
     }
   }
 
@@ -450,24 +470,36 @@ export function MatrixWorkspace({
               <p className="whitespace-pre-wrap break-words text-sm leading-6">
                 {message.body}
               </p>
+              {message.attachment &&
+                selected &&
+                connectedSession?.transport && (
+                  <MatrixAttachmentView
+                    key={`${selected}/${message.id}/${message.attachment.file.hashes?.sha256}`}
+                    message={message}
+                    chatID={selected}
+                    transport={connectedSession.transport}
+                  />
+                )}
               <time className="mt-1 block text-right text-xs tabular-nums text-[#a1a1a6]">
                 {new Date(message.timestamp).toLocaleTimeString("ru", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
               </time>
-              {message.own && !message.failedToDecrypt && (
-                <button
-                  className="mr-3 mt-2 text-xs text-[#a1a1a6]"
-                  disabled={sending}
-                  onClick={() => {
-                    setEditing(message.id);
-                    setText(message.body);
-                  }}
-                >
-                  Изменить
-                </button>
-              )}
+              {message.own &&
+                !message.failedToDecrypt &&
+                !message.attachment && (
+                  <button
+                    className="mr-3 mt-2 text-xs text-[#a1a1a6]"
+                    disabled={sending}
+                    onClick={() => {
+                      setEditing(message.id);
+                      setText(message.body);
+                    }}
+                  >
+                    Изменить
+                  </button>
+                )}
               {message.own && !message.failedToDecrypt && (
                 <button
                   className="mt-2 text-xs text-[#a1a1a6]"
@@ -526,6 +558,23 @@ export function MatrixWorkspace({
             className="flex items-end gap-3 border-t border-white/10 p-4"
             onSubmit={(event) => void send(event)}
           >
+            {!editing && (
+              <label className="cursor-pointer text-sm">
+                Вложение
+                <input
+                  type="file"
+                  className="sr-only"
+                  aria-label="Прикрепить изображение или аудио"
+                  disabled={sending}
+                  accept="image/jpeg,image/png,image/webp,audio/mp4,audio/mpeg,audio/ogg,audio/webm,audio/wav"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void sendFile(file);
+                  }}
+                />
+              </label>
+            )}
             <Textarea
               aria-label="Сообщение"
               maxLength={4000}

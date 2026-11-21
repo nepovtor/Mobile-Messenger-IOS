@@ -126,6 +126,42 @@ describe("protected room delivery", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("does not disclose an attachment key when membership changes during upload", async () => {
+    const { transport, client } = fixture();
+    client.uploadContent = vi.fn(async () => {
+      descriptor = { ...descriptor, epoch: 3 };
+      return { content_uri: "mxc://matrix.example/media" };
+    });
+    client.sendMessage = vi.fn();
+    await expect(
+      transport.sendAttachment(
+        "chat-one",
+        {
+          kind: "image",
+          mimetype: "image/png",
+          size: 3,
+          name: "image.png",
+          ciphertext: "YWJj",
+          file: {
+            v: "v2",
+            iv: "A".repeat(22),
+            hashes: { sha256: "A".repeat(43) },
+            key: {
+              kty: "oct",
+              alg: "A256CTR",
+              k: "A".repeat(43),
+              ext: true,
+              key_ops: ["encrypt", "decrypt"],
+            },
+          },
+        },
+        "stable-media-transaction",
+      ),
+    ).rejects.toThrow("защиты");
+    expect(client.uploadContent).toHaveBeenCalledTimes(1);
+    expect(client.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("preserves encrypted original content when a plaintext edit is aggregated", async () => {
     const { transport, room, client } = fixture();
     const event = {

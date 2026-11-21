@@ -28,8 +28,27 @@ final class MatrixInteroperabilityTests: XCTestCase {
     private struct Receipt: Decodable { let received: Bool }
     private struct FirstReady: Decodable { let ready: Bool }
     private final class RecoveryProgress: EnableRecoveryProgressListener, @unchecked Sendable { func onUpdate(status: EnableRecoveryProgress) {} }
+    private struct Attachments: Decodable {
+        let imageID: String; let audioID: String; let corruptID: String
+        let imageBytesBase64: String; let audioBytesBase64: String
+    }
     private struct Complete: Decodable { let completed: Bool }
 
+    private final class FixtureSessionDelegate: ClientSessionDelegate, @unchecked Sendable {
+        private let mutex = NSLock()
+        private var session: Session
+        init(_ session: Session) { self.session = session }
+        func retrieveSessionFromKeychain(userId: String) throws -> Session {
+            mutex.lock(); defer { mutex.unlock() }
+            guard userId == session.userId else { throw MatrixWorkspaceError.sessionClosed }
+            return session
+        }
+        func saveSessionInKeychain(session: Session) {
+            mutex.lock(); defer { mutex.unlock() }
+            guard session.userId == self.session.userId, session.deviceId == self.session.deviceId else { return }
+            self.session = session
+        }
+    }
     private final class Observer: TimelineListener, @unchecked Sendable {
         let callback: @Sendable ([TimelineDiff]) -> Void
         init(_ callback: @escaping @Sendable ([TimelineDiff]) -> Void) { self.callback = callback }
@@ -59,6 +78,15 @@ final class MatrixInteroperabilityTests: XCTestCase {
             events.filter {
                 guard case .msgLike(let content) = $0.content, case .message(let message) = content.kind else { return false }
                 return message.body == body
+            }
+        }
+        func attachment(_ id: String) -> NativeMatrixAttachment? {
+            guard let event = events.first(where: { if case .eventId(let value) = $0.eventOrTransactionId { return value == id }; return false }),
+                  case .msgLike(let content) = event.content, case .message(let message) = content.kind else { return nil }
+            switch message.msgType {
+            case .image(let media): return NativeMatrixAttachment(source: media.source, mimetype: media.info?.mimetype, size: media.info?.size, image: true)
+            case .audio(let media): return NativeMatrixAttachment(source: media.source, mimetype: media.info?.mimetype, size: media.info?.size, image: false)
+            default: return nil
             }
         }
         func cannotDecrypt(_ id: String) -> Bool {
@@ -99,11 +127,13 @@ final class MatrixInteroperabilityTests: XCTestCase {
             throw MatrixWorkspaceError.invalidConfiguration
         }
         let certificate = try Data(contentsOf: URL(fileURLWithPath: manifest.certificateFile))
-        let client = try await MatrixClientFactory().makeClient(homeserverURL: config.homeserver,
-            userID: credentials.user_id, deviceID: credentials.device_id, trustedRootCertificates: [certificate])
-        try await client.restoreSession(session: Session(accessToken: credentials.access_token, refreshToken: nil,
+        let session = Session(accessToken: credentials.access_token, refreshToken: nil,
             userId: credentials.user_id, deviceId: credentials.device_id, homeserverUrl: config.homeserver.absoluteString,
-            oauthData: nil, slidingSyncVersion: .native))
+            oauthData: nil, slidingSyncVersion: .native)
+        let delegate = FixtureSessionDelegate(session)
+        let client = try await MatrixClientFactory().makeClient(homeserverURL: config.homeserver,
+            userID: credentials.user_id, deviceID: credentials.device_id, sessionDelegate: delegate, trustedRootCertificates: [certificate])
+        try await client.restoreSession(session: session)
         let sync = try await client.syncService().withOfflineMode().finish()
         await sync.start()
         if waitForRoom { try await wait("Native room did not synchronize") { try client.getRoom(roomId: config.roomID) != nil } }
@@ -141,6 +171,34 @@ final class MatrixInteroperabilityTests: XCTestCase {
         print("MatrixInterop: checking encrypted native delivery")
         let receipt: Receipt = try await control("received", manifest: manifest)
         XCTAssertTrue(receipt.received, "The JS peer must decrypt a ciphertext-only native event")
+        print("MatrixInterop: verifying encrypted image/audio and corrupted media")
+        let media: Attachments = try await control("attachments", manifest: manifest)
+        try await wait("Native SDK did not decode encrypted attachment metadata") {
+            events.attachment(media.imageID) != nil && events.attachment(media.audioID) != nil && events.attachment(media.corruptID) != nil
+        }
+        let imageData = try XCTUnwrap(Data(base64Encoded: media.imageBytesBase64))
+        let audioData = try XCTUnwrap(Data(base64Encoded: media.audioBytesBase64))
+        let webImage = try XCTUnwrap(events.attachment(media.imageID))
+        let webAudio = try XCTUnwrap(events.attachment(media.audioID))
+        let downloadedImage = try await active.0.getMediaContent(mediaSource: webImage.source)
+        let downloadedAudio = try await active.0.getMediaContent(mediaSource: webAudio.source)
+        XCTAssertEqual(downloadedImage, imageData); XCTAssertEqual(downloadedAudio, audioData)
+        let corruptMedia = try XCTUnwrap(events.attachment(media.corruptID))
+        do {
+            _ = try await active.0.getMediaContent(mediaSource: corruptMedia.source)
+            XCTFail("The native SDK accepted a corrupted encrypted attachment")
+        } catch { /* The official SDK must reject a mismatching ciphertext hash. */ }
+        room.enableSendQueue(enable: true)
+        let imageUpload = try timeline.sendImage(params: UploadParameters(source: .data(bytes: imageData, filename: "native-image.png"),
+            caption: nil, formattedCaption: nil, mentions: nil, inReplyTo: nil), thumbnailSource: nil,
+            imageInfo: ImageInfo(height: 1, width: 1, mimetype: "image/png", size: UInt64(imageData.count), thumbnailInfo: nil,
+                thumbnailSource: nil, blurhash: nil, isAnimated: false))
+        try await imageUpload.join()
+        let audioUpload = try timeline.sendAudio(params: UploadParameters(source: .data(bytes: audioData, filename: "native-audio.wav"),
+            caption: nil, formattedCaption: nil, mentions: nil, inReplyTo: nil), audioInfo: AudioInfo(duration: nil, size: UInt64(audioData.count), mimetype: "audio/wav"))
+        try await audioUpload.join()
+        let mediaReceipt: Receipt = try await control("attachments-received", manifest: manifest)
+        XCTAssertTrue(mediaReceipt.received)
         print("MatrixInterop: comparing SDK SAS codes")
         let verification = try await MatrixDeviceVerification.open(client: active.0, ownUserID: config.native.user_id, onRequest: {})
         let requested: Requested = try await control("verify", manifest: manifest)

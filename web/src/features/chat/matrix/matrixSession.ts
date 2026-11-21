@@ -340,11 +340,17 @@ export class MatrixSession {
                 }
               },
               (message) =>
-                this.transport!.sendText(
-                  message.chatID,
-                  message.body,
-                  message.transactionID,
-                ),
+                message.attachment
+                  ? this.transport!.sendAttachment(
+                      message.chatID,
+                      message.attachment,
+                      message.transactionID,
+                    )
+                  : this.transport!.sendText(
+                      message.chatID,
+                      message.body,
+                      message.transactionID,
+                    ),
             );
             const retry = (state: SyncState, previous: SyncState | null) => {
               if (state === SyncState.Syncing && previous !== SyncState.Syncing)

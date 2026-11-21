@@ -1,4 +1,12 @@
 import {
+  attachmentBytes,
+  attachmentFromContent,
+  downloadAttachment,
+  validAttachment,
+  type PendingAttachment,
+  type SecureAttachment,
+} from "./encryptedAttachment";
+import {
   EventType,
   MsgType,
   Preset,
@@ -21,6 +29,7 @@ export type SecureMessage = {
   timestamp: number;
   own: boolean;
   failedToDecrypt: boolean;
+  attachment?: SecureAttachment;
 };
 
 export function assertRoomMembership(
@@ -46,10 +55,13 @@ export function assertRoomMembership(
 
 export class MatrixRoomTransport {
   private active = true;
+  private readonly downloads = new Set<AbortController>();
   private readonly opening = new Map<string, Promise<Room>>();
   constructor(readonly client: MatrixClient) {}
   close(): void {
     this.active = false;
+    this.downloads.forEach((controller) => controller.abort());
+    this.downloads.clear();
   }
   private requireActive(): void {
     if (!this.active) throw new Error("Сессия закрыта");
@@ -188,6 +200,84 @@ export class MatrixRoomTransport {
     return response.event_id;
   }
 
+  async sendAttachment(
+    chatID: string,
+    attachment: PendingAttachment,
+    transactionID: string,
+  ): Promise<string> {
+    if (!validAttachment(attachment, true))
+      throw new Error("Параметры вложения повреждены");
+    if (!(await this.client.getCrypto()?.isCrossSigningReady()))
+      throw new Error("Подтвердите устройство перед отправкой");
+    const room = await this.open(chatID);
+    this.requireActive();
+    const pending = room
+      .getPendingEvents()
+      .find((event) => event.getTxnId() === transactionID);
+    if (pending) return (await this.client.resendEvent(pending, room)).event_id;
+    const ciphertext = attachmentBytes(attachment);
+    let url: string;
+    try {
+      url = (
+        await this.client.uploadContent(
+          new Blob([ciphertext], { type: "application/octet-stream" }),
+          { type: "application/octet-stream", includeFilename: false },
+        )
+      ).content_uri;
+    } finally {
+      ciphertext.fill(0);
+    }
+    this.requireActive();
+    // Revalidate membership/epoch after upload before disclosing the media key.
+    const checked = await this.open(chatID);
+    if (checked.roomId !== room.roomId)
+      throw new Error("Комната изменилась во время загрузки");
+    const content = {
+      body: attachment.name,
+      file: {
+        ...attachment.file,
+        url,
+        v: "v2",
+        hashes: { sha256: attachment.file.hashes!.sha256! },
+      },
+      info: { mimetype: attachment.mimetype, size: attachment.size },
+    };
+    const response = await this.client.sendMessage(
+      room.roomId,
+      attachment.kind === "image"
+        ? { ...content, msgtype: MsgType.Image }
+        : { ...content, msgtype: MsgType.Audio },
+      transactionID,
+    );
+    this.requireActive();
+    return response.event_id;
+  }
+
+  async download(chatID: string, eventID: string): Promise<Blob> {
+    const room = await this.open(chatID);
+    const event = room.findEventById(eventID);
+    if (!event) throw new Error("Вложение больше недоступно");
+    const message = await this.decode(event);
+    if (!message?.attachment || message.failedToDecrypt)
+      throw new Error("Нет защищённого вложения");
+    this.requireActive();
+    const controller = new AbortController();
+    this.downloads.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const blob = await downloadAttachment(
+        this.client,
+        message.attachment,
+        controller.signal,
+      );
+      this.requireActive();
+      return blob;
+    } finally {
+      clearTimeout(timeout);
+      this.downloads.delete(controller);
+    }
+  }
+
   async editText(chatID: string, eventID: string, text: string): Promise<void> {
     if (!text.trim() || text.length > 4_000)
       throw new Error("Сообщение должно содержать от 1 до 4000 символов");
@@ -265,6 +355,9 @@ export class MatrixRoomTransport {
             : "Вложение",
       own: event.getSender() === this.client.getUserId(),
       failedToDecrypt,
+      ...(!failedToDecrypt && !event.isRedacted()
+        ? { attachment: attachmentFromContent(content) }
+        : {}),
     };
   }
 }

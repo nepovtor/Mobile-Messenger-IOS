@@ -1,3 +1,6 @@
+import AVFoundation
+import ImageIO
+import UniformTypeIdentifiers
 import AuthenticationServices
 import Combine
 import Foundation
@@ -15,6 +18,24 @@ private final class MatrixTimelineObserver: TimelineListener, @unchecked Sendabl
     func onUpdate(diff: [TimelineDiff]) { update(diff) }
 }
 
+struct NativeMatrixAttachment {
+    let source: MediaSource
+    let mimetype: String
+    let size: UInt64
+    let image: Bool
+
+    init?(source: MediaSource, mimetype: String?, size: UInt64?, image: Bool) {
+        let allowed: Set<String> = image ? ["image/jpeg", "image/png", "image/webp"]
+            : ["audio/mp4", "audio/mpeg", "audio/ogg", "audio/webm", "audio/wav"]
+        guard let mimetype, allowed.contains(mimetype), let size, size > 0, size <= 10 * 1024 * 1024,
+              let data = source.toJson().data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let file = json["file"] as? [String: Any], file["v"] as? String == "v2",
+              (file["hashes"] as? [String: String])?["sha256"] != nil else { return nil }
+        self.source = source; self.mimetype = mimetype; self.size = size; self.image = image
+    }
+}
+
 struct NativeMatrixMessage: Identifiable {
     let id: String
     let eventID: EventOrTransactionId
@@ -25,6 +46,7 @@ struct NativeMatrixMessage: Identifiable {
     let warning: String?
     let canRetry: Bool
     let editable: Bool
+    let attachment: NativeMatrixAttachment?
 }
 
 @MainActor
@@ -242,6 +264,63 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         } catch { if generation == current { self.error = error.localizedDescription } }
     }
 
+    func sendAttachment(url: URL) async {
+        guard ready, !busy, let chatID = selected, let client, let config, url.isFileURL else { return }
+        busy = true; let current = generation; let selection = selectionGeneration
+        defer { if generation == current { busy = false } }
+        do {
+            guard client.encryption().verificationState() == .verified else {
+                throw NSError(domain: "MatrixAttachment", code: 1, userInfo: [NSLocalizedDescriptionKey: "Сначала подтвердите устройство"])
+            }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .isRegularFileKey])
+            let mime = values.contentType?.preferredMIMEType ?? ""
+            let image = ["image/jpeg", "image/png", "image/webp"].contains(mime)
+            let audio = ["audio/mp4", "audio/mpeg", "audio/ogg", "audio/webm", "audio/wav"].contains(mime)
+            guard values.isRegularFile == true, let size = values.fileSize, size > 0, size <= 10 * 1024 * 1024, image || audio else {
+                throw NSError(domain: "MatrixAttachment", code: 2, userInfo: [NSLocalizedDescriptionKey: "Выберите изображение или аудио размером до 10 МБ"])
+            }
+            let data = try Data(contentsOf: url)
+            guard data.count == size else { throw MatrixWorkspaceError.roomChanged }
+            let room = try await protectedRoom(chatID: chatID, client: client, config: config, generation: current)
+            guard generation == current, selectionGeneration == selection else { return }
+            let next = try await room.timeline()
+            let params = UploadParameters(source: .data(bytes: data, filename: String(url.lastPathComponent.prefix(160))),
+                caption: nil, formattedCaption: nil, mentions: nil, inReplyTo: nil)
+            room.enableSendQueue(enable: true)
+            let handle: SendAttachmentJoinHandle
+            if image {
+                handle = try next.sendImage(params: params, thumbnailSource: nil,
+                    imageInfo: ImageInfo(height: nil, width: nil, mimetype: mime, size: UInt64(size),
+                        thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil, isAnimated: nil))
+            } else {
+                handle = try next.sendAudio(params: params, audioInfo: AudioInfo(duration: nil, size: UInt64(size), mimetype: mime))
+            }
+            // SDK encryption, upload, durable queue and hash metadata remain one operation.
+            try await handle.join()
+        } catch { if generation == current { self.error = error.localizedDescription } }
+    }
+
+    func downloadAttachment(_ message: NativeMatrixMessage) async throws -> Data {
+        guard ready, let chatID = selected, let client, let config, let attachment = message.attachment else {
+            throw MatrixWorkspaceError.sessionClosed
+        }
+        let current = generation; let selection = selectionGeneration
+        _ = try await protectedRoom(chatID: chatID, client: client, config: config, generation: current)
+        guard generation == current, selectionGeneration == selection,
+              messages.contains(where: { $0.id == message.id && $0.attachment?.source.toJson() == attachment.source.toJson() }) else {
+            throw MatrixWorkspaceError.sessionClosed
+        }
+        // The SDK verifies the encrypted media hash and decrypts with its descriptor.
+        let data = try await client.getMediaContent(mediaSource: attachment.source)
+        guard generation == current, selectionGeneration == selection, data.count == Int(attachment.size),
+              messages.contains(where: { $0.id == message.id && $0.attachment != nil }) else {
+            throw MatrixWorkspaceError.sessionClosed
+        }
+        return data
+    }
+
     func redact(_ message: NativeMatrixMessage) async {
         guard message.own, let chatID = selected, let client, let config, !busy else { return }
         let current = generation; let selection = selectionGeneration
@@ -390,8 +469,15 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
             }
             if event.isRemote && (!encrypted(info.originalJson) || (info.latestEditJson != nil && !encrypted(info.latestEditJson))) { return nil }
             let body: String
+            var attachment: NativeMatrixAttachment?
             switch content.kind {
-            case .message(let message): body = message.body
+            case .message(let message):
+                body = message.body
+                switch message.msgType {
+                case .image(let media): attachment = NativeMatrixAttachment(source: media.source, mimetype: media.info?.mimetype, size: media.info?.size, image: true)
+                case .audio(let media): attachment = NativeMatrixAttachment(source: media.source, mimetype: media.info?.mimetype, size: media.info?.size, image: false)
+                default: break
+                }
             case .redacted: body = "Сообщение удалено"
             case .unableToDecrypt: body = "Не удалось расшифровать сообщение"
             default: return nil
@@ -418,7 +504,7 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
                 }
             }
             return NativeMatrixMessage(id: id, eventID: event.eventOrTransactionId, sender: event.sender,
-                body: body, own: event.isOwn, date: Date(timeIntervalSince1970: Double(event.timestamp) / 1000), warning: warning, canRetry: canRetry, editable: event.isEditable)
+                body: body, own: event.isOwn, date: Date(timeIntervalSince1970: Double(event.timestamp) / 1000), warning: warning, canRetry: canRetry, editable: event.isEditable && attachment == nil, attachment: attachment)
         }
     }
 }
@@ -428,6 +514,7 @@ struct MatrixChatEntryView: View {
     @ObservedObject var container: AppContainer
     let initialChat: ChatListItem?
     @StateObject private var model: NativeMatrixWorkspaceModel
+    @State private var choosingAttachment = false
     init(container: AppContainer, initialChat: ChatListItem? = nil) {
         self.container = container
         self.initialChat = initialChat
@@ -487,6 +574,7 @@ struct MatrixChatEntryView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(message.own ? "Вы" : message.sender).font(.caption).foregroundStyle(.secondary)
                             Text(message.body).textSelection(.enabled)
+                            if message.attachment != nil { NativeMatrixAttachmentView(model: model, message: message) }
                             Text(message.date, style: .time).font(.caption2).foregroundStyle(.secondary)
                             if let warning = message.warning { Text(warning).font(.caption).foregroundStyle(.orange) }
                         }.padding(12).frame(maxWidth: .infinity, alignment: message.own ? .trailing : .leading)
@@ -507,6 +595,9 @@ struct MatrixChatEntryView: View {
             }
             if model.selected == id {
             HStack(alignment: .bottom) {
+                if model.editing == nil { Button { choosingAttachment = true } label: {
+                    Image(systemName: "paperclip").accessibilityLabel("Прикрепить изображение или аудио")
+                }.disabled(model.busy) }
                 TextField("Сообщение", text: $model.text, axis: .vertical).lineLimit(1...5)
                 Button(model.editing == nil ? "Отправить" : "Сохранить") { Task { await model.send() } }.disabled(model.busy || model.text.isEmpty)
             }.padding(16)
@@ -520,6 +611,12 @@ struct MatrixChatEntryView: View {
             }
         }
         .navigationTitle(title)
+        .fileImporter(isPresented: $choosingAttachment, allowedContentTypes: [.jpeg, .png, .webP, .audio]) { result in
+            switch result {
+            case .success(let url): Task { await model.sendAttachment(url: url) }
+            case .failure: model.error = "Не удалось открыть файл"
+            }
+        }
         .task(id: id) { await model.open(chatID: id) }
     }
 }
@@ -542,5 +639,53 @@ private struct NativeMatrixRecoveryView: View {
             Button("Восстановить ключи") { Task { await model.recover() } }.disabled(model.busy)
             if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
         }.padding(24)
+    }
+}
+
+
+@MainActor
+private struct NativeMatrixAttachmentView: View {
+    @ObservedObject var model: NativeMatrixWorkspaceModel
+    let message: NativeMatrixMessage
+    @State private var image: UIImage?
+    @State private var player: AVAudioPlayer?
+    @State private var download: Task<Void, Never>?
+    @State private var error: String?
+    @State private var active = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let image { Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 320) }
+            else if let player {
+                Button("Воспроизвести аудио") { player.currentTime = 0; player.play() }
+                Button("Остановить") { player.stop() }
+            } else {
+                Button(download == nil ? "Открыть вложение" : "Проверяем вложение…") { open() }.disabled(download != nil)
+            }
+            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+        }
+        .onAppear { active = true }
+        .onDisappear { active = false; download?.cancel(); download = nil; player?.stop(); player = nil; image = nil }
+    }
+
+    private func open() {
+        guard download == nil else { return }
+        error = nil
+        download = Task { @MainActor in
+            defer { if active { download = nil } }
+            do {
+                let data = try await model.downloadAttachment(message)
+                guard active, !Task.isCancelled else { return }
+                if message.attachment?.image == true {
+                    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                          let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                            kCGImageSourceCreateThumbnailFromImageAlways: true,
+                            kCGImageSourceThumbnailMaxPixelSize: 2048,
+                            kCGImageSourceCreateThumbnailWithTransform: true
+                          ] as CFDictionary) else { throw MatrixWorkspaceError.roomChanged }
+                    image = UIImage(cgImage: thumbnail)
+                } else { player = try AVAudioPlayer(data: data); player?.prepareToPlay() }
+            } catch { if active && !Task.isCancelled { self.error = "Не удалось проверить и открыть вложение" } }
+        }
     }
 }

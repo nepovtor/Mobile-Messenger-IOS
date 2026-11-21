@@ -50,6 +50,44 @@ describe("durable protected outbox", () => {
     expect(persisted).toEqual([]);
   });
 
+  it("retains encrypted attachment bytes and transaction ID after restart", async () => {
+    const entry: PendingSecureMessage = {
+      ...pending,
+      attachment: {
+        kind: "image",
+        mimetype: "image/png",
+        size: 3,
+        name: "image.png",
+        ciphertext: "YWJj",
+        file: {
+          v: "v2",
+          iv: "A".repeat(22),
+          hashes: { sha256: "A".repeat(43) },
+          key: {
+            kty: "oct",
+            alg: "A256CTR",
+            k: "A".repeat(43),
+            ext: true,
+            key_ops: ["encrypt", "decrypt"],
+          },
+        },
+      },
+    };
+    const save = vi.fn(async () => {});
+    const first = new SecureMessageOutbox([entry], save, async () => {
+      throw Error("offline");
+    });
+    await first.retry();
+    const persisted = first.snapshot();
+    first.close();
+    const deliver = vi.fn(async () => "$media");
+    const second = new SecureMessageOutbox(persisted, save, deliver);
+    persisted[0].attachment!.file.key.k = "changed";
+    await second.retry();
+    expect(deliver).toHaveBeenCalledExactlyOnceWith(entry);
+    expect(second.snapshot()).toEqual([]);
+  });
+
   it("does not send when local persistence fails", async () => {
     const deliver = vi.fn();
     const queue = new SecureMessageOutbox(

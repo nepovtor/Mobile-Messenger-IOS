@@ -1,3 +1,7 @@
+import {
+  encryptAttachment,
+  decryptAttachment,
+} from "matrix-encrypt-attachment";
 import { createServer } from "node:http";
 import {
   createHmac,
@@ -42,6 +46,7 @@ const state = {
   reordered: false,
   verificationPassed: false,
   firstDeviceReady: false,
+  attachmentsPassed: false,
   phase: "setup",
 };
 const results = process.env.MATRIX_INTEROP_RESULT;
@@ -319,6 +324,74 @@ async function startVerification() {
   await changed();
 }
 
+const imageBytes = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4F0AAAAASUVORK5CYII=",
+  "base64",
+);
+const audioBytes = Buffer.alloc(48);
+audioBytes.write("RIFF", 0);
+audioBytes.writeUInt32LE(40, 4);
+audioBytes.write("WAVEfmt ", 8);
+audioBytes.writeUInt32LE(16, 16);
+audioBytes.writeUInt16LE(1, 20);
+audioBytes.writeUInt16LE(1, 22);
+audioBytes.writeUInt32LE(8000, 24);
+audioBytes.writeUInt32LE(16000, 28);
+audioBytes.writeUInt16LE(2, 32);
+audioBytes.writeUInt16LE(16, 34);
+audioBytes.write("data", 36);
+audioBytes.writeUInt32LE(4, 40);
+let attachmentEvents;
+async function sendAttachmentBytes(bytes, name, mime, corrupt = false) {
+  const encrypted = await encryptAttachment(Uint8Array.from(bytes).buffer);
+  const ciphertext = new Uint8Array(encrypted.data);
+  if (corrupt) ciphertext[0] ^= 1;
+  const upload = await bob.client.uploadContent(ciphertext, {
+    type: "application/octet-stream",
+    includeFilename: false,
+  });
+  const sent = await bob.client.sendMessage(roomID, {
+    msgtype: mime.startsWith("image/") ? "m.image" : "m.audio",
+    body: name,
+    file: { ...encrypted.info, url: upload.content_uri },
+    info: { mimetype: mime, size: bytes.length },
+  });
+  const wire = await bob.client.fetchRoomEvent(roomID, sent.event_id);
+  if (
+    wire.type !== "m.room.encrypted" ||
+    JSON.stringify(wire).includes(encrypted.info.key.k)
+  )
+    throw Error("attachment-key-on-wire");
+  return sent.event_id;
+}
+async function readAttachment(event, expected) {
+  const content = event.getContent();
+  if (!event.isEncrypted() || !content.file || content.url)
+    throw Error("attachment-not-encrypted");
+  const url = bob.client.mxcUrlToHttp(
+    content.file.url,
+    undefined,
+    undefined,
+    undefined,
+    false,
+    false,
+    true,
+  );
+  if (new URL(url).origin !== origin.origin)
+    throw Error("attachment-foreign-origin");
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${bob.client.getAccessToken()}` },
+    redirect: "error",
+  });
+  if (!response.ok) throw Error("attachment-download");
+  const cipher = await response.arrayBuffer();
+  if (Buffer.from(cipher).equals(expected))
+    throw Error("attachment-plaintext-upload");
+  const plain = await decryptAttachment(cipher, content.file);
+  if (!Buffer.from(plain).equals(expected))
+    throw Error("attachment-bytes-differ");
+}
+
 const control = createServer(async (request, response) => {
   const authorization = request.headers.authorization ?? "";
   const expected = `Bearer ${controlToken}`;
@@ -351,6 +424,43 @@ const control = createServer(async (request, response) => {
       scenarios ??= deliverScenarios();
       await scenarios;
       return reply({ corruptID, sessionID: originalSessionID, webEventID });
+    }
+    if (path === "/attachments") {
+      state.phase = "attachments";
+      await record();
+      attachmentEvents ??= (async () => ({
+        imageID: await sendAttachmentBytes(
+          imageBytes,
+          "web-image.png",
+          "image/png",
+        ),
+        audioID: await sendAttachmentBytes(
+          audioBytes,
+          "web-audio.wav",
+          "audio/wav",
+        ),
+        corruptID: await sendAttachmentBytes(
+          imageBytes,
+          "damaged-image.png",
+          "image/png",
+          true,
+        ),
+        imageBytesBase64: imageBytes.toString("base64"),
+        audioBytesBase64: audioBytes.toString("base64"),
+      }))();
+      return reply(await attachmentEvents);
+    }
+    if (path === "/attachments-received") {
+      await wait(
+        () =>
+          observed.has("native-image.png") && observed.has("native-audio.wav"),
+        "native-attachments-missing",
+      );
+      await readAttachment(observed.get("native-image.png"), imageBytes);
+      await readAttachment(observed.get("native-audio.wav"), audioBytes);
+      state.attachmentsPassed = true;
+      await record();
+      return reply({ received: true });
     }
     if (path === "/new-account") {
       await register("interop_first");
@@ -450,6 +560,7 @@ const control = createServer(async (request, response) => {
     }
     if (path === "/complete") {
       if (
+        !state.attachmentsPassed ||
         !state.firstDeviceReady ||
         !state.verificationPassed ||
         !state.receivedNative ||

@@ -110,7 +110,8 @@ def main():
                 subprocess.run(['node', 'scripts/matrix-interop-driver.mjs'], cwd=repo / 'web', env=env, check=True)
             else:
                 subprocess.run(['xcodebuild', '-project', 'MobileMessengerIOS.xcodeproj', '-scheme', 'MobileMessengerIOS',
-                                '-destination', 'id=' + args.simulator, '-only-testing:MobileMessengerIOSTests/MatrixInteroperabilityTests',
+                                '-destination', 'id=' + args.simulator, '-test-timeouts-enabled', 'YES',
+                                '-maximum-test-execution-time-allowance', '240', '-only-testing:MobileMessengerIOSTests/MatrixInteroperabilityTests',
                                 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-',
                                 'CODE_SIGN_STYLE=Manual', 'test'], cwd=repo, check=True,
                                env={**env, 'TEST_RUNNER_MATRIX_INTEROP_MANIFEST': str(manifest)})

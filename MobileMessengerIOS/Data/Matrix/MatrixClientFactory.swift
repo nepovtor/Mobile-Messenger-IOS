@@ -55,7 +55,7 @@ public actor MatrixClientFactory {
         var builder = ClientBuilder()
             .homeserverUrl(url: homeserverURL.absoluteString)
             .disableWellKnownLookup(disableWellKnownLookup: true)
-            .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: UUID().uuidString))
+            .crossProcessLockConfig(crossProcessLockConfig: sessionDelegate == nil ? .singleProcess : .multiProcess(holderName: UUID().uuidString))
             .autoEnableCrossSigning(autoEnableCrossSigning: true)
             .roomKeyRecipientStrategy(strategy: .identityBasedStrategy)
             .sqliteStore(config: store)
