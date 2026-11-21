@@ -115,8 +115,12 @@ final class MatrixInteroperabilityTests: XCTestCase {
             throw XCTSkip("Dedicated loopback fixture required; the interop CI job must execute this test")
         }
         let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        executionTimeAllowance = 240
+        continueAfterFailure = false
+        print("MatrixInterop: opening native SDK with fixture TLS root")
         let config: Configuration = try await control("config", manifest: manifest)
         var active = try await open(config.native, config: config, manifest: manifest)
+        print("MatrixInterop: recovering existing identity")
         try await active.0.encryption().recover(recoveryKey: config.recovery)
         try await wait("Recovery must restore and verify the existing identity") { active.0.encryption().verificationState() == .verified }
         var room = try XCTUnwrap(try active.0.getRoom(roomId: config.roomID))
@@ -126,6 +130,7 @@ final class MatrixInteroperabilityTests: XCTestCase {
         var events = Events()
         var observer = Observer { [weak events] differences in Task { @MainActor in events?.update(differences) } }
         var handle = await timeline.addListener(listener: observer)
+        print("MatrixInterop: checking encrypted Web delivery")
         let expected: Ready = try await control("ready", manifest: manifest)
         try await wait("Swift did not decrypt every reordered/retried Web message") {
             ["web", "retry", "first", "second"].allSatisfy { events.containing(config.markers[$0]!).count == 1 }
@@ -133,8 +138,10 @@ final class MatrixInteroperabilityTests: XCTestCase {
         }
         let content = try XCTUnwrap(timeline.createMessageContent(msgType: .text(content: TextMessageContent(body: config.markers["native"]!, formatted: nil))))
         _ = try await timeline.send(msg: content)
+        print("MatrixInterop: checking encrypted native delivery")
         let receipt: Receipt = try await control("received", manifest: manifest)
         XCTAssertTrue(receipt.received, "The JS peer must decrypt a ciphertext-only native event")
+        print("MatrixInterop: comparing SDK SAS codes")
         let verification = try await MatrixDeviceVerification.open(client: active.0, ownUserID: config.native.user_id, onRequest: {})
         let requested: Requested = try await control("verify", manifest: manifest)
         XCTAssertTrue(requested.requested)

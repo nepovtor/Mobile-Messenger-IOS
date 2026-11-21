@@ -14,7 +14,21 @@ import {
   setLegacyAccessToken,
 } from "@/shared/auth/legacySession";
 
+let authGeneration = 0;
+let logoutOperation: Promise<void> | undefined;
+const logoutReceiptKey = "mobile-messenger.logout-pending.v1";
+
+function hasPendingLogout(): boolean {
+  try {
+    return localStorage.getItem(logoutReceiptKey) === "pending";
+  } catch {
+    return false;
+  }
+}
+
 type AuthStore = {
+  logoutPending: boolean;
+  logoutError: string | null;
   currentUser: CurrentUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -33,6 +47,8 @@ type AuthStore = {
 };
 
 export const authStore = create<AuthStore>((set, get) => ({
+  logoutPending: hasPendingLogout(),
+  logoutError: null,
   currentUser: null,
   isAuthenticated: false,
   isLoading: false,
@@ -67,12 +83,17 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   async verifyCode(phone, code) {
+    if (get().logoutPending)
+      throw new Error("Сначала завершите выход из предыдущей сессии");
+    const current = authGeneration;
     set({ isLoading: true, error: null });
     try {
       const response = await authApi.verifyCode(phone, code);
+      if (current !== authGeneration) return;
       setLegacyAccessToken(response.token);
-      await authenticateWithSessionCookie(set);
+      await authenticateWithSessionCookie(set, current);
     } catch (error) {
+      if (current !== authGeneration) return;
       clearLegacyAccessToken();
       const message = mapAuthErrorMessage(error);
       set({ isLoading: false, error: message });
@@ -80,12 +101,17 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   async login(payload) {
+    if (get().logoutPending)
+      throw new Error("Сначала завершите выход из предыдущей сессии");
+    const current = authGeneration;
     set({ isLoading: true, error: null });
     try {
       const response = await authApi.login(payload);
+      if (current !== authGeneration) return;
       setLegacyAccessToken(response.token);
-      await authenticateWithSessionCookie(set);
+      await authenticateWithSessionCookie(set, current);
     } catch (error) {
+      if (current !== authGeneration) return;
       clearLegacyAccessToken();
       set({
         error: mapAuthErrorMessage(
@@ -98,20 +124,59 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   async logout() {
-    await authApi.logout().catch(() => undefined);
-    clearLegacyAccessToken();
-    set({
-      currentUser: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-      telegramStartUrl: null,
-    });
+    if (logoutOperation) return logoutOperation;
+    ++authGeneration;
+    const operation = (async () => {
+      set({ logoutPending: true, logoutError: null });
+      // Only a receipt marker is persisted. The HttpOnly refresh cookie remains
+      // available to the idempotent logout endpoint until remote acknowledgement.
+      try {
+        localStorage.setItem(logoutReceiptKey, "pending");
+      } catch {
+        /* Still try to settle online. */
+      }
+      try {
+        await authApi.logout();
+      } catch (error) {
+        set({
+          logoutError:
+            "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход.",
+        });
+        throw error;
+      }
+      try {
+        localStorage.removeItem(logoutReceiptKey);
+      } catch {
+        /* A harmless retry after reload is safe. */
+      }
+      clearLegacyAccessToken();
+      set({
+        logoutPending: false,
+        logoutError: null,
+        currentUser: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+        telegramStartUrl: null,
+      });
+    })();
+    logoutOperation = operation;
+    try {
+      await operation;
+    } finally {
+      if (logoutOperation === operation) logoutOperation = undefined;
+    }
   },
   async restoreSession() {
+    if (get().logoutPending || hasPendingLogout()) {
+      set({ logoutPending: true, isLoading: false });
+      return;
+    }
+    const current = authGeneration;
     set({ isLoading: true, error: null });
     try {
       const currentUser = await authApi.getMe();
+      if (current !== authGeneration) return;
       set({
         currentUser,
         isAuthenticated: true,
@@ -119,6 +184,7 @@ export const authStore = create<AuthStore>((set, get) => ({
         error: null,
       });
     } catch {
+      if (current !== authGeneration) return;
       set({
         currentUser: null,
         isAuthenticated: false,
@@ -162,6 +228,8 @@ export const authStore = create<AuthStore>((set, get) => ({
     }
   },
   handleUnauthorized(message) {
+    if (get().logoutPending) return;
+    ++authGeneration;
     clearLegacyAccessToken();
     set({
       currentUser: null,
@@ -181,6 +249,7 @@ export const authStore = create<AuthStore>((set, get) => ({
 
 async function authenticateWithSessionCookie(
   set: (partial: Partial<AuthStore>) => void,
+  current: number,
 ) {
   set({
     currentUser: null,
@@ -188,6 +257,7 @@ async function authenticateWithSessionCookie(
   });
   try {
     const currentUser = await authApi.getMe();
+    if (current !== authGeneration) return;
     set({
       currentUser,
       isAuthenticated: true,
@@ -195,6 +265,7 @@ async function authenticateWithSessionCookie(
       error: null,
     });
   } catch (error) {
+    if (current !== authGeneration) return;
     set({
       currentUser: null,
       isAuthenticated: false,

@@ -43,6 +43,11 @@ def main():
                         '-keyout', str(private_key), '-out', str(certificate)], check=True, capture_output=True)
         private_key.chmod(0o600)
         certificate.chmod(0o600)
+        # The pinned Swift FFI consumes DER certificate bytes. Node/Python use PEM.
+        sdk_certificate = root / 'localhost.der'
+        subprocess.run(['openssl', 'x509', '-in', str(certificate), '-outform', 'DER',
+                        '-out', str(sdk_certificate)], check=True, capture_output=True)
+        sdk_certificate.chmod(0o600)
         port = free_port()
         homeserver = f'https://localhost:{port}'
         secret = secrets.token_urlsafe(32)
@@ -89,7 +94,7 @@ def main():
                 raise RuntimeError('Disposable Synapse startup timed out')
             env = {**os.environ, 'NODE_EXTRA_CA_CERTS': str(certificate), 'MATRIX_INTEROP_HOMESERVER': homeserver,
                    'MATRIX_INTEROP_REGISTRATION_FILE': str(registration_file), 'MATRIX_INTEROP_MANIFEST': str(manifest),
-                   'MATRIX_INTEROP_CERTIFICATE': str(certificate), 'MATRIX_INTEROP_RESULT': str(state_file)}
+                   'MATRIX_INTEROP_CERTIFICATE': str(sdk_certificate), 'MATRIX_INTEROP_RESULT': str(state_file)}
             peer = subprocess.Popen(['node', 'scripts/matrix-interop-peer.mjs'], cwd=repo / 'web', env=env,
                                     stdout=peer_log, stderr=subprocess.STDOUT)
             children.append(peer)

@@ -221,7 +221,9 @@ export function MatrixWorkspace({
     setGeneratedRecovery(null);
     setRecovery("");
     try {
-      await current?.logout();
+      // The backend settles MAS/Matrix revocation before acknowledging logout.
+      // Keep the sealed local history/unsent queue; closing only locks its keys.
+      await current?.close();
       await logoutUserSession();
     } catch (failure) {
       setError(messageFor(failure));

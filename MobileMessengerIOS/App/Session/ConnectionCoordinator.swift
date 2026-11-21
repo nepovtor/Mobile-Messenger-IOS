@@ -78,7 +78,7 @@ public final class ConnectionCoordinator: ObservableObject {
     }
 
     public func refresh() async {
-        guard sessionStore.authToken != nil else {
+        guard sessionStore.authToken != nil, !sessionStore.isLogoutPending else {
             realtimeService?.deactivate()
             status = .offline
             return
@@ -109,7 +109,7 @@ public final class ConnectionCoordinator: ObservableObject {
     }
 
     private func updateStatus() {
-        guard sessionStore.authToken != nil else {
+        guard sessionStore.authToken != nil, !sessionStore.isLogoutPending else {
             status = .offline
             return
         }

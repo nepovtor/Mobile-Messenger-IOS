@@ -34,14 +34,19 @@ public final class AppSessionCoordinator {
     }
 
     public func logout(
-        beforeClearing: @MainActor () async -> Void = {}
-    ) async {
+        beforeClearing: @MainActor () async throws -> Void = {}
+    ) async throws {
+        sessionStore.beginLogout()
+        authenticationTask?.cancel()
+        connectionCoordinator.sessionEnded()
+        sessionEnded?()
         await detachNotifications?()
-        await beforeClearing()
+        try await beforeClearing()
         sessionStore.logout()
     }
 
     public func handleUnauthorized() {
+        guard !sessionStore.isLogoutPending else { return }
         sessionEnded?()
         sessionStore.logout()
     }
@@ -51,6 +56,7 @@ public final class AppSessionCoordinator {
             guard let self else { return }
             switch state {
             case .authenticated(_, let userID, _):
+                guard !sessionStore.isLogoutPending else { return }
                 authenticationTask?.cancel()
                 let namespace = sessionStore.cacheNamespace
                 authenticationTask = Task { [weak self] in

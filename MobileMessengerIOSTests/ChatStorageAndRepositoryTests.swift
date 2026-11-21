@@ -358,6 +358,28 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         XCTAssertEqual(sessionStore.state, .unauthenticated)
     }
 
+    func testPendingLogoutRetainsCredentialAndReceiptAcrossRestartUntilAcknowledgement() throws {
+        let tokens = InMemoryTokenStore()
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let store = SessionStore(tokenStore: tokens, defaults: defaults)
+        let user = UUID()
+        store.authenticate(with: "access", refreshToken: "retry-revocation", userID: user, displayName: "Анна")
+        let oldNamespace = store.cacheNamespace
+        store.beginLogout()
+        XCTAssertTrue(store.isLogoutPending)
+        XCTAssertNotEqual(oldNamespace, store.cacheNamespace)
+        XCTAssertEqual(store.authRefreshToken, "retry-revocation")
+        let restarted = SessionStore(tokenStore: tokens, defaults: defaults)
+        XCTAssertTrue(restarted.isLogoutPending)
+        XCTAssertEqual(restarted.authRefreshToken, "retry-revocation")
+        restarted.authenticate(with: "other", userID: UUID(), displayName: "Другой")
+        XCTAssertEqual(restarted.currentUserID, user)
+        restarted.logout() // Only after the remote coordinator acknowledges revocation.
+        XCTAssertFalse(restarted.isLogoutPending)
+        XCTAssertNil(restarted.authRefreshToken)
+        XCTAssertFalse(SessionStore(tokenStore: tokens, defaults: defaults).isLogoutPending)
+    }
+
     func testUserSwitchClearsOldChatsBeforeLoadingNextAccount() async throws {
         let tokenStore = InMemoryTokenStore()
         let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))

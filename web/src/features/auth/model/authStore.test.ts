@@ -34,10 +34,13 @@ vi.mock("@/features/profile/api/profileApi", () => ({
 
 describe("authStore", () => {
   beforeEach(() => {
+    localStorage.clear();
     clearLegacyAccessToken();
     vi.resetAllMocks();
     vi.mocked(authApi.logout).mockResolvedValue();
     authStore.setState({
+      logoutPending: false,
+      logoutError: null,
       currentUser: {
         userID: "user-1",
         displayName: "Anna",
@@ -92,6 +95,58 @@ describe("authStore", () => {
       clearSpy.mockRestore();
       detachSpy.mockRestore();
     }
+  });
+
+  it("retains a pending revocation across 503, unauthorized callbacks and restore, then settles on retry", async () => {
+    vi.mocked(authApi.logout).mockRejectedValueOnce(
+      new ApiError("Matrix revocation is pending", 503),
+    );
+    const detach = vi
+      .spyOn(pushStore.getState(), "detachFromCurrentSession")
+      .mockRejectedValue(new Error("offline"));
+    expect(await logoutUserSession()).toBe(false);
+    expect(authStore.getState().logoutPending).toBe(true);
+    expect(authStore.getState().currentUser?.userID).toBe("user-1");
+    expect(localStorage.getItem("mobile-messenger.logout-pending.v1")).toBe(
+      "pending",
+    );
+    expect(chatStore.getState().chats).toHaveLength(0);
+    authStore.getState().handleUnauthorized("Expired");
+    await authStore.getState().restoreSession();
+    expect(authApi.getMe).not.toHaveBeenCalled();
+    await expect(
+      authStore.getState().verifyCode("+1555", "123456"),
+    ).rejects.toThrow("Сначала завершите");
+    vi.mocked(authApi.logout).mockResolvedValueOnce();
+    expect(await logoutUserSession()).toBe(true);
+    expect(authStore.getState().logoutPending).toBe(false);
+    expect(authStore.getState().currentUser).toBeNull();
+    expect(
+      localStorage.getItem("mobile-messenger.logout-pending.v1"),
+    ).toBeNull();
+    detach.mockRestore();
+  });
+
+  it("ignores a delayed session restore after logout has settled", async () => {
+    let complete!: (
+      user: NonNullable<ReturnType<typeof authStore.getState>["currentUser"]>,
+    ) => void;
+    vi.mocked(authApi.getMe).mockReturnValueOnce(
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+    );
+    const restore = authStore.getState().restoreSession();
+    await logoutUserSession();
+    complete({
+      userID: "old",
+      displayName: "Old",
+      contact: "+1555",
+      method: "phone",
+    });
+    await restore;
+    expect(authStore.getState().isAuthenticated).toBe(false);
+    expect(authStore.getState().currentUser).toBeNull();
   });
 
   it("establishes a cookie session before requesting the current user", async () => {

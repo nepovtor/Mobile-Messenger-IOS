@@ -58,6 +58,8 @@ public final class AppContainer: ObservableObject {
     }
     public var pendingPushChatID: UUID? { router.pendingPushChatID }
 
+    @Published public private(set) var logoutError: String?
+    @Published public private(set) var isLoggingOut = false
     @Published public private(set) var configurationRevision: Int = 0
 
     private init() {
@@ -422,13 +424,21 @@ public final class AppContainer: ObservableObject {
     }
 
     public func logout() async {
+        guard !isLoggingOut else { return }
+        isLoggingOut = true; logoutError = nil
+        defer { isLoggingOut = false }
         let refreshToken = sessionStore.authRefreshToken
         let baseURL = configService.restBaseURL
-        await sessionCoordinator.logout {
-            if let refreshToken {
-                try? await RESTAuthService(baseURL: baseURL)
-                    .logout(refreshToken: refreshToken)
+        do {
+            try await sessionCoordinator.logout {
+                // A legacy session can have no refresh credential. Modern
+                // sessions preserve it across failures and app restarts.
+                if let refreshToken {
+                    try await RESTAuthService(baseURL: baseURL).logout(refreshToken: refreshToken)
+                }
             }
+        } catch {
+            logoutError = "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход."
         }
     }
 
@@ -450,7 +460,7 @@ public final class AppContainer: ObservableObject {
     }
 
     private func validAuthToken(namespace: UUID) async -> String? {
-        guard namespace == sessionStore.cacheNamespace else { return nil }
+        guard namespace == sessionStore.cacheNamespace, !sessionStore.isLogoutPending else { return nil }
         guard let accessToken = sessionStore.authToken else {
             return nil
         }
@@ -484,7 +494,7 @@ public final class AppContainer: ObservableObject {
             )
             return response.token
         } catch {
-            guard namespace == sessionStore.cacheNamespace else { return nil }
+            guard namespace == sessionStore.cacheNamespace, !sessionStore.isLogoutPending else { return nil }
             refreshTask = nil
             if let expiration = Self.jwtExpiration(accessToken),
                expiration > Date() {

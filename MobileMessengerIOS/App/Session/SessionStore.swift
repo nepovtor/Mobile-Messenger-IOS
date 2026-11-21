@@ -16,9 +16,11 @@ public final class SessionStore: ObservableObject {
         static let tokenKey = "auth.token"
         static let userIDKey = "auth.user_id"
         static let displayNameKey = "auth.display_name"
+        static let logoutPendingKey = "auth.logout_pending"
         static let cacheNamespaceKey = "auth.cache_namespace"
     }
 
+    @Published public private(set) var isLogoutPending: Bool
     @Published public private(set) var state: State
     public private(set) var cacheNamespace: UUID
     public var sessionBoundaryHandler: (() -> Void)?
@@ -28,6 +30,7 @@ public final class SessionStore: ObservableObject {
     public init(tokenStore: TokenStore, defaults: UserDefaults = .standard) {
         self.tokenStore = tokenStore
         self.defaults = defaults
+        isLogoutPending = defaults.bool(forKey: Constants.logoutPendingKey)
         cacheNamespace = defaults.string(forKey: Constants.cacheNamespaceKey)
             .flatMap(UUID.init(uuidString:)) ?? UUID()
 
@@ -50,6 +53,7 @@ public final class SessionStore: ObservableObject {
         userID: UUID,
         displayName: String
     ) {
+        guard !isLogoutPending else { return }
         cacheNamespace = UUID()
         defaults.set(cacheNamespace.uuidString, forKey: Constants.cacheNamespaceKey)
         tokenStore.clear()
@@ -64,7 +68,20 @@ public final class SessionStore: ObservableObject {
         sessionBoundaryHandler?()
     }
 
+    /// Retain the Keychain refresh credential until the server acknowledges
+    /// revocation. Invalidate all messaging work immediately, including on retry.
+    public func beginLogout() {
+        guard !isLogoutPending else { return }
+        defaults.set(true, forKey: Constants.logoutPendingKey)
+        isLogoutPending = true
+        cacheNamespace = UUID()
+        defaults.set(cacheNamespace.uuidString, forKey: Constants.cacheNamespaceKey)
+        sessionBoundaryHandler?()
+    }
+
     public func logout() {
+        defaults.removeObject(forKey: Constants.logoutPendingKey)
+        isLogoutPending = false
         cacheNamespace = UUID()
         defaults.removeObject(forKey: Constants.cacheNamespaceKey)
         tokenStore.clear()
@@ -105,6 +122,7 @@ public final class SessionStore: ObservableObject {
     }
 
     public func updateCredentials(accessToken: String, refreshToken: String?) {
+        guard !isLogoutPending else { return }
         guard case let .authenticated(_, userID, displayName) = state else {
             return
         }

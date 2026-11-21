@@ -18,9 +18,19 @@ export function initializeSessionCoordinator() {
 }
 
 export async function logoutUserSession() {
-  await pushStore.getState().detachFromCurrentSession();
+  // Start the receipt before clearing views or making any other network call.
+  const revocation = authStore.getState().logout();
   clearFeatureState();
-  await authStore.getState().logout();
+  void pushStore
+    .getState()
+    .detachFromCurrentSession()
+    .catch(() => undefined);
+  try {
+    await revocation;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function handleUnauthorizedSession(message: string) {

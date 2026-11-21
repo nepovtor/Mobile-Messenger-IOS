@@ -98,6 +98,26 @@ describe("App push session handling", () => {
     cleanup();
   });
 
+  it("blocks protected screens and push registration while revocation awaits retry", async () => {
+    authStoreMock.mockReturnValue({
+      restoreSession,
+      isAuthenticated: true,
+      logoutPending: true,
+      logoutError: "Ожидается отзыв",
+    });
+    render(
+      <MemoryRouter initialEntries={["/messenger"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("Выход не завершён")).toBeInTheDocument();
+    expect(screen.queryByText("messenger")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Повторить выход" }),
+    ).toBeInTheDocument();
+    expect(syncPushForUser).not.toHaveBeenCalled();
+  });
+
   it("does not detach the web push subscription while the user session is restoring", async () => {
     render(
       <MemoryRouter>

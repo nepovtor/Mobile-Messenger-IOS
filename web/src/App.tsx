@@ -1,5 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { initializeSessionCoordinator } from "@/app/sessionCoordinator";
+import {
+  logoutUserSession,
+  initializeSessionCoordinator,
+} from "@/app/sessionCoordinator";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
@@ -50,7 +53,13 @@ export default function App() {
   const navigate = useNavigate();
   const [sessionsRestored, setSessionsRestored] = useState(false);
   const [pushInitialized, setPushInitialized] = useState(false);
-  const { restoreSession, isAuthenticated: isUserAuthenticated } = authStore();
+  const {
+    restoreSession,
+    isAuthenticated: isUserAuthenticated,
+    logoutPending,
+    logoutError,
+  } = authStore();
+  const [logoutBusy, setLogoutBusy] = useState(false);
   const {
     restoreSession: restoreAdminSession,
     isAuthenticated: isAdminAuthenticated,
@@ -89,10 +98,15 @@ export default function App() {
   }, [isUserAuthenticated, sessionsRestored]);
 
   useEffect(() => {
-    if (sessionsRestored && pushInitialized && isUserAuthenticated) {
+    if (
+      sessionsRestored &&
+      pushInitialized &&
+      isUserAuthenticated &&
+      !logoutPending
+    ) {
       void pushStore.getState().syncForAuthenticatedUser();
     }
-  }, [isUserAuthenticated, pushInitialized, sessionsRestored]);
+  }, [isUserAuthenticated, pushInitialized, sessionsRestored, logoutPending]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) {
@@ -127,6 +141,27 @@ export default function App() {
 
   if (!sessionsRestored) {
     return <RouteFallback />;
+  }
+
+  if (logoutPending) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-5 p-6">
+        <h1 className="text-xl font-medium">Выход не завершён</h1>
+        <p role="status">
+          {logoutError ??
+            "Ожидаем подтверждения отзыва сессии от сервера. Переписка заблокирована."}
+        </p>
+        <button
+          disabled={logoutBusy}
+          onClick={() => {
+            setLogoutBusy(true);
+            void logoutUserSession().finally(() => setLogoutBusy(false));
+          }}
+        >
+          {logoutBusy ? "Проверяем…" : "Повторить выход"}
+        </button>
+      </main>
+    );
   }
 
   return (

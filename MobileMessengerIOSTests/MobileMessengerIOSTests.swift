@@ -597,6 +597,10 @@ actor AuthServiceSpy: AuthNetworking {
 
 final class InMemoryTokenStore: TokenStore {
     private var token: String?
+    private var refreshToken: String?
+
+    func store(refreshToken: String) { self.refreshToken = refreshToken }
+    func retrieveRefreshToken() -> String? { refreshToken }
 
     func store(token: String) {
         self.token = token
@@ -608,6 +612,7 @@ final class InMemoryTokenStore: TokenStore {
 
     func clear() {
         token = nil
+        refreshToken = nil
     }
 }
 
