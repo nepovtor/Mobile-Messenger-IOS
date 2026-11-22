@@ -52,6 +52,7 @@ export function MatrixWorkspace({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [phone, setPhone] = useState("");
+  const [groupTitle, setGroupTitle] = useState("");
   const [recovery, setRecovery] = useState("");
   const [generatedRecovery, setGeneratedRecovery] = useState<string | null>(
     null,
@@ -227,12 +228,28 @@ export function MatrixWorkspace({
     if (!phone.trim()) return;
     const current = generation.current;
     try {
-      const chat = await chatApi.createChat(phone.trim(), [phone.trim()]);
+      const contacts = [
+        ...new Set(
+          phone
+            .split(/[,;\n]/)
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (contacts.length > 20)
+        throw new Error("Добавьте не более 20 участников");
+      if (contacts.length > 1 && !groupTitle.trim())
+        throw new Error("Введите название группы");
+      const chat = await chatApi.createChat(
+        groupTitle.trim() || contacts[0],
+        contacts,
+      );
       const metadata = await chatApi.getChats();
       if (generation.current !== current) return;
       setChats(metadata);
       setSelected(chat.id);
       setPhone("");
+      setGroupTitle("");
     } catch (failure) {
       setError(messageFor(failure));
     }
@@ -343,18 +360,27 @@ export function MatrixWorkspace({
           </button>
         </header>
         <form
-          className="flex gap-2"
+          className="space-y-2"
           onSubmit={(event) => void createChat(event)}
         >
           <Input
-            aria-label="Номер нового контакта"
-            type="tel"
+            aria-label="Номера участников через запятую"
+            type="text"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
-            placeholder="Номер телефона"
+            placeholder="Номера через запятую"
           />
-          <Button type="submit" size="sm" aria-label="Создать диалог">
-            +
+          {phone.split(/[,;]/).length > 1 && (
+            <Input
+              aria-label="Название группы"
+              maxLength={120}
+              value={groupTitle}
+              onChange={(event) => setGroupTitle(event.target.value)}
+              placeholder="Название группы"
+            />
+          )}
+          <Button type="submit" size="sm" aria-label="Создать переписку">
+            Создать
           </Button>
         </form>
         <nav aria-label="Диалоги" className="min-h-0 flex-1 overflow-y-auto">

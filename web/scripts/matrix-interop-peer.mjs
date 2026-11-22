@@ -47,6 +47,7 @@ const state = {
   verificationPassed: false,
   firstDeviceReady: false,
   attachmentsPassed: false,
+  groupRotationPassed: false,
   phase: "setup",
 };
 const results = process.env.MATRIX_INTEROP_RESULT;
@@ -226,7 +227,7 @@ const markers = Object.fromEntries(
 let corruptID, originalSessionID, webEventID;
 const observed = new Map();
 bob.client.on(matrix.ClientEvent.Event, (event) => {
-  if (event.getRoomId() !== roomID) return;
+  if (!event.getRoomId()) return;
   const capture = () => {
     if (
       event.getType() === "m.room.message" &&
@@ -392,6 +393,101 @@ async function readAttachment(event, expected) {
     throw Error("attachment-bytes-differ");
 }
 
+let groupScenario;
+let carol;
+let groupRoomID;
+const groupMarkers = {
+  before: `group-before-${randomUUID()}`,
+  after: `group-after-${randomUUID()}`,
+  native: `group-native-${randomUUID()}`,
+};
+async function assertExcluded(runtime, wire) {
+  const event = new matrix.MatrixEvent({ ...wire, room_id: groupRoomID });
+  await runtime.client.decryptEventIfNeeded(event).catch(() => undefined);
+  if (!event.isDecryptionFailure())
+    throw Error("removed-member-decrypted-future-message");
+}
+async function groupRotation() {
+  state.phase = "group-rotation";
+  await record();
+  await register("interop_carol");
+  carol = await session(await login("interop_carol", "CAROL_WEB"));
+  await setupRecovery(carol);
+  groupRoomID = (
+    await bob.client.createRoom({
+      preset: "private_chat",
+      visibility: "private",
+      invite: [native.user_id, carol.client.getUserId()],
+      initial_state: [
+        {
+          type: "m.room.encryption",
+          state_key: "",
+          content: { algorithm: "m.megolm.v1.aes-sha2" },
+        },
+        {
+          type: "m.room.history_visibility",
+          state_key: "",
+          content: { history_visibility: "joined" },
+        },
+      ],
+    })
+  ).room_id;
+  await alice.client.joinRoom(groupRoomID);
+  await carol.client.joinRoom(groupRoomID);
+  await wait(
+    () => bob.client.getRoom(groupRoomID)?.getJoinedMemberCount() === 3,
+    "group-members-not-synced",
+  );
+  const before = await bob.client.sendTextMessage(
+    groupRoomID,
+    groupMarkers.before,
+  );
+  await wait(async () => {
+    const room = carol.client.getRoom(groupRoomID);
+    for (const event of room.getLiveTimeline().getEvents()) {
+      await carol.client.decryptEventIfNeeded(event);
+      if (event.getContent().body === groupMarkers.before) return true;
+    }
+    return false;
+  }, "group-before-not-decrypted");
+  const beforeWire = await bob.client.fetchRoomEvent(
+    groupRoomID,
+    before.event_id,
+  );
+  await bob.client.kick(
+    groupRoomID,
+    carol.client.getUserId(),
+    "Disposable SDK rotation test",
+  );
+  await wait(
+    () =>
+      bob.client.getRoom(groupRoomID)?.getMember(carol.client.getUserId())
+        ?.membership === "leave",
+    "group-removal-not-synced",
+  );
+  const after = await bob.client.sendTextMessage(
+    groupRoomID,
+    groupMarkers.after,
+  );
+  const afterWire = await bob.client.fetchRoomEvent(
+    groupRoomID,
+    after.event_id,
+  );
+  if (
+    beforeWire.type !== "m.room.encrypted" ||
+    afterWire.type !== "m.room.encrypted" ||
+    beforeWire.content.session_id === afterWire.content.session_id
+  )
+    throw Error("group-session-not-rotated");
+  await assertExcluded(carol, afterWire);
+  return {
+    roomID: groupRoomID,
+    before: groupMarkers.before,
+    after: groupMarkers.after,
+    native: groupMarkers.native,
+  };
+}
+
 const control = createServer(async (request, response) => {
   const authorization = request.headers.authorization ?? "";
   const expected = `Bearer ${controlToken}`;
@@ -459,6 +555,27 @@ const control = createServer(async (request, response) => {
       await readAttachment(observed.get("native-image.png"), imageBytes);
       await readAttachment(observed.get("native-audio.wav"), audioBytes);
       state.attachmentsPassed = true;
+      await record();
+      return reply({ received: true });
+    }
+    if (path === "/group") {
+      groupScenario ??= groupRotation();
+      return reply(await groupScenario);
+    }
+    if (path === "/group-received") {
+      await wait(
+        () => observed.has(groupMarkers.native),
+        "native-group-message-missing",
+      );
+      const event = observed.get(groupMarkers.native);
+      const wire = await bob.client.fetchRoomEvent(groupRoomID, event.getId());
+      if (
+        wire.type !== "m.room.encrypted" ||
+        JSON.stringify(wire).includes(groupMarkers.native)
+      )
+        throw Error("native-group-plaintext");
+      await assertExcluded(carol, wire);
+      state.groupRotationPassed = true;
       await record();
       return reply({ received: true });
     }
@@ -539,6 +656,7 @@ const control = createServer(async (request, response) => {
       // No old device may answer a room-key request during recovery acceptance.
       alice.client.stopClient();
       bob.client.stopClient();
+      carol?.client.stopClient();
       return reply({ native: await login("interop_alice", "ALICE_RECOVERED") });
     }
     if (path === "/received") {
@@ -560,6 +678,7 @@ const control = createServer(async (request, response) => {
     }
     if (path === "/complete") {
       if (
+        !state.groupRotationPassed ||
         !state.attachmentsPassed ||
         !state.firstDeviceReady ||
         !state.verificationPassed ||
@@ -605,6 +724,7 @@ const close = () => {
   clearTimeout(deadline);
   alice.client.stopClient();
   bob.client.stopClient();
+  carol?.client.stopClient();
   control.close();
   process.exit();
 };

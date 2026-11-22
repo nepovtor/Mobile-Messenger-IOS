@@ -28,12 +28,17 @@ final class MatrixInteroperabilityTests: XCTestCase {
     private struct Receipt: Decodable { let received: Bool }
     private struct FirstReady: Decodable { let ready: Bool }
     private final class RecoveryProgress: EnableRecoveryProgressListener, @unchecked Sendable { func onUpdate(status: EnableRecoveryProgress) {} }
+    private struct GroupScenario: Decodable { let roomID: String; let before: String; let after: String; let native: String }
     private struct Attachments: Decodable {
         let imageID: String; let audioID: String; let corruptID: String
         let imageBytesBase64: String; let audioBytesBase64: String
     }
     private struct Complete: Decodable { let completed: Bool }
 
+    private final class SyncObserver: SyncServiceStateObserver, @unchecked Sendable {
+        func onUpdate(state: SyncServiceState) { print("MatrixInterop sync: \(state)") }
+    }
+    private var syncStateHandles: [TaskHandle] = []
     private final class FixtureSessionDelegate: ClientSessionDelegate, @unchecked Sendable {
         private let mutex = NSLock()
         private var session: Session
@@ -122,7 +127,7 @@ final class MatrixInteroperabilityTests: XCTestCase {
         throw NSError(domain: "MatrixInterop", code: 2, userInfo: [NSLocalizedDescriptionKey: description])
     }
 
-    private func open(_ credentials: Credentials, config: Configuration, manifest: Manifest, waitForRoom: Bool = true) async throws -> (Client, SyncService) {
+    private func open(_ credentials: Credentials, config: Configuration, manifest: Manifest, waitForRoom: Bool = true) async throws -> (Client, SyncService, RoomListEntriesWithDynamicAdaptersResult) {
         guard config.homeserver.scheme == "https", config.homeserver.host == "localhost", config.homeserver.port != nil else {
             throw MatrixWorkspaceError.invalidConfiguration
         }
@@ -135,9 +140,12 @@ final class MatrixInteroperabilityTests: XCTestCase {
             userID: credentials.user_id, deviceID: credentials.device_id, sessionDelegate: delegate, trustedRootCertificates: [certificate])
         try await client.restoreSession(session: session)
         let sync = try await client.syncService().withOfflineMode().finish()
+        let entries = try await sync.roomListService().allRooms().entriesWithDynamicAdapters(pageSize: 100, listener: MatrixRoomListObserver())
+        _ = entries.controller().setFilter(kind: .all(filters: []))
+        syncStateHandles.append(sync.state(listener: SyncObserver()))
         await sync.start()
         if waitForRoom { try await wait("Native room did not synchronize") { try client.getRoom(roomId: config.roomID) != nil } }
-        return (client, sync)
+        return (client, sync, entries)
     }
 
     func testRealJavaScriptSwiftExchangeRestartAndRecovery() async throws {
@@ -156,6 +164,7 @@ final class MatrixInteroperabilityTests: XCTestCase {
         var room = try XCTUnwrap(try active.0.getRoom(roomId: config.roomID))
         let encrypted = await room.isEncrypted()
         XCTAssertTrue(encrypted)
+        try await active.1.roomListService().setRoomSubscriptions(roomIds: [config.roomID])
         var timeline = try await room.timeline()
         var events = Events()
         var observer = Observer { [weak events] differences in Task { @MainActor in events?.update(differences) } }
@@ -199,6 +208,23 @@ final class MatrixInteroperabilityTests: XCTestCase {
         try await audioUpload.join()
         let mediaReceipt: Receipt = try await control("attachments-received", manifest: manifest)
         XCTAssertTrue(mediaReceipt.received)
+        print("MatrixInterop: checking group rotation and removed-member exclusion")
+        let group: GroupScenario = try await control("group", manifest: manifest)
+        try await wait("Native group did not synchronize") { try active.0.getRoom(roomId: group.roomID) != nil }
+        let groupRoom = try XCTUnwrap(try active.0.getRoom(roomId: group.roomID))
+        try await active.1.roomListService().setRoomSubscriptions(roomIds: [config.roomID, group.roomID])
+        let groupTimeline = try await groupRoom.timeline()
+        let groupEvents = Events()
+        let groupObserver = Observer { [weak groupEvents] differences in Task { @MainActor in groupEvents?.update(differences) } }
+        let groupHandle = await groupTimeline.addListener(listener: groupObserver)
+        _ = try await groupTimeline.paginateBackwards(numEvents: 100)
+        try await wait("A remaining native member could not decrypt the rotated group session") { groupEvents.containing(group.after).count == 1 }
+        let groupContent = try XCTUnwrap(groupTimeline.createMessageContent(msgType: .text(content: TextMessageContent(body: group.native, formatted: nil))))
+        groupRoom.enableSendQueue(enable: true)
+        _ = try await groupTimeline.send(msg: groupContent)
+        let groupReceipt: Receipt = try await control("group-received", manifest: manifest)
+        XCTAssertTrue(groupReceipt.received)
+        groupHandle.cancel()
         print("MatrixInterop: comparing SDK SAS codes")
         let verification = try await MatrixDeviceVerification.open(client: active.0, ownUserID: config.native.user_id, onRequest: {})
         let requested: Requested = try await control("verify", manifest: manifest)

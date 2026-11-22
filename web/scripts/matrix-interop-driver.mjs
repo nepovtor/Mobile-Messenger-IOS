@@ -206,6 +206,23 @@ try {
     });
   }
   await control("/attachments-received");
+  const group = await control("/group");
+  await wait(
+    () => Boolean(client.getRoom(group.roomID)),
+    "Group missing from native-equivalent sync",
+  );
+  await wait(async () => {
+    for (const event of client
+      .getRoom(group.roomID)
+      .getLiveTimeline()
+      .getEvents()) {
+      await client.decryptEventIfNeeded(event);
+      if (event.getContent().body === group.after) return true;
+    }
+    return false;
+  }, "Remaining member did not decrypt rotated group session");
+  await client.sendTextMessage(group.roomID, group.native);
+  await control("/group-received");
   await control("/verify");
   await wait(() => Boolean(incoming), "SAS request was not received");
   incoming.on(VerificationRequestEvent.Change, () => {

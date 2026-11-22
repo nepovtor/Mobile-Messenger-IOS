@@ -16,7 +16,7 @@ struct ContentView: View {
             if sessionStore.isLogoutPending {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Выход не завершён").font(.title2)
-                    Text(container.logoutError ?? "Ожидаем подтверждения отзыва сессии от сервера. Переписка заблокирована.")
+                    Text(container.logoutError ?? "Завершаем выход из приложения. Переписка заблокирована.")
                     Button(container.isLoggingOut ? "Проверяем…" : "Повторить выход") {
                         Task { await container.logout() }
                     }.disabled(container.isLoggingOut)

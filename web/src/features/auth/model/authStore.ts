@@ -147,8 +147,10 @@ export const authStore = create<AuthStore>((set, get) => ({
       } catch {
         /* Still try to settle online. */
       }
+      let acknowledged = false;
       try {
         await authApi.logout();
+        acknowledged = true;
         if (pendingUserID) {
           const { retireSealedSessions } =
             await import("@/features/chat/matrix/sessionVault");
@@ -156,8 +158,9 @@ export const authStore = create<AuthStore>((set, get) => ({
         }
       } catch (error) {
         set({
-          logoutError:
-            "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход.",
+          logoutError: acknowledged
+            ? "Сессия отозвана. Не удалось закрыть локальные учётные данные. Повторите выход."
+            : "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход.",
         });
         throw error;
       }

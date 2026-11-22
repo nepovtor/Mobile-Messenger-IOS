@@ -149,7 +149,7 @@ export default function App() {
         <h1 className="text-xl font-medium">Выход не завершён</h1>
         <p role="status">
           {logoutError ??
-            "Ожидаем подтверждения отзыва сессии от сервера. Переписка заблокирована."}
+            "Завершаем выход из приложения. Переписка заблокирована."}
         </p>
         <button
           disabled={logoutBusy}

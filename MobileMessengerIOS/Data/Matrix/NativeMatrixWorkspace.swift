@@ -8,6 +8,10 @@ import MatrixRustSDK
 import SwiftUI
 import UIKit
 
+final class MatrixRoomListObserver: RoomListEntriesListener, @unchecked Sendable {
+    func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate]) {}
+}
+
 final class MatrixAuthenticationObserver: ClientDelegate, @unchecked Sendable {
     private let revoked: @Sendable () -> Void
     init(revoked: @escaping @Sendable () -> Void) { self.revoked = revoked }
@@ -73,6 +77,7 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
     @Published var deviceVerification: MatrixDeviceVerification?
     @Published var showDeviceVerification = false
     @Published var showRecoverySettings = false
+    @Published var showNewGroup = false
     @Published var editing: EventOrTransactionId?
     private let metadata: MatrixMetadataService
     private let owner: UUID
@@ -83,6 +88,8 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
     private var client: Client?
     private var keychain: MatrixSessionKeychain?
     private var sync: SyncService?
+    private var roomListObserver: MatrixRoomListObserver?
+    private var roomListEntries: RoomListEntriesWithDynamicAdaptersResult?
     private var browser: ASWebAuthenticationSession?
     private var browserContinuation: CheckedContinuation<URL, Error>?
     private var authorization: OAuthAuthorizationData?
@@ -178,6 +185,12 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
             let service = try await next.syncService().withOfflineMode().finish()
             guard generation == current else { await service.stop(); return }
             sync = service
+            let roomListObserver = MatrixRoomListObserver()
+            self.roomListObserver = roomListObserver
+            let entries = try await service.roomListService().allRooms().entriesWithDynamicAdapters(pageSize: 100, listener: roomListObserver)
+            guard generation == current else { entries.entriesStream().cancel(); return }
+            _ = entries.controller().setFilter(kind: .all(filters: []))
+            roomListEntries = entries
             deviceVerification = try await MatrixDeviceVerification.open(client: next, ownUserID: config.expectedUserID) { [weak self] in
                 guard let self, self.generation == current else { return }
                 if !self.showRecoverySettings { self.showDeviceVerification = true }
@@ -221,6 +234,7 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         do {
             let room = try await protectedRoom(chatID: chatID, client: client, config: config, generation: current)
             guard generation == current, selectionGeneration == selection else { return }
+            try await sync?.roomListService().setRoomSubscriptions(roomIds: [room.id()])
             let next = try await room.timeline()
             guard generation == current, selectionGeneration == selection else { return }
             timeline = next
@@ -299,6 +313,24 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
             else { _ = try await next.send(msg: content) }
             if generation == current, selectionGeneration == selection { text = ""; editing = nil }
         } catch { if generation == current { self.error = error.localizedDescription } }
+    }
+
+    func createGroup(title: String, contacts: String) async -> Bool {
+        guard ready, !busy else { return false }
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phones = Array(Set(contacts.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })).sorted()
+        guard !title.isEmpty, title.count <= 120, (2...20).contains(phones.count) else {
+            error = "Введите название группы и от 2 до 20 номеров через запятую"; return false
+        }
+        busy = true; error = nil; let current = generation
+        defer { if generation == current { busy = false } }
+        do {
+            _ = try await metadata.createGroup(title: title, contacts: phones)
+            let list = try await metadata.chats()
+            guard generation == current else { return false }
+            chats = list; return true
+        } catch { if generation == current { self.error = error.localizedDescription }; return false }
     }
 
     func sendAttachment(url: URL) async {
@@ -444,8 +476,9 @@ final class NativeMatrixWorkspaceModel: NSObject, ObservableObject, ASWebAuthent
         authorization = nil
         authHandle?.cancel(); authHandle = nil; authObserver = nil
         keychain?.close(); keychain = nil
-        deviceVerification?.close(); deviceVerification = nil; showDeviceVerification = false; showRecoverySettings = false
+        deviceVerification?.close(); deviceVerification = nil; showDeviceVerification = false; showRecoverySettings = false; showNewGroup = false
         timelineHandle?.cancel(); timelineHandle = nil; timelineObserver = nil
+        roomListEntries?.entriesStream().cancel(); roomListEntries = nil; roomListObserver = nil
         let previous = sync; sync = nil
         let previousClient = client
         Task { await previousClient?.enableAllSendQueues(enable: false); await previous?.stop() }
@@ -575,6 +608,9 @@ struct MatrixChatEntryView: View {
                         }
                         .navigationTitle("Сообщения")
                         .toolbar {
+                            Button { model.showNewGroup = true } label: {
+                                Image(systemName: "plus").accessibilityLabel("Создать группу")
+                            }
                             Menu {
                                 Button("Подтвердить устройство") { Task { await model.requestDeviceVerification() } }
                                 Button("Ключи и восстановление") { model.showRecoverySettings = true }
@@ -603,6 +639,7 @@ struct MatrixChatEntryView: View {
         .sheet(isPresented: $model.showDeviceVerification, onDismiss: { Task { await model.deviceVerification?.cancel() } }) {
             if let verification = model.deviceVerification { MatrixDeviceVerificationView(verification: verification) }
         }
+        .sheet(isPresented: $model.showNewGroup) { NativeMatrixNewGroupView(model: model) }
         .sheet(isPresented: $model.showRecoverySettings) { NativeMatrixRecoveryView(model: model) }
         .task { if model.config == nil && !model.legacy { await model.loadConfiguration() } }
     }
@@ -729,6 +766,27 @@ private struct NativeMatrixAttachmentView: View {
                     image = UIImage(cgImage: thumbnail)
                 } else { player = try AVAudioPlayer(data: data); player?.prepareToPlay() }
             } catch { if active && !Task.isCancelled { self.error = "Не удалось проверить и открыть вложение" } }
+        }
+    }
+}
+
+
+@MainActor
+private struct NativeMatrixNewGroupView: View {
+    @ObservedObject var model: NativeMatrixWorkspaceModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var contacts = ""
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Название группы", text: $title)
+                TextField("Номера через запятую", text: $contacts, axis: .vertical).keyboardType(.numbersAndPunctuation)
+                Text("Добавьте номера сотрудников, которые уже зарегистрированы в приложении.").font(.footnote)
+                if let error = model.error { Text(error).foregroundStyle(.red) }
+                Button("Создать группу") { Task { if await model.createGroup(title: title, contacts: contacts) { dismiss() } } }.disabled(model.busy)
+            }.navigationTitle("Новая группа")
+            .toolbar { Button("Отменить") { dismiss() } }
         }
     }
 }

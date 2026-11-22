@@ -121,6 +121,14 @@ final class MatrixSessionKeychain: ClientSessionDelegate, @unchecked Sendable {
     func remove() throws {
         mutex.lock(); defer { mutex.unlock() }
         guard active else { throw MatrixWorkspaceError.sessionClosed }
+        var result: AnyObject?
+        let read = SecItemCopyMatching(query.merging([
+            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne
+        ]) { $1 } as CFDictionary, &result)
+        if read == errSecItemNotFound { active = false; return }
+        guard read == errSecSuccess, let data = result as? Data else { throw MatrixWorkspaceError.keychain(read) }
+        // A stale logout operation must not remove a subsequently created device.
+        try validate(JSONDecoder().decode(Record.self, from: data).session)
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw MatrixWorkspaceError.keychain(status) }
         active = false

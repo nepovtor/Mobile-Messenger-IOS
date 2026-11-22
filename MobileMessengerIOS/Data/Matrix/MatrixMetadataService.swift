@@ -87,6 +87,11 @@ final class MatrixMetadataService {
         return try await request("matrix/chats/\(chatID.uuidString)", body: data)
     }
 
+    func createGroup(title: String, contacts: [String]) async throws -> ServerChat {
+        let body = try JSONSerialization.data(withJSONObject: ["title": title, "participantContacts": contacts])
+        return try await request("chats", body: body)
+    }
+
     func chats() async throws -> [ServerChat] { try await request("chats") }
 
     private func request<T: Decodable>(_ path: String, body: Data? = nil) async throws -> T {

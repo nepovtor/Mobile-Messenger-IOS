@@ -59,4 +59,18 @@ final class MatrixClientFactoryTests: XCTestCase {
         XCTAssertEqual(try next.retrieveSessionFromKeychain(userId: config.expectedUserID).accessToken, "new-token")
     }
 
+    func testStaleDeviceCannotRemoveReplacementCredentials() throws {
+        let owner = UUID()
+        let config = NativeMatrixConfig(homeserverURL: URL(string: "https://matrix.example")!, issuerURL: URL(string: "https://auth.example")!, serverName: "matrix.example", expectedUserID: "@u_\(owner.uuidString.replacingOccurrences(of: "-", with: "").lowercased()):matrix.example")
+        let old = try MatrixSessionKeychain(config: config, onFailure: {})
+        try old.save(.init(accessToken: "old", refreshToken: nil, userId: config.expectedUserID, deviceId: old.deviceID, homeserverUrl: config.homeserverURL.absoluteString, oauthData: nil, slidingSyncVersion: .none))
+        try MatrixSessionKeychain(config: config, onFailure: {}).remove()
+        let next = try MatrixSessionKeychain(config: config, onFailure: {})
+        defer { try? next.remove() }
+        try next.save(.init(accessToken: "new", refreshToken: nil, userId: config.expectedUserID, deviceId: next.deviceID, homeserverUrl: config.homeserverURL.absoluteString, oauthData: nil, slidingSyncVersion: .none))
+        XCTAssertThrowsError(try old.remove())
+        XCTAssertEqual(try next.retrieveSessionFromKeychain(userId: config.expectedUserID).accessToken, "new")
+        old.close()
+    }
+
 }

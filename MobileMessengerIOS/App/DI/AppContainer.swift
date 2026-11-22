@@ -449,6 +449,7 @@ public final class AppContainer: ObservableObject {
         defer { isLoggingOut = false }
         let refreshToken = sessionStore.authRefreshToken
         let baseURL = configService.restBaseURL
+        var acknowledged = false
         do {
             try await sessionCoordinator.logout {
                 // A legacy session can have no refresh credential. Modern
@@ -456,12 +457,15 @@ public final class AppContainer: ObservableObject {
                 if let refreshToken {
                     try await RESTAuthService(baseURL: baseURL).logout(refreshToken: refreshToken)
                 }
+                acknowledged = true
                 // Pending logout blocks new authentication. Retire only the
                 // current credential after acknowledgement; retain SDK stores.
                 try self.matrixSessionForLogout()?.remove()
             }
         } catch {
-            logoutError = "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход."
+            logoutError = acknowledged
+                ? "Сессия отозвана. Не удалось закрыть локальные учётные данные. Повторите выход."
+                : "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход."
         }
     }
 
