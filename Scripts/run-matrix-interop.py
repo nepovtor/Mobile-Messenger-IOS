@@ -23,6 +23,39 @@ def free_port():
         return server.getsockname()[1]
 
 
+def create_fixture_certificates(root):
+    ca = root / 'fixture-ca.pem'
+    ca_key = root / 'fixture-ca.key'
+    certificate = root / 'localhost.pem'
+    private_key = root / 'localhost.key'
+    request = root / 'localhost.csr'
+    extensions = root / 'localhost.ext'
+    sdk_certificate = root / 'fixture-ca.der'
+
+    # The native SDK uses rustls. Serve a leaf certificate and trust its CA.
+    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                    '-subj', '/CN=Mobile Messenger Interop CA',
+                    '-addext', 'basicConstraints=critical,CA:TRUE,pathlen:0',
+                    '-addext', 'keyUsage=critical,keyCertSign,cRLSign',
+                    '-addext', 'subjectKeyIdentifier=hash',
+                    '-keyout', str(ca_key), '-out', str(ca)], check=True, capture_output=True)
+    subprocess.run(['openssl', 'req', '-new', '-newkey', 'rsa:2048', '-nodes', '-subj', '/CN=localhost',
+                    '-keyout', str(private_key), '-out', str(request)], check=True, capture_output=True)
+    extensions.write_text('basicConstraints=critical,CA:FALSE\n'
+                          'authorityKeyIdentifier=keyid:always\n'
+                          'keyUsage=critical,digitalSignature,keyEncipherment\n'
+                          'extendedKeyUsage=serverAuth\n'
+                          'subjectAltName=DNS:localhost,IP:127.0.0.1\n')
+    subprocess.run(['openssl', 'x509', '-req', '-in', str(request), '-CA', str(ca), '-CAkey', str(ca_key),
+                    '-set_serial', '0x' + secrets.token_hex(16), '-days', '1', '-extfile', str(extensions),
+                    '-out', str(certificate)], check=True, capture_output=True)
+    subprocess.run(['openssl', 'x509', '-in', str(ca), '-outform', 'DER', '-out', str(sdk_certificate)],
+                   check=True, capture_output=True)
+    for path in (ca_key, private_key):
+        path.chmod(0o600)
+    return certificate, private_key, ca, sdk_certificate
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--simulator')
@@ -36,18 +69,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='mm-matrix-interop-') as temporary:
         root = Path(temporary)
         os.chmod(root, 0o700)
-        certificate = root / 'localhost.pem'
-        private_key = root / 'localhost.key'
-        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-                        '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
-                        '-keyout', str(private_key), '-out', str(certificate)], check=True, capture_output=True)
-        private_key.chmod(0o600)
-        certificate.chmod(0o600)
-        # The pinned Swift FFI consumes DER certificate bytes. Node/Python use PEM.
-        sdk_certificate = root / 'localhost.der'
-        subprocess.run(['openssl', 'x509', '-in', str(certificate), '-outform', 'DER',
-                        '-out', str(sdk_certificate)], check=True, capture_output=True)
-        sdk_certificate.chmod(0o600)
+        certificate, private_key, ca, sdk_certificate = create_fixture_certificates(root)
         port = free_port()
         homeserver = f'https://localhost:{port}'
         secret = secrets.token_urlsafe(32)
@@ -80,7 +102,7 @@ def main():
             server = subprocess.Popen([sys.executable, '-m', 'synapse.app.homeserver', '--config-path', str(config_file)],
                                       cwd=root, stdout=synapse_log, stderr=subprocess.STDOUT)
             children.append(server)
-            context = ssl.create_default_context(cafile=str(certificate))
+            context = ssl.create_default_context(cafile=str(ca))
             for _ in range(120):
                 if server.poll() is not None:
                     raise RuntimeError('Disposable Synapse exited; inspect the local fixture log without uploading credentials')
@@ -92,7 +114,7 @@ def main():
                     time.sleep(0.25)
             else:
                 raise RuntimeError('Disposable Synapse startup timed out')
-            env = {**os.environ, 'NODE_EXTRA_CA_CERTS': str(certificate), 'MATRIX_INTEROP_HOMESERVER': homeserver,
+            env = {**os.environ, 'NODE_EXTRA_CA_CERTS': str(ca), 'MATRIX_INTEROP_HOMESERVER': homeserver,
                    'MATRIX_INTEROP_REGISTRATION_FILE': str(registration_file), 'MATRIX_INTEROP_MANIFEST': str(manifest),
                    'MATRIX_INTEROP_CERTIFICATE': str(sdk_certificate), 'MATRIX_INTEROP_RESULT': str(state_file)}
             peer = subprocess.Popen(['node', 'scripts/matrix-interop-peer.mjs'], cwd=repo / 'web', env=env,
