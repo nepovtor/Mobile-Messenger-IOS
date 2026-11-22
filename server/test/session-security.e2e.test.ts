@@ -4,6 +4,12 @@ import test from "node:test";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import request from "supertest";
 import { Repository } from "typeorm";
+import {
+  AuthSessionEntity,
+  SessionPrincipalType,
+} from "../src/entities/auth-session.entity";
+import { SessionService } from "../src/modules/sessions/session.service";
+import { authenticateByCode } from "./support/auth-chat-test-harness";
 import { RefreshTokenEntity } from "../src/entities/refresh-token.entity";
 import { createTestApp } from "./support/auth-chat-test-harness";
 
@@ -117,4 +123,50 @@ test("refresh-token reuse revokes the whole token family", async (t) => {
     ),
   );
   assert.ok(storedTokens.every((token) => token.revokedAt instanceof Date));
+});
+
+test("a concurrent last-seen update cannot resurrect a revoked session", async (t) => {
+  const app = await createTestApp();
+  t.after(async () => app.close());
+  const login = await authenticateByCode(app, "+15550009099");
+  const service = app.get(SessionService);
+  const repository = app.get<
+    Repository<import("../src/entities/auth-session.entity").AuthSessionEntity>
+  >(getRepositoryToken(AuthSessionEntity));
+  const claims = await service.verifyAccessToken(
+    login.token,
+    SessionPrincipalType.USER,
+  );
+  await repository.update(claims.sid, {
+    lastSeenAt: new Date(Date.now() - 120_000),
+  });
+  const originalFind = repository.findOneBy.bind(repository);
+  let read!: () => void;
+  const didRead = new Promise<void>((resolve) => {
+    read = resolve;
+  });
+  let resume!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  repository.findOneBy = async (where) => {
+    const result = await originalFind(where);
+    read();
+    await gate;
+    return result;
+  };
+  const checking = service.requireActiveSession(claims);
+  const rejected = assert.rejects(checking, /Session is no longer active/);
+  await didRead;
+  const revokedAt = new Date();
+  await repository.update(claims.sid, {
+    revokedAt,
+    revokeReason: "concurrent-revoke",
+  });
+  resume();
+  await rejected;
+  repository.findOneBy = originalFind;
+  const stored = await originalFind({ id: claims.sid });
+  assert.equal(stored?.revokedAt?.getTime(), revokedAt.getTime());
+  assert.equal(stored?.revokeReason, "concurrent-revoke");
 });

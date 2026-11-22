@@ -3,6 +3,97 @@ import XCTest
 
 @MainActor
 final class ChatStorageAndRepositoryTests: XCTestCase {
+    func testMatrixModeRejectsLegacyTextAndAttachmentsBeforeCaching() async throws {
+        let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
+        let repository = DefaultChatRepository(store: store, remote: ChatNetworkingStub(),
+            realtime: RealtimeServiceStub(sendError: nil), analytics: AnalyticsServiceSpy(),
+            reachability: ReachabilityServiceStub(isReachable: true), plaintextAllowed: { false })
+        let chatID = UUID()
+        do { _ = try await repository.sendMessage(chatID: chatID, text: "Must stay private", localID: nil); XCTFail("Legacy text must be blocked") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("защищённую")) }
+        do { _ = try await repository.sendImageMessage(chatID: chatID, imageData: Data([1, 2, 3]), caption: nil, localID: nil); XCTFail("Legacy image must be blocked") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("защищённую")) }
+        do { _ = try await repository.sendAudioMessage(chatID: chatID, audioData: Data([1, 2, 3]), localID: nil); XCTFail("Legacy voice must be blocked") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("защищённую")) }
+        let pending = try await store.pendingMessages(in: chatID)
+        XCTAssertTrue(pending.isEmpty)
+        await repository.resetLocalState()
+    }
+
+    func testSessionResetDeletesUnsentAttachmentFiles() async throws {
+        let namespace = UUID()
+        let localID = UUID()
+        let repository = DefaultChatRepository(
+            store: SwiftDataChatStore(storageURL: temporaryStoreURL()),
+            remote: ChatNetworkingStub(), realtime: RealtimeServiceStub(sendError: nil),
+            analytics: AnalyticsServiceSpy(), reachability: ReachabilityServiceStub(isReachable: false),
+            attachmentNamespace: namespace
+        )
+        _ = try await repository.sendImageMessage(
+            chatID: UUID(), imageData: Data([1, 2, 3]), caption: nil, localID: localID
+        )
+        let directory = try XCTUnwrap(FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first).appendingPathComponent("MobileMessengerIOS/pending-images/\(namespace.uuidString)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("\(localID.uuidString).jpg").path))
+        await repository.resetLocalState()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testInvalidatedStoreRejectsDelayedWritesAndFinishesObservers() async throws {
+        let storageURL = temporaryStoreURL()
+        let store = SwiftDataChatStore(storageURL: storageURL)
+        try await store.ensureChatExists(id: UUID(), title: "Previous session")
+        let events = await store.observeChats()
+        var iterator = events.makeAsyncIterator()
+        _ = await iterator.next()
+        try await store.invalidate()
+        do {
+            try await store.ensureChatExists(id: UUID(), title: "Delayed response")
+            XCTFail("A delayed response must not recreate the previous session's cache")
+        } catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }
+        _ = await iterator.next()
+        let ended = await iterator.next()
+        XCTAssertNil(ended)
+        let restored = SwiftDataChatStore(storageURL: storageURL)
+        let chats = try await restored.fetchChats(searchQuery: nil)
+        XCTAssertTrue(chats.isEmpty)
+    }
+
+    func testSessionNamespacesDoNotShareMessages() async throws {
+        let namespaceA = UUID()
+        let namespaceB = UUID()
+        let storeA = SwiftDataChatStore(namespace: namespaceA)
+        let storeB = SwiftDataChatStore(namespace: namespaceB)
+        let chatID = UUID()
+        try await storeA.ensureChatExists(id: chatID, title: "Account A")
+        let otherChats = try await storeB.fetchChats(searchQuery: nil)
+        XCTAssertTrue(otherChats.isEmpty)
+        try await storeA.reset()
+        try await storeB.reset()
+    }
+
+    func testInvalidatedRepositoryCannotSendOrUseCachedFallback() async throws {
+        let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
+        let repository = DefaultChatRepository(
+            store: store, remote: ChatNetworkingStub(),
+            realtime: RealtimeServiceStub(sendError: nil),
+            analytics: AnalyticsServiceSpy(),
+            reachability: ReachabilityServiceStub(isReachable: true)
+        )
+        try await store.ensureChatExists(id: UUID(), title: "Previous account")
+        repository.invalidateSession()
+        do {
+            _ = try await repository.listChats(searchQuery: nil)
+            XCTFail("An old repository must not return cached account data")
+        } catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }
+        do {
+            _ = try await repository.sendMessage(chatID: UUID(), text: "Stale", localID: nil)
+            XCTFail("An old repository must not send")
+        } catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }
+        await repository.resetLocalState()
+    }
+
     func testDuplicateMessageIsIgnored() async throws {
         let store = SwiftDataChatStore(storageURL: temporaryStoreURL())
         let chatID = UUID()
@@ -265,6 +356,28 @@ final class ChatStorageAndRepositoryTests: XCTestCase {
         XCTAssertNil(sessionStore.authToken)
         XCTAssertNil(sessionStore.currentUserID)
         XCTAssertEqual(sessionStore.state, .unauthenticated)
+    }
+
+    func testPendingLogoutRetainsCredentialAndReceiptAcrossRestartUntilAcknowledgement() throws {
+        let tokens = InMemoryTokenStore()
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let store = SessionStore(tokenStore: tokens, defaults: defaults)
+        let user = UUID()
+        store.authenticate(with: "access", refreshToken: "retry-revocation", userID: user, displayName: "Анна")
+        let oldNamespace = store.cacheNamespace
+        store.beginLogout()
+        XCTAssertTrue(store.isLogoutPending)
+        XCTAssertNotEqual(oldNamespace, store.cacheNamespace)
+        XCTAssertEqual(store.authRefreshToken, "retry-revocation")
+        let restarted = SessionStore(tokenStore: tokens, defaults: defaults)
+        XCTAssertTrue(restarted.isLogoutPending)
+        XCTAssertEqual(restarted.authRefreshToken, "retry-revocation")
+        restarted.authenticate(with: "other", userID: UUID(), displayName: "Другой")
+        XCTAssertEqual(restarted.currentUserID, user)
+        restarted.logout() // Only after the remote coordinator acknowledges revocation.
+        XCTAssertFalse(restarted.isLogoutPending)
+        XCTAssertNil(restarted.authRefreshToken)
+        XCTAssertFalse(SessionStore(tokenStore: tokens, defaults: defaults).isLogoutPending)
     }
 
     func testUserSwitchClearsOldChatsBeforeLoadingNextAccount() async throws {

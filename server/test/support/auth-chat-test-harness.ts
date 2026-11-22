@@ -23,6 +23,7 @@ import { PushSubscriptionEntity } from "../../src/entities/push-subscription.ent
 import { TelegramLinkEntity } from "../../src/entities/telegram-link.entity";
 import { TelegramPairingTokenEntity } from "../../src/entities/telegram-pairing-token.entity";
 import { UserEntity } from "../../src/entities/user.entity";
+import { MatrixModule } from "../../src/modules/matrix/matrix.module";
 import { AuthModule } from "../../src/modules/auth/auth.module";
 import { ChatModule } from "../../src/modules/chat/chat.module";
 import { MediaModule } from "../../src/modules/media/media.module";
@@ -119,6 +120,9 @@ export type TestAppOptions = {
   telegramAllowRelink?: boolean;
   webAppUrl?: string | null;
   e2eeRequired?: boolean;
+  oidcBridgeEnabled?: boolean;
+  oidcBridgeSharedSecret?: string;
+  postgresUrl?: string;
   beforeInit?: (app: INestApplication) => Promise<void> | void;
 };
 
@@ -126,6 +130,14 @@ export async function createTestApp(
   options: TestAppOptions = {},
 ): Promise<INestApplication> {
   process.env["NODE_ENV"] = "test";
+  process.env["OIDC_BRIDGE_ENABLED"] = options.oidcBridgeEnabled
+    ? "true"
+    : "false";
+  if (options.oidcBridgeSharedSecret) {
+    process.env["OIDC_BRIDGE_SHARED_SECRET"] = options.oidcBridgeSharedSecret;
+  } else {
+    delete process.env["OIDC_BRIDGE_SHARED_SECRET"];
+  }
   process.env["JWT_SECRET"] = "test-jwt-secret";
   process.env["JWT_EXPIRES_IN"] = "7d";
   process.env["DB_SYNCHRONIZE"] = "true";
@@ -206,30 +218,39 @@ export async function createTestApp(
             MediaEntity,
             PushSubscriptionEntity,
           ],
-          synchronize: true,
+          synchronize: !options.postgresUrl,
+          ...(options.postgresUrl ? { url: options.postgresUrl } : {}),
         }),
-        dataSourceFactory: async (options) => {
-          const database = newDb({
-            autoCreateForeignKeyIndices: true,
-          });
-          database.public.registerFunction({
-            name: "current_database",
-            returns: DataType.text,
-            implementation: () => "pg_mem",
-          });
-          database.public.registerFunction({
-            name: "version",
-            returns: DataType.text,
-            implementation: () => "pg-mem",
-          });
+        ...(!options.postgresUrl
+          ? {
+              dataSourceFactory: async (
+                options: import("typeorm").DataSourceOptions | undefined,
+              ) => {
+                if (!options) throw new Error("Database options are required");
+                const database = newDb({
+                  autoCreateForeignKeyIndices: true,
+                });
+                database.public.registerFunction({
+                  name: "current_database",
+                  returns: DataType.text,
+                  implementation: () => "pg_mem",
+                });
+                database.public.registerFunction({
+                  name: "version",
+                  returns: DataType.text,
+                  implementation: () => "pg-mem",
+                });
 
-          const dataSource =
-            await database.adapters.createTypeormDataSource(options);
-          return dataSource.initialize();
-        },
+                const dataSource =
+                  await database.adapters.createTypeormDataSource(options);
+                return dataSource.initialize();
+              },
+            }
+          : {}),
       }),
       RealtimeModule,
       AuthModule,
+      MatrixModule,
       HealthModule,
       UsersModule,
       MediaModule,

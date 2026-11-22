@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { AuthMethod, UserEntity } from "../../entities/user.entity";
+import { AuthMethod, UserEntity, UserStatus } from "../../entities/user.entity";
 import { normalizePhone } from "../common/contact.utils";
 import { isProductionEnv } from "../common/runtime-config";
 import { AuthService } from "../auth/auth.service";
@@ -106,8 +106,13 @@ export class UsersService {
       );
     }
 
-    user.displayName = trimmedDisplayName;
-    const saved = await this.usersRepository.save(user);
+    const result = await this.usersRepository.update(
+      { id: user.id, status: UserStatus.ACTIVE },
+      { displayName: trimmedDisplayName },
+    );
+    if (result.affected !== 1)
+      throw new BadRequestException("Account is not active");
+    const saved = { ...user, displayName: trimmedDisplayName };
 
     return {
       userID: saved.id,

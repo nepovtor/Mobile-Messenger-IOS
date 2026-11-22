@@ -1,3 +1,4 @@
+import { MatrixRevocationWorker } from "../matrix/matrix-revocation.worker";
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -56,6 +57,7 @@ type RotationResult =
 export class SessionService {
   constructor(
     private readonly dataSource: DataSource,
+    private readonly matrixRevocations: MatrixRevocationWorker,
     private readonly jwtService: JwtService,
     private readonly securityAuditService: SecurityAuditService,
     @InjectRepository(AuthSessionEntity)
@@ -275,12 +277,22 @@ export class SessionService {
         refreshTokenValue,
         expectedPrincipalType,
       );
-      await this.revokeSession(
-        expectedPrincipalType,
-        identity.principalId,
-        identity.sessionId,
-        reason,
-      );
+      const existing = await this.sessionsRepository.findOneBy({
+        id: identity.sessionId,
+      });
+      if (existing?.revokedAt) {
+        // Retrying logout observes its receipt. A previously revoked refresh
+        // token must not revoke new Matrix sessions or restart quarantine.
+        if (expectedPrincipalType === SessionPrincipalType.USER)
+          await this.matrixRevocations.requireSettled(identity.principalId);
+      } else {
+        await this.revokeSession(
+          expectedPrincipalType,
+          identity.principalId,
+          identity.sessionId,
+          reason,
+        );
+      }
     } catch (error) {
       if (!(error instanceof UnauthorizedException)) {
         throw error;
@@ -337,8 +349,14 @@ export class SessionService {
 
     const staleThreshold = Date.now() - 60_000;
     if (session.lastSeenAt.getTime() < staleThreshold) {
-      session.lastSeenAt = new Date();
-      await this.sessionsRepository.save(session);
+      const lastSeenAt = new Date();
+      const result = await this.sessionsRepository.update(
+        { id: session.id, revokedAt: IsNull() },
+        { lastSeenAt },
+      );
+      if (result.affected !== 1)
+        throw new UnauthorizedException("Session is no longer active");
+      session.lastSeenAt = lastSeenAt;
     }
     return session;
   }
@@ -358,6 +376,8 @@ export class SessionService {
       return false;
     }
     await this.revokeSessionEntity(session, reason);
+    if (principalType === SessionPrincipalType.USER)
+      await this.matrixRevocations.requireSettled(principalId);
     return true;
   }
 
@@ -373,6 +393,11 @@ export class SessionService {
     });
     for (const session of sessions) {
       await this.revokeSessionEntity(session, reason);
+    }
+    if (principalType === SessionPrincipalType.USER) {
+      if (sessions.length === 0)
+        await this.matrixRevocations.enqueue(principalId);
+      await this.matrixRevocations.requireSettled(principalId);
     }
   }
 
@@ -390,6 +415,11 @@ export class SessionService {
     });
     for (const session of sessions) {
       await this.revokeSessionEntity(session, reason);
+    }
+    if (principalType === SessionPrincipalType.USER) {
+      if (sessions.length === 0)
+        await this.matrixRevocations.enqueue(principalId);
+      await this.matrixRevocations.requireSettled(principalId);
     }
     return sessions.length;
   }
@@ -462,6 +492,8 @@ export class SessionService {
         reason,
         now,
       );
+      if (session.principalType === SessionPrincipalType.USER)
+        await this.matrixRevocations.enqueue(session.principalId, manager);
     });
   }
 
@@ -472,9 +504,10 @@ export class SessionService {
     reason: string,
     now: Date,
   ): Promise<void> {
-    session.revokedAt = session.revokedAt ?? now;
-    session.revokeReason = reason.slice(0, 255);
-    await sessionsRepository.save(session);
+    await sessionsRepository.update(
+      { id: session.id, revokedAt: IsNull() },
+      { revokedAt: now, revokeReason: reason.slice(0, 255) },
+    );
     await refreshRepository.update(
       {
         tokenFamilyId: session.tokenFamilyId,

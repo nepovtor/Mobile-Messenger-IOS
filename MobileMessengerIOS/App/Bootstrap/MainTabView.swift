@@ -21,7 +21,7 @@ struct MainTabView: View {
                     Label("Карта", systemImage: "map")
                 }
 
-            ChatListView(container: container)
+            MatrixChatEntryView(container: container)
                 .tag(AppContainer.MainTab.chats)
                 .tabItem {
                     Label("Чаты", systemImage: "message")

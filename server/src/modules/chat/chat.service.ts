@@ -2,10 +2,20 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, IsNull, LessThanOrEqual, Not, Repository } from "typeorm";
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  LessThanOrEqual,
+  Not,
+  QueryFailedError,
+  Repository,
+} from "typeorm";
 import { ChatEntity } from "../../entities/chat.entity";
 import { ChatParticipantEntity } from "../../entities/chat-participant.entity";
 import { MediaEntity } from "../../entities/media.entity";
@@ -71,6 +81,7 @@ interface RealtimeSendMessageDto {
 @Injectable()
 export class ChatService {
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(ChatEntity)
     private readonly chatsRepository: Repository<ChatEntity>,
     @InjectRepository(ChatParticipantEntity)
@@ -278,7 +289,6 @@ export class ChatService {
     dto: SendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    await this.requirePlaintextMessages(chatID);
     return this.createMessage(
       chatID,
       {
@@ -296,7 +306,6 @@ export class ChatService {
     dto: RealtimeSendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    await this.requirePlaintextMessages(chatID);
     return this.createMessage(chatID, dto, user);
   }
 
@@ -318,131 +327,129 @@ export class ChatService {
     dto: RealtimeSendMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    const participant = await this.getParticipantOrFail(chatID, user.sub);
-    const participants = await this.participantsRepository.find({
-      where: { chatId: chatID },
-    });
-    const restoredParticipantIDs = participants
-      .filter((item) => item.hiddenAt != null)
-      .map((item) => item.userId);
+    const result = await this.withPlaintextChat(
+      chatID,
+      async (manager, chat) => {
+        const participantsRepository = manager.getRepository(
+          ChatParticipantEntity,
+        );
+        const messagesRepository = manager.getRepository(MessageEntity);
+        const participant = await this.getParticipantOrFail(
+          chatID,
+          user.sub,
+          manager,
+        );
+        const participants = await participantsRepository.find({
+          where: { chatId: chatID },
+        });
+        const restoredParticipantIDs = participants
+          .filter((item) => item.hiddenAt != null)
+          .map((item) => item.userId);
 
-    const trimmedText = dto.text?.trim();
-    let media: MediaEntity | null = null;
+        const existingMessage = await messagesRepository.findOne({
+          where: {
+            chatId: chatID,
+            authorId: user.sub,
+            clientMessageId: dto.clientMessageId,
+          },
+          relations: { author: true, media: true },
+        });
+        if (existingMessage) {
+          return { existingMessage };
+        }
 
-    const existingMessage = await this.messagesRepository.findOne({
-      where: {
-        chatId: chatID,
-        authorId: user.sub,
-        clientMessageId: dto.clientMessageId,
+        const trimmedText = dto.text?.trim();
+        let media: MediaEntity | null = null;
+        if (dto.kind === MessageKind.TEXT) {
+          if (!trimmedText) {
+            throw new BadRequestException("Text message must contain text");
+          }
+        } else if (
+          dto.kind === MessageKind.IMAGE ||
+          dto.kind === MessageKind.AUDIO
+        ) {
+          const mediaLabel = dto.kind === MessageKind.AUDIO ? "Audio" : "Image";
+          if (!dto.mediaID) {
+            throw new BadRequestException(
+              `${mediaLabel} message must contain mediaID`,
+            );
+          }
+          media = await this.mediaService.getUploadedMediaOrFail(dto.mediaID);
+          if (media.uploadedById !== user.sub) {
+            throw new BadRequestException("Media belongs to another user");
+          }
+          const expectedPrefix =
+            dto.kind === MessageKind.AUDIO ? "audio/" : "image/";
+          if (!media.mimeType.startsWith(expectedPrefix)) {
+            throw new BadRequestException(
+              `${mediaLabel} message contains incompatible media`,
+            );
+          }
+        } else {
+          throw new BadRequestException("Unsupported message kind");
+        }
+
+        const message = await messagesRepository.save(
+          messagesRepository.create({
+            chatId: chatID,
+            authorId: user.sub,
+            clientMessageId: dto.clientMessageId,
+            kind: dto.kind,
+            text: trimmedText || null,
+            mediaId: media?.id ?? null,
+            status:
+              participants.length > 1
+                ? MessageStatus.DELIVERED
+                : MessageStatus.SENT,
+          }),
+        );
+
+        for (const chatParticipant of participants) {
+          chatParticipant.hiddenAt = null;
+          if (chatParticipant.userId === user.sub) {
+            chatParticipant.lastReadAt = message.createdAt;
+            chatParticipant.lastReadMessageId = message.id;
+          }
+        }
+        if (!participants.some((item) => item.userId === user.sub)) {
+          participant.hiddenAt = null;
+          participant.lastReadAt = message.createdAt;
+          participant.lastReadMessageId = message.id;
+          participants.push(participant);
+        }
+        await participantsRepository.save(participants);
+        chat.lastMessageId = message.id;
+        chat.lastActivity = message.createdAt;
+        await manager.getRepository(ChatEntity).save(chat);
+
+        const hydratedMessage = await messagesRepository.findOne({
+          where: { id: message.id },
+          relations: { author: true, media: true },
+        });
+        if (!hydratedMessage) {
+          throw new NotFoundException("Message not found after save");
+        }
+        return { hydratedMessage, participants, restoredParticipantIDs, chat };
       },
-      relations: { author: true, media: true },
-    });
-    if (existingMessage) {
-      return this.presenter.mapMessage(existingMessage);
-    }
-
-    if (dto.kind === MessageKind.TEXT) {
-      if (!trimmedText) {
-        throw new BadRequestException("Text message must contain text");
-      }
-    } else if (
-      dto.kind === MessageKind.IMAGE ||
-      dto.kind === MessageKind.AUDIO
-    ) {
-      const mediaLabel = dto.kind === MessageKind.AUDIO ? "Audio" : "Image";
-      if (!dto.mediaID) {
-        throw new BadRequestException(
-          `${mediaLabel} message must contain mediaID`,
-        );
-      }
-      media = await this.mediaService.getUploadedMediaOrFail(dto.mediaID);
-      if (media.uploadedById !== user.sub) {
-        throw new BadRequestException("Media belongs to another user");
-      }
-      const expectedPrefix =
-        dto.kind === MessageKind.AUDIO ? "audio/" : "image/";
-      if (!media.mimeType.startsWith(expectedPrefix)) {
-        throw new BadRequestException(
-          `${mediaLabel} message contains incompatible media`,
-        );
-      }
-    } else {
-      throw new BadRequestException("Unsupported message kind");
-    }
-
-    const message = await this.messagesRepository.save(
-      this.messagesRepository.create({
-        chatId: chatID,
-        authorId: user.sub,
-        clientMessageId: dto.clientMessageId,
-        kind: dto.kind,
-        text:
-          dto.kind === MessageKind.TEXT
-            ? trimmedText || null
-            : trimmedText || null,
-        mediaId: media?.id ?? null,
-        status:
-          participants.length > 1
-            ? MessageStatus.DELIVERED
-            : MessageStatus.SENT,
-      }),
     );
 
-    for (const chatParticipant of participants) {
-      chatParticipant.hiddenAt = null;
-      if (chatParticipant.userId === user.sub) {
-        chatParticipant.lastReadAt = message.createdAt;
-        chatParticipant.lastReadMessageId = message.id;
-      }
+    if (result.existingMessage) {
+      return this.presenter.mapMessage(result.existingMessage);
     }
-
-    if (!participants.some((item) => item.userId === user.sub)) {
-      participant.hiddenAt = null;
-      participant.lastReadAt = message.createdAt;
-      participant.lastReadMessageId = message.id;
-      participants.push(participant);
-    }
-
-    await this.participantsRepository.save(participants);
-
-    const chat = await this.chatsRepository.findOneBy({
-      id: chatID as ChatEntity["id"],
-    });
-    if (!chat) {
-      throw new NotFoundException("Chat not found");
-    }
-    chat.lastMessageId = message.id;
-    chat.lastActivity = message.createdAt;
-    await this.chatsRepository.save(chat);
-
-    const hydratedMessage = await this.messagesRepository.findOne({
-      where: { id: message.id },
-      relations: { author: true, media: true },
-    });
-    if (!hydratedMessage) {
-      throw new NotFoundException("Message not found after save");
-    }
-
+    const { hydratedMessage, participants, restoredParticipantIDs, chat } =
+      result;
     for (const restoredUserID of restoredParticipantIDs) {
       const summary = await this.getChatSummary(chatID, restoredUserID);
       this.chatEvents.publishToUsers([restoredUserID], {
         type: "chat.created",
-        payload: {
-          chatID,
-          chat: summary,
-        },
+        payload: { chatID, chat: summary },
       });
     }
-
     const payload = await this.presenter.mapMessage(hydratedMessage);
     this.chatEvents.broadcastToChatParticipants(participants, {
       event: "message.created",
-      data: {
-        chatID,
-        message: payload,
-      },
+      data: { chatID, message: payload },
     });
-
     void this.pushService
       .notifyMessageCreated({
         authorUserId: user.sub,
@@ -468,51 +475,58 @@ export class ChatService {
     user: AuthenticatedUser,
   ): Promise<{ ok: true }> {
     this.requireLegacyMessageReads();
-    const participant = await this.getParticipantOrFail(chatID, user.sub);
-    const message = await this.messagesRepository.findOne({
-      where: { id: messageID as MessageEntity["id"], chatId: chatID },
-    });
-    if (!message) {
-      throw new NotFoundException("Message not found");
-    }
-    if (
-      participant.lastReadAt &&
-      participant.lastReadAt.getTime() >= message.createdAt.getTime()
-    ) {
-      return { ok: true };
-    }
-
-    participant.lastReadAt = message.createdAt;
-    participant.lastReadMessageId = message.id;
-    await this.participantsRepository.save(participant);
-
-    await this.messagesRepository.update(
-      {
-        chatId: chatID,
-        authorId: Not(user.sub),
-        createdAt: LessThanOrEqual(message.createdAt),
-      },
-      {
-        status: MessageStatus.READ,
-      },
-    );
-
-    const participants = await this.participantsRepository.find({
-      where: { chatId: chatID },
-    });
-    this.chatEvents.publishToUsers(
-      participants.map((item) => item.userId),
-      {
-        type: "message.read",
-        payload: {
-          chatID,
-          messageID,
-          userID: user.sub,
-          readAt: message.createdAt.toISOString(),
+    const readEvent = await this.withPlaintextChat(chatID, async (manager) => {
+      const participantsRepository = manager.getRepository(
+        ChatParticipantEntity,
+      );
+      const messagesRepository = manager.getRepository(MessageEntity);
+      const participant = await this.getParticipantOrFail(
+        chatID,
+        user.sub,
+        manager,
+      );
+      const message = await messagesRepository.findOne({
+        where: { id: messageID as MessageEntity["id"], chatId: chatID },
+      });
+      if (!message) {
+        throw new NotFoundException("Message not found");
+      }
+      if (
+        participant.lastReadAt &&
+        participant.lastReadAt.getTime() >= message.createdAt.getTime()
+      ) {
+        return null;
+      }
+      participant.lastReadAt = message.createdAt;
+      participant.lastReadMessageId = message.id;
+      await participantsRepository.save(participant);
+      await messagesRepository.update(
+        {
+          chatId: chatID,
+          authorId: Not(user.sub),
+          createdAt: LessThanOrEqual(message.createdAt),
         },
-      },
-    );
-
+        { status: MessageStatus.READ },
+      );
+      const participants = await participantsRepository.find({
+        where: { chatId: chatID },
+      });
+      return { participants, readAt: message.createdAt.toISOString() };
+    });
+    if (readEvent) {
+      this.chatEvents.publishToUsers(
+        readEvent.participants.map((item) => item.userId),
+        {
+          type: "message.read",
+          payload: {
+            chatID,
+            messageID,
+            userID: user.sub,
+            readAt: readEvent.readAt,
+          },
+        },
+      );
+    }
     return { ok: true };
   }
 
@@ -522,38 +536,45 @@ export class ChatService {
     dto: UpdateMessageDto,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    await this.requirePlaintextMessages(chatID);
-    await this.getParticipantOrFail(chatID, user.sub);
-    const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
-
-    if (message.deletedAt) {
-      throw new BadRequestException("Deleted message cannot be edited");
-    }
-    if (message.kind !== MessageKind.TEXT) {
-      throw new BadRequestException("Only text messages can be edited");
-    }
-
-    const trimmedText = dto.text.trim();
-    if (!trimmedText) {
-      throw new BadRequestException("Text message must contain text");
-    }
-
-    message.text = trimmedText;
-    message.editedAt = new Date();
-    const savedMessage = await this.messagesRepository.save(message);
-    await this.refreshChatMetadata(chatID);
-
-    const participants = await this.participantsRepository.find({
-      where: { chatId: chatID },
-    });
+    const { savedMessage, participants } = await this.withPlaintextChat(
+      chatID,
+      async (manager, chat) => {
+        await this.getParticipantOrFail(chatID, user.sub, manager);
+        const message = await this.getOwnMessageOrFail(
+          chatID,
+          messageID,
+          user.sub,
+          manager,
+        );
+        if (message.deletedAt) {
+          throw new BadRequestException("Deleted message cannot be edited");
+        }
+        if (message.kind !== MessageKind.TEXT) {
+          throw new BadRequestException("Only text messages can be edited");
+        }
+        const trimmedText = dto.text.trim();
+        if (!trimmedText) {
+          throw new BadRequestException("Text message must contain text");
+        }
+        message.text = trimmedText;
+        message.editedAt = new Date();
+        const savedMessage = await manager
+          .getRepository(MessageEntity)
+          .save(message);
+        await this.refreshChatMetadata(chatID, manager, chat);
+        const participants = await manager
+          .getRepository(ChatParticipantEntity)
+          .find({
+            where: { chatId: chatID },
+          });
+        return { savedMessage, participants };
+      },
+    );
     const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
     const payload = await this.presenter.mapMessage(hydratedMessage);
     this.chatEvents.broadcastToChatParticipants(participants, {
       event: "message.updated",
-      data: {
-        chatID,
-        message: payload,
-      },
+      data: { chatID, message: payload },
     });
     return payload;
   }
@@ -563,35 +584,45 @@ export class ChatService {
     messageID: string,
     user: AuthenticatedUser,
   ): Promise<MessageResponse> {
-    await this.requirePlaintextMessages(chatID);
-    await this.getParticipantOrFail(chatID, user.sub);
-    const message = await this.getOwnMessageOrFail(chatID, messageID, user.sub);
-
-    if (message.deletedAt) {
-      return this.presenter.mapMessage(
-        await this.requireHydratedMessage(message.id),
-      );
-    }
-
-    message.text = "Сообщение удалено";
-    message.mediaId = null;
-    message.media = null;
-    message.deletedAt = new Date();
-    const savedMessage = await this.messagesRepository.save(message);
-    await this.refreshChatMetadata(chatID);
-
-    const participants = await this.participantsRepository.find({
-      where: { chatId: chatID },
-    });
-    const hydratedMessage = await this.requireHydratedMessage(savedMessage.id);
-    const payload = await this.presenter.mapMessage(hydratedMessage);
-    this.chatEvents.broadcastToChatParticipants(participants, {
-      event: "message.deleted",
-      data: {
-        chatID,
-        message: payload,
+    const result = await this.withPlaintextChat(
+      chatID,
+      async (manager, chat) => {
+        await this.getParticipantOrFail(chatID, user.sub, manager);
+        const message = await this.getOwnMessageOrFail(
+          chatID,
+          messageID,
+          user.sub,
+          manager,
+        );
+        if (message.deletedAt) {
+          return { savedMessage: message, participants: null };
+        }
+        message.text = "Сообщение удалено";
+        message.mediaId = null;
+        message.media = null;
+        message.deletedAt = new Date();
+        const savedMessage = await manager
+          .getRepository(MessageEntity)
+          .save(message);
+        await this.refreshChatMetadata(chatID, manager, chat);
+        const participants = await manager
+          .getRepository(ChatParticipantEntity)
+          .find({
+            where: { chatId: chatID },
+          });
+        return { savedMessage, participants };
       },
-    });
+    );
+    const hydratedMessage = await this.requireHydratedMessage(
+      result.savedMessage.id,
+    );
+    const payload = await this.presenter.mapMessage(hydratedMessage);
+    if (result.participants) {
+      this.chatEvents.broadcastToChatParticipants(result.participants, {
+        event: "message.deleted",
+        data: { chatID, message: payload },
+      });
+    }
     return payload;
   }
 
@@ -646,15 +677,39 @@ export class ChatService {
     return this.findExistingDirectChat([firstUserID, secondUserID].sort());
   }
 
-  private async requirePlaintextMessages(chatID: string): Promise<void> {
-    // A deployment flag change must not downgrade an already protected chat.
-    const chat = isE2EERequired()
-      ? null
-      : await this.chatsRepository.findOneBy({ id: chatID });
-    if (isE2EERequired() || chat?.e2eeRequired) {
+  private async withPlaintextChat<T>(
+    chatID: string,
+    work: (manager: EntityManager, chat: ChatEntity) => Promise<T>,
+  ): Promise<T> {
+    if (isE2EERequired()) {
       throw new ForbiddenException(
         "Plaintext messages are disabled; use encrypted-message envelopes",
       );
+    }
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        // Lock the chat before any participant or message row. A policy UPDATE
+        // takes this same lock and cannot commit ahead of an older mutation.
+        const chat = await manager.getRepository(ChatEntity).findOne({
+          where: { id: chatID },
+          lock: { mode: "pessimistic_write" },
+        });
+        if (!chat) {
+          throw new NotFoundException("Chat not found");
+        }
+        if (isE2EERequired() || chat.e2eeRequired) {
+          throw new ForbiddenException(
+            "Plaintext messages are disabled; use encrypted-message envelopes",
+          );
+        }
+        return work(manager, chat);
+      });
+    } catch (error) {
+      if (error instanceof QueryFailedError) {
+        // TypeORM's exception contains SQL parameters, potentially plaintext.
+        throw new InternalServerErrorException("Message operation failed");
+      }
+      throw error;
     }
   }
 
@@ -816,8 +871,12 @@ export class ChatService {
   private async getParticipantOrFail(
     chatID: string,
     userID: string,
+    manager?: EntityManager,
   ): Promise<ChatParticipantEntity> {
-    const participant = await this.participantsRepository.findOne({
+    const participant = await (
+      manager?.getRepository(ChatParticipantEntity) ??
+      this.participantsRepository
+    ).findOne({
       where: { chatId: chatID, userId: userID },
       relations: { chat: { lastMessage: true } },
     });
@@ -858,8 +917,11 @@ export class ChatService {
     chatID: string,
     messageID: string,
     userID: string,
+    manager?: EntityManager,
   ): Promise<MessageEntity> {
-    const message = await this.messagesRepository.findOne({
+    const message = await (
+      manager?.getRepository(MessageEntity) ?? this.messagesRepository
+    ).findOne({
       where: {
         id: messageID as MessageEntity["id"],
         chatId: chatID,
@@ -886,22 +948,19 @@ export class ChatService {
     return message;
   }
 
-  private async refreshChatMetadata(chatID: string): Promise<void> {
-    const chat = await this.chatsRepository.findOneBy({
-      id: chatID as ChatEntity["id"],
-    });
-    if (!chat) {
-      throw new NotFoundException("Chat not found");
-    }
-
-    const latestMessage = await this.messagesRepository.findOne({
+  private async refreshChatMetadata(
+    chatID: string,
+    manager: EntityManager,
+    chat: ChatEntity,
+  ): Promise<void> {
+    const latestMessage = await manager.getRepository(MessageEntity).findOne({
       where: { chatId: chatID },
       order: { createdAt: "DESC" },
     });
 
     chat.lastActivity = latestMessage?.createdAt ?? chat.lastActivity;
     chat.lastMessageId = latestMessage?.id ?? null;
-    await this.chatsRepository.save(chat);
+    await manager.getRepository(ChatEntity).save(chat);
   }
 
   private async findExistingDirectChat(

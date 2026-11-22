@@ -11,6 +11,10 @@ fail-closed production configuration, session/device and opaque-delivery
 schema, administrator CLI provisioning, safer transport/logging/client token
 handling, default-deny Supabase access, migration tests, and CI security gates.
 
+Matrix lifecycle addendum (2026-10-06): [implemented boundary, test evidence and
+external audit gates](./MATRIX_AUDIT_READINESS.md). This is internal engineering
+verification; no independent audit has been performed.
+
 Production E2EE is **not complete**. Client cryptography is blocked by the
 library/support/license decision in
 [E2EE_ARCHITECTURE.md](./E2EE_ARCHITECTURE.md). The server boundary must stay
@@ -76,7 +80,9 @@ set to `true`; locked backend and web dependency audits remain mandatory.
 
 ## Open release blockers
 
-- Select and legally approve a reviewed cross-platform E2EE implementation.
+- Complete the selected Matrix client transport and legally approve its deployment/dependencies.
+- Independently review the [OTP/OIDC bridge](../oidc-bridge/README.md) and implement
+  coordinated NestJS/MAS account/device/session revocation before rollout.
 - Complete official vectors and iOS/web interoperability tests.
 - Upgrade React Router and remove the narrow `GHSA-qwww-vcr4-c8h2` exception
   as soon as a patched release is published; the exception expires 2026-08-08.

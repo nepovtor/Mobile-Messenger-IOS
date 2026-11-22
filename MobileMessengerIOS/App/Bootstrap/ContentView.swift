@@ -13,6 +13,15 @@ struct ContentView: View {
 
     var body: some View {
         Group {
+            if sessionStore.isLogoutPending {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Выход не завершён").font(.title2)
+                    Text(container.logoutError ?? "Завершаем выход из приложения. Переписка заблокирована.")
+                    Button(container.isLoggingOut ? "Проверяем…" : "Повторить выход") {
+                        Task { await container.logout() }
+                    }.disabled(container.isLoggingOut)
+                }.padding(24)
+            } else {
             switch sessionStore.state {
             case .authenticated:
                 MainTabView(container: container)
@@ -20,6 +29,7 @@ struct ContentView: View {
                 AuthView(container: container) {
                     // SessionStore обновит состояние самостоятельно после успешной авторизации
                 }
+            }
             }
         }
         .id(container.configurationRevision)

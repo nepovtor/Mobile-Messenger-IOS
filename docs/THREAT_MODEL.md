@@ -1,6 +1,20 @@
 # Threat Model
 
 Review date: 2026-07-31
+Matrix migration addendum: [2026-10-06 decision](./MATRIX_E2EE_MIGRATION.md).
+The revised group design uses Matrix Megolm and does not promise strict group
+post-compromise security. The OTP-to-OIDC bridge and Matrix homeserver add
+separate account-linking, token, room-state and signing-key trust boundaries
+that require independent review before rollout.
+The OTP/OIDC bridge now uses an existing UUID as subject, a separate backend
+service credential, S256 code flow and encrypted PostgreSQL artifacts. These
+controls were exercised through a disposable MAS/Synapse encrypted SDK exchange.
+When MATRIX_ENABLED is configured, NestJS account/session revocations now enqueue
+transactional MAS lock/all-session revocation, with pending acknowledgements,
+upstream authentication-time fences and a signed-token quarantine before fresh-OTP
+admission. This is tested infrastructure; product UI/device mapping, restore and
+independent review remain release gates. See [audit evidence](./MATRIX_AUDIT_READINESS.md). The provider database is trusted
+for replay-state integrity; at-rest encryption does not prevent database rollback.
 Scope: iOS app, web app, NestJS API, WebSocket transport, PostgreSQL,
 S3-compatible storage, push providers, Telegram/SMS verification, CI/CD, and
 Cloudways operations.

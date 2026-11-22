@@ -131,6 +131,11 @@ export class DemoChatSeeder implements OnModuleInit {
       if (!chat) {
         continue;
       }
+      // Demo content must not be added to a chat that has already switched to
+      // E2EE. The database trigger is the final guard if policy changes later.
+      if (chat.e2eeRequired) {
+        continue;
+      }
 
       const existingParticipants = await this.participantsRepository.find({
         where: { chatId: chat.id },

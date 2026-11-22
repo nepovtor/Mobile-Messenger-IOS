@@ -19,6 +19,7 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-latest
+    timeout-minutes: 25
     env:
       SCHEME: MobileMessengerIOS
       PROJECT: MobileMessengerIOS.xcodeproj
@@ -161,7 +162,9 @@ jobs:
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination "id=$IOS_SIMULATOR_ID" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
             test
 
       - name: Build release configuration
@@ -249,6 +252,60 @@ jobs:
           export COOKIE_SECURE=true
           node -e 'require("./dist/modules/common/runtime-config.js").validateRuntimeConfig()'
 
+  oidc-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            oidc-bridge/package-lock.json
+            web/package-lock.json
+
+      - name: Install locked backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install locked OIDC bridge dependencies
+        working-directory: oidc-bridge
+        run: npm ci
+
+      - name: Install locked Matrix SDK test dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Verify OIDC bridge registry signatures
+        working-directory: oidc-bridge
+        run: npm audit signatures
+
+      - name: Audit OIDC bridge production dependencies
+        working-directory: oidc-bridge
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify OIDC bridge formatting
+        working-directory: oidc-bridge
+        run: npm run format:check
+
+      - name: Test OTP identity boundary and OIDC on isolated PostgreSQL
+        run: Scripts/test-oidc-bridge.sh
+
+      - name: Test Matrix binding and revocation transactions on isolated PostgreSQL
+        run: Scripts/test-matrix-lifecycle.sh
+
+      - name: Validate isolated staging configuration
+        run: python3 -m unittest discover -s ops/matrix-staging -p 'test_*.py'
+
+      - name: Test OTP login through isolated Matrix and MAS
+        run: node oidc-bridge/scripts/matrix-stack-smoke.mjs
+
   web:
     runs-on: ubuntu-latest
     defaults:
@@ -293,6 +350,10 @@ jobs:
       - name: Build web client
         run: npm exec -- vite build
 
+      - name: Test Matrix encrypted delivery on isolated Synapse
+        working-directory: .
+        run: Scripts/test-matrix-web-smoke.sh
+
   migrations:
     runs-on: ubuntu-latest
     services:
@@ -332,6 +393,12 @@ jobs:
 
       - name: Run clean and legacy migration smoke tests
         run: Scripts/migration-smoke.sh
+
+      - name: Test E2EE policy concurrency on PostgreSQL 16
+        working-directory: server
+        env:
+          E2EE_TEST_PGUSER: postgres
+        run: npm run test:postgres:e2ee
 
   dependency-review:
     if: >-

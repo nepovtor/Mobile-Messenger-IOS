@@ -1,3 +1,4 @@
+import { MatrixLifecycleModule } from "../matrix/matrix-lifecycle.module";
 import { Logger, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PhoneVerificationCodeEntity } from "../../entities/phone-verification-code.entity";
@@ -16,6 +17,8 @@ import { AuthGuard } from "./auth.guard";
 import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AuthService } from "./auth.service";
 import { LoginController } from "./login.controller";
+import { OidcBridgeController } from "./oidc-bridge.controller";
+import { OidcBridgeGuard } from "./oidc-bridge.guard";
 import { ConsoleSmsProvider } from "./sms/console-sms.provider";
 import { MockSmsProvider } from "./sms/mock-sms.provider";
 import { SMS_SERVICE } from "./sms/sms.types";
@@ -33,11 +36,13 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
     ]),
     SecurityModule,
     SessionsModule,
+    MatrixLifecycleModule,
   ],
-  controllers: [AuthController, LoginController],
+  controllers: [AuthController, LoginController, OidcBridgeController],
   providers: [
     AuthService,
     AuthGuard,
+    OidcBridgeGuard,
     AuthRateLimitService,
     TelegramBotService,
     {
@@ -92,6 +97,7 @@ import { TelegramBotService } from "./telegram/telegram-bot.service";
     AuthRateLimitService,
     TelegramBotService,
     SessionsModule,
+    MatrixLifecycleModule,
     TypeOrmModule,
     SMS_SERVICE,
   ],

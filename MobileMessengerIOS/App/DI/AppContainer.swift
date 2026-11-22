@@ -30,12 +30,10 @@ public final class AppContainer: ObservableObject {
     private let analytics: AnalyticsService
     private let notificationManager: PushNotificationManager
     private let reachability: ReachabilityService
-    private lazy var authTokenProvider: @Sendable () async -> String? = { [weak self] in
-        await self?.validAuthToken()
-    }
     private var refreshTask: Task<AuthVerifyResponse, Error>?
-    private let chatStore: ChatLocalStore
+    private var chatStore: ChatLocalStore
     private var chatRepository: ChatRepository!
+    private var nativeMatrixWorkspace: NativeMatrixWorkspaceModel?
     private var chatService: ChatNetworking!
     private var contactsService: ContactsNetworking!
     private var profileService: ProfileNetworking!
@@ -60,6 +58,8 @@ public final class AppContainer: ObservableObject {
     }
     public var pendingPushChatID: UUID? { router.pendingPushChatID }
 
+    @Published public private(set) var logoutError: String?
+    @Published public private(set) var isLoggingOut = false
     @Published public private(set) var configurationRevision: Int = 0
 
     private init() {
@@ -79,12 +79,46 @@ public final class AppContainer: ObservableObject {
             router: router,
             connectionCoordinator: connectionCoordinator
         )
-        chatStore = SwiftDataChatStore()
+        chatStore = SwiftDataChatStore(namespace: sessionStore.cacheNamespace)
         notificationManager = PushNotificationManager.shared
         configureNetworkingServices()
         configureCoordinators()
+        sessionStore.sessionBoundaryHandler = { [weak self] in
+            self?.replaceSessionServices()
+        }
         bindChildState()
         runDebugBackendHealthCheck()
+    }
+
+    func makeNativeMatrixWorkspace() -> NativeMatrixWorkspaceModel {
+        if let nativeMatrixWorkspace { return nativeMatrixWorkspace }
+        let model = NativeMatrixWorkspaceModel(container: self) { [weak self] config in
+            guard let self, let owner = self.sessionStore.currentUserID,
+                  (try? config.validate(owner: owner)) != nil,
+                  let data = try? JSONEncoder().encode(config) else { return }
+            self.defaults.set(data, forKey: self.matrixConfigurationKey(owner: owner))
+        }
+        nativeMatrixWorkspace = model
+        return model
+    }
+
+    private func matrixConfigurationKey(owner: UUID) -> String {
+        "matrix.last-config.v1.\(configService.restBaseURL.absoluteString).\(owner.uuidString)"
+    }
+
+    private func matrixSessionForLogout() throws -> MatrixSessionKeychain? {
+        guard let owner = sessionStore.currentUserID,
+              let data = defaults.data(forKey: matrixConfigurationKey(owner: owner)) else { return nil }
+        let config = try JSONDecoder().decode(NativeMatrixConfig.self, from: data)
+        try config.validate(owner: owner)
+        return try MatrixSessionKeychain(config: config, onFailure: {})
+    }
+
+    func makeMatrixMetadataService() -> MatrixMetadataService {
+        let namespace = sessionStore.cacheNamespace
+        return MatrixMetadataService(baseURL: configService.restBaseURL, token: { [weak self] in
+            await self?.validAuthToken(namespace: namespace)
+        })
     }
 
     public func updateAppearanceMode(_ mode: AppearanceMode) {
@@ -236,40 +270,37 @@ public final class AppContainer: ObservableObject {
     }
 
     private func configureNetworkingServices() {
+        let namespace = sessionStore.cacheNamespace
+        let authTokenProvider: @Sendable () async -> String? = { [weak self] in
+            await self?.validAuthToken(namespace: namespace)
+        }
+        let unauthorizedHandler: @Sendable () async -> Void = { [weak self] in
+            await self?.handleUnauthorizedSessionReset(namespace: namespace)
+        }
         chatService = RESTChatService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         contactsService = RESTContactsService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         profileService = RESTProfileService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         locationService = RESTLocationService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         pushService = RESTPushDeviceService(
             baseURL: configService.restBaseURL,
             authTokenProvider: authTokenProvider,
-            unauthorizedHandler: { [weak self] in
-                await self?.handleUnauthorizedSessionReset()
-            }
+            unauthorizedHandler: unauthorizedHandler
         )
         contactsRepository = DefaultContactsRepository(service: contactsService)
         profileRepository = DefaultProfileRepository(service: profileService)
@@ -286,7 +317,12 @@ public final class AppContainer: ObservableObject {
             remote: chatService,
             realtime: realtimeService,
             analytics: analytics,
-            reachability: reachability
+            reachability: reachability,
+            attachmentNamespace: namespace,
+            plaintextAllowed: { [weak self] in
+                guard let self else { return false }
+                return try await self.legacyMessagingAllowed(namespace: namespace)
+            }
         )
         notificationManager.configure(
             pushService: pushService,
@@ -294,7 +330,7 @@ public final class AppContainer: ObservableObject {
                 self?.isPushFeatureEnabled ?? false
             },
             isSessionAuthenticated: { [weak self] in
-                self?.sessionStore.authToken != nil
+                (self?.sessionStore.authToken != nil) && (self?.sessionStore.isLogoutPending == false)
             },
             routeHandler: { [weak self] chatID in
                 self?.router.openChatFromPush(chatID: chatID)
@@ -302,21 +338,27 @@ public final class AppContainer: ObservableObject {
         )
     }
 
+    private func legacyMessagingAllowed(namespace: UUID) async throws -> Bool {
+        guard namespace == sessionStore.cacheNamespace, let owner = sessionStore.currentUserID else { return false }
+        let config = try await makeMatrixMetadataService().config(owner: owner)
+        guard namespace == sessionStore.cacheNamespace else { return false }
+        return config == nil
+    }
+
     private func configureCoordinators() {
+        let namespace = sessionStore.cacheNamespace
         connectionCoordinator.configure(
             realtimeService: realtimeService,
             foregroundRefresh: { [weak self] in
-                guard let self, self.sessionStore.authToken != nil else { return }
+                guard let self, self.sessionStore.authToken != nil, !self.sessionStore.isLogoutPending,
+                      self.sessionStore.cacheNamespace == namespace else { return }
                 await self.notificationManager.syncAuthorizedStateForCurrentSession()
+                guard !self.sessionStore.isLogoutPending, self.sessionStore.cacheNamespace == namespace else { return }
                 self.realtimeService.activate()
                 await self.chatRepository.refreshForForeground()
             }
         )
         sessionCoordinator.configure(
-            realtimeService: realtimeService,
-            resetLocalState: { [weak self] in
-                await self?.chatRepository?.resetLocalState()
-            },
             syncNotifications: { [weak self] in
                 await self?.notificationManager.syncAuthorizedStateForCurrentSession()
             },
@@ -337,13 +379,26 @@ public final class AppContainer: ObservableObject {
     }
 
     private func applyConfigurationChange() {
-        configureNetworkingServices()
-        configureCoordinators()
-        configurationRevision += 1
+        sessionStore.logout()
         runDebugBackendHealthCheck()
         if connectionCoordinator.isSceneActive {
             Task { await connectionCoordinator.refresh() }
         }
+    }
+
+    private func replaceSessionServices() {
+        nativeMatrixWorkspace?.close()
+        nativeMatrixWorkspace = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        realtimeService?.handleLogout()
+        let previousRepository = chatRepository as? DefaultChatRepository
+        previousRepository?.invalidateSession()
+        Task { await previousRepository?.resetLocalState() }
+        chatStore = SwiftDataChatStore(namespace: sessionStore.cacheNamespace)
+        configureNetworkingServices()
+        configureCoordinators()
+        configurationRevision += 1
     }
 
     private func runDebugBackendHealthCheck() {
@@ -389,13 +444,28 @@ public final class AppContainer: ObservableObject {
     }
 
     public func logout() async {
+        guard !isLoggingOut else { return }
+        isLoggingOut = true; logoutError = nil
+        defer { isLoggingOut = false }
         let refreshToken = sessionStore.authRefreshToken
         let baseURL = configService.restBaseURL
-        await sessionCoordinator.logout {
-            if let refreshToken {
-                try? await RESTAuthService(baseURL: baseURL)
-                    .logout(refreshToken: refreshToken)
+        var acknowledged = false
+        do {
+            try await sessionCoordinator.logout {
+                // A legacy session can have no refresh credential. Modern
+                // sessions preserve it across failures and app restarts.
+                if let refreshToken {
+                    try await RESTAuthService(baseURL: baseURL).logout(refreshToken: refreshToken)
+                }
+                acknowledged = true
+                // Pending logout blocks new authentication. Retire only the
+                // current credential after acknowledgement; retain SDK stores.
+                try self.matrixSessionForLogout()?.remove()
             }
+        } catch {
+            logoutError = acknowledged
+                ? "Сессия отозвана. Не удалось закрыть локальные учётные данные. Повторите выход."
+                : "Сервер не подтвердил отзыв сессии. Проверьте соединение и повторите выход."
         }
     }
 
@@ -411,11 +481,13 @@ public final class AppContainer: ObservableObject {
         router.clearPendingPushChatNavigation()
     }
 
-    private func handleUnauthorizedSessionReset() async {
+    private func handleUnauthorizedSessionReset(namespace: UUID) async {
+        guard namespace == sessionStore.cacheNamespace else { return }
         sessionCoordinator.handleUnauthorized()
     }
 
-    private func validAuthToken() async -> String? {
+    private func validAuthToken(namespace: UUID) async -> String? {
+        guard namespace == sessionStore.cacheNamespace, !sessionStore.isLogoutPending else { return nil }
         guard let accessToken = sessionStore.authToken else {
             return nil
         }
@@ -441,6 +513,7 @@ public final class AppContainer: ObservableObject {
 
         do {
             let response = try await task.value
+            guard namespace == sessionStore.cacheNamespace, !Task.isCancelled else { return nil }
             refreshTask = nil
             sessionStore.updateCredentials(
                 accessToken: response.token,
@@ -448,6 +521,7 @@ public final class AppContainer: ObservableObject {
             )
             return response.token
         } catch {
+            guard namespace == sessionStore.cacheNamespace, !sessionStore.isLogoutPending else { return nil }
             refreshTask = nil
             if let expiration = Self.jwtExpiration(accessToken),
                expiration > Date() {

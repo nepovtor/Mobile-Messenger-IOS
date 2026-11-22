@@ -9,9 +9,10 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     private let decoder: JSONDecoder
     private var persistenceTask: Task<Void, Never>?
     private var persistenceGeneration = 0
+    private var isInvalidated = false
     private static let persistenceDelayNanoseconds: UInt64 = 300_000_000
 
-    public init(storageURL: URL? = nil) {
+    public init(storageURL: URL? = nil, namespace: UUID? = nil) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
@@ -19,12 +20,18 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
         self.decoder = .mobileMessengerISO8601()
 
-        let defaultURL = Self.defaultStorageURL()
+        let defaultURL = namespace.map {
+            Self.defaultStorageURL().deletingLastPathComponent()
+                .appendingPathComponent("sessions", isDirectory: true)
+                .appendingPathComponent($0.uuidString, isDirectory: true)
+                .appendingPathComponent("chat-store.json")
+        } ?? Self.defaultStorageURL()
         self.storageURL = storageURL ?? defaultURL
         self.chats = Self.loadState(from: self.storageURL, using: decoder)
     }
 
     public func ensureChatExists(id: UUID, title: String) async throws {
+        try requireActive()
         if chats[id] == nil {
             chats[id] = ChatRecord(
                 id: id,
@@ -42,6 +49,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func removeChat(id: UUID) async throws {
+        try requireActive()
         let removedRecord = chats.removeValue(forKey: id)
         let messageContinuations = messageStreams.removeValue(forKey: id)
 
@@ -55,6 +63,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func upsert(chats: [Chat]) async throws {
+        try requireActive()
         for chat in chats {
             var record = self.chats[chat.id] ?? ChatRecord(
                 id: chat.id,
@@ -75,6 +84,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func upsert(messages: [Message], for chatID: UUID) async throws {
+        try requireActive()
         guard !messages.isEmpty else { return }
 
         var record = chats[chatID] ?? Self.makeRecord(
@@ -104,6 +114,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func append(message: Message, for chatID: UUID) async throws {
+        try requireActive()
         let matchingMessageWasPending = chats[chatID]?.messages.contains(where: {
             ($0.id == message.id || $0.localID == message.localID) &&
             Self.isPending($0.status)
@@ -119,6 +130,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func replaceMessage(localID: UUID, in chatID: UUID, with message: Message) async throws {
+        try requireActive()
         var record = chats[chatID] ?? ChatRecord(
             id: chatID,
             title: "Диалог",
@@ -138,6 +150,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func loadMessages(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
+        try requireActive()
         guard let record = chats[chatID] else { return [] }
         if let messageID {
             guard let index = record.messages.firstIndex(where: {
@@ -152,6 +165,10 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
     public func observeChats() -> AsyncStream<[Chat]> {
         AsyncStream { continuation in
+            guard !isInvalidated else {
+                continuation.finish()
+                return
+            }
             let id = UUID()
             chatStreams[id] = continuation
             continuation.yield(currentChats())
@@ -163,6 +180,10 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
 
     public func observeMessages(for chatID: UUID) -> AsyncStream<Message> {
         AsyncStream { continuation in
+            guard !isInvalidated else {
+                continuation.finish()
+                return
+            }
             let token = UUID()
             messageStreams[chatID, default: [:]][token] = continuation
             continuation.onTermination = { _ in
@@ -172,10 +193,12 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func fetchChats(searchQuery: String?) async throws -> [Chat] {
-        currentChats(searchQuery: searchQuery)
+        try requireActive()
+        return currentChats(searchQuery: searchQuery)
     }
 
     public func updateTypingParticipants(_ participants: [String], in chatID: UUID) async throws {
+        try requireActive()
         guard var record = chats[chatID] else { return }
         record.typingParticipants = participants
         chats[chatID] = record
@@ -184,6 +207,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func updateStatus(for messageID: UUID, in chatID: UUID, status: MessageStatus) async throws {
+        try requireActive()
         guard var record = chats[chatID] else { return }
         guard let index = record.messages.firstIndex(where: { $0.id.messageID == messageID }) else { return }
         let wasPending = Self.isPending(record.messages[index].status)
@@ -201,6 +225,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func updateStatus(forLocalID localID: UUID, in chatID: UUID, status: MessageStatus) async throws {
+        try requireActive()
         guard var record = chats[chatID] else { return }
         guard let index = record.messages.firstIndex(where: { $0.localID == localID }) else { return }
         let wasPending = Self.isPending(record.messages[index].status)
@@ -218,6 +243,7 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func pendingMessages(in chatID: UUID) async throws -> [Message] {
+        try requireActive()
         guard let record = chats[chatID] else { return [] }
         return record.messages.filter { message in
             message.isOutgoing && Self.isPending(message.status)
@@ -225,13 +251,15 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
     }
 
     public func allPendingMessages() async throws -> [Message] {
-        chats.values
+        try requireActive()
+        return chats.values
             .flatMap(\.messages)
             .filter { $0.isOutgoing && Self.isPending($0.status) }
             .sorted(by: Self.sortMessages)
     }
 
     public func purgeMessages(olderThan date: Date) async throws {
+        try requireActive()
         for (chatID, var record) in chats {
             record.messages.removeAll { $0.createdAt < date }
             record.refreshDerivedFields(messagesAreSorted: true)
@@ -245,6 +273,21 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         chats = [:]
         try persistImmediately()
         broadcastChats()
+    }
+
+    public func invalidate() async throws {
+        isInvalidated = true
+        defer {
+            chatStreams.values.forEach { $0.finish() }
+            chatStreams.removeAll()
+            messageStreams.values.flatMap(\.values).forEach { $0.finish() }
+            messageStreams.removeAll()
+        }
+        try await reset()
+    }
+
+    private func requireActive() throws {
+        guard !isInvalidated else { throw CancellationError() }
     }
 
     private func removeContinuation(for chatID: UUID, token: UUID) {
@@ -298,11 +341,15 @@ public actor SwiftDataChatStore: @preconcurrency ChatLocalStore {
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true,
-            attributes: nil
+            attributes: [.protectionKey: FileProtectionType.complete]
         )
+        var protectedDirectory = directory
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try protectedDirectory.setResourceValues(resourceValues)
         let payload = PersistedState(chats: Array(chats.values))
         let data = try encoder.encode(payload)
-        try data.write(to: storageURL, options: .atomic)
+        try data.write(to: storageURL, options: [.atomic, .completeFileProtection])
     }
 
     private func persistImmediately() throws {

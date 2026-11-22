@@ -15,12 +15,32 @@ export function initializeSessionCoordinator() {
   }
   isInitialized = true;
   registerUnauthorizedHandler("user", handleUnauthorizedSession);
+  window.addEventListener("storage", (event) => {
+    if (
+      event.key !== "mobile-messenger.logout-pending.v1" ||
+      (!event.newValue?.startsWith("pending") &&
+        !event.oldValue?.startsWith("pending"))
+    )
+      return;
+    clearFeatureState();
+    authStore.getState().observeLogoutReceipt(event.newValue);
+  });
 }
 
 export async function logoutUserSession() {
-  await pushStore.getState().detachFromCurrentSession();
+  // Start the receipt before clearing views or making any other network call.
+  const revocation = authStore.getState().logout();
   clearFeatureState();
-  await authStore.getState().logout();
+  void pushStore
+    .getState()
+    .detachFromCurrentSession()
+    .catch(() => undefined);
+  try {
+    await revocation;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function handleUnauthorizedSession(message: string) {

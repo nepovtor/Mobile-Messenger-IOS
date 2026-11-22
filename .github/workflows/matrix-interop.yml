@@ -1,0 +1,40 @@
+name: Matrix iOS-Web interoperability
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: matrix-interop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  swift-js:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Install official SDK and isolated Synapse
+        run: |
+          npm ci --prefix web
+          python -m venv "$RUNNER_TEMP/matrix-interop-python"
+          "$RUNNER_TEMP/matrix-interop-python/bin/pip" install matrix-synapse==1.162.0
+      - name: Select available iPhone simulator
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
+          phones = [d for runtime, devices in data['devices'].items() if 'iOS' in runtime for d in devices if d.get('isAvailable') and d['name'].startswith('iPhone')]
+          if not phones: raise SystemExit('No iPhone simulator is available')
+          with open(os.environ['GITHUB_ENV'], 'a') as output: output.write('MATRIX_SIMULATOR_ID=' + phones[0]['udid'] + '\n')
+          PY
+      - name: Run real Swift-JavaScript encrypted exchange and recovery
+        run: '"$RUNNER_TEMP/matrix-interop-python/bin/python" Scripts/run-matrix-interop.py --simulator "$MATRIX_SIMULATOR_ID"'

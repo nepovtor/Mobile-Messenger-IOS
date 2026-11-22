@@ -7,6 +7,9 @@ public final class DefaultChatRepository: ChatRepository {
     private let analytics: AnalyticsService
     private let reachability: ReachabilityService
     private let fileManager: FileManager
+    private let attachmentNamespace: UUID
+    private let plaintextAllowed: @Sendable () async throws -> Bool
+    private let lifetime = RepositoryLifetime()
     private let pendingSendCoordinator = PendingSendCoordinator()
     private let activeChatSubscriptions = ActiveChatSubscriptionRegistry()
     private let chatSyncCoordinator = ChatSyncCoordinator()
@@ -20,7 +23,9 @@ public final class DefaultChatRepository: ChatRepository {
         realtime: ChatRealtimeService,
         analytics: AnalyticsService,
         reachability: ReachabilityService,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        attachmentNamespace: UUID = UUID(),
+        plaintextAllowed: @escaping @Sendable () async throws -> Bool = { true }
     ) {
         self.store = store
         self.remote = remote
@@ -28,6 +33,8 @@ public final class DefaultChatRepository: ChatRepository {
         self.analytics = analytics
         self.reachability = reachability
         self.fileManager = fileManager
+        self.attachmentNamespace = attachmentNamespace
+        self.plaintextAllowed = plaintextAllowed
 
         reachabilityTask = Task { [weak self] in
             await self?.observeReachability()
@@ -51,12 +58,14 @@ public final class DefaultChatRepository: ChatRepository {
 
     public func createChat(title: String, participantContacts: [String]) async throws -> Chat {
         let chat = try await remote.createChat(title: title, participantContacts: participantContacts).asDomainChat()
+        try lifetime.requireActive()
         try await store.upsert(chats: [chat])
         return chat
     }
 
     public func deleteChat(chatID: UUID) async throws {
         try await remote.deleteChat(chatID: chatID)
+        try lifetime.requireActive()
         try await store.removeChat(id: chatID)
     }
 
@@ -67,9 +76,11 @@ public final class DefaultChatRepository: ChatRepository {
     public func listChats(searchQuery: String?) async throws -> [Chat] {
         do {
             let chats = try await remote.listChats(searchQuery: searchQuery).map { try $0.asDomainChat() }
+            try lifetime.requireActive()
             try await store.upsert(chats: chats)
             return try await store.fetchChats(searchQuery: searchQuery)
         } catch {
+            try lifetime.requireActive()
             let cached = try await store.fetchChats(searchQuery: searchQuery)
             guard !cached.isEmpty else { throw error }
             analytics.track(error: error, context: "chat_list_remote_fallback")
@@ -124,10 +135,12 @@ public final class DefaultChatRepository: ChatRepository {
     public func loadHistory(for chatID: UUID, limit: Int, before messageID: UUID?) async throws -> [Message] {
         do {
             let messages = try await remote.loadMessages(chatID: chatID, limit: limit, before: messageID).map { $0.asDomainMessage() }
+            try lifetime.requireActive()
             try await store.ensureChatExists(id: chatID, title: "Диалог")
             try await store.upsert(messages: messages, for: chatID)
             return try await store.loadMessages(for: chatID, limit: limit, before: messageID)
         } catch {
+            try lifetime.requireActive()
             let cached = try await store.loadMessages(for: chatID, limit: limit, before: messageID)
             guard !cached.isEmpty else { throw error }
             analytics.track(error: error, context: "chat_history_remote_fallback")
@@ -136,6 +149,11 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func sendMessage(chatID: UUID, text: String, localID: UUID?) async throws -> Message {
+        try await requirePlaintextTransport()
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf16.count <= 4_000 else {
+            throw AppError.network(description: "Сообщение должно содержать от 1 до 4000 символов")
+        }
         let local = localID ?? UUID()
         let optimistic = Message(
             id: Message.Identifier(chatID: chatID, messageID: local),
@@ -156,6 +174,7 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func sendImageMessage(chatID: UUID, imageData: Data, caption: String?, localID: UUID?) async throws -> Message {
+        try await requirePlaintextTransport()
         let local = localID ?? UUID()
         let localFileURL = try savePendingImage(data: imageData, localID: local)
         let optimistic = Message(
@@ -191,6 +210,7 @@ public final class DefaultChatRepository: ChatRepository {
         audioData: Data,
         localID: UUID?
     ) async throws -> Message {
+        try await requirePlaintextTransport()
         guard !audioData.isEmpty, audioData.count <= 20_000_000 else {
             throw AppError.network(description: "Некорректный размер голосового сообщения")
         }
@@ -225,13 +245,17 @@ public final class DefaultChatRepository: ChatRepository {
     }
 
     public func editMessage(chatID: UUID, messageID: UUID, text: String) async throws -> Message {
+        try await requirePlaintextTransport()
         let updated = try await remote.editMessage(chatID: chatID, messageID: messageID, text: text).asDomainMessage()
+        try lifetime.requireActive()
         try await store.append(message: updated, for: chatID)
         return updated
     }
 
     public func deleteMessage(chatID: UUID, messageID: UUID) async throws -> Message {
+        try await requirePlaintextTransport()
         let deleted = try await remote.deleteMessage(chatID: chatID, messageID: messageID).asDomainMessage()
+        try lifetime.requireActive()
         try await store.append(message: deleted, for: chatID)
         return deleted
     }
@@ -244,10 +268,12 @@ public final class DefaultChatRepository: ChatRepository {
         do {
             let pending = try await store.pendingMessages(in: chatID)
             for message in pending.sorted(by: { $0.createdAt < $1.createdAt }) {
+                try lifetime.requireActive()
                 try? await store.updateStatus(forLocalID: message.localID, in: chatID, status: .sending)
                 await attemptDelivery(of: message)
             }
             let refreshed = try await remote.loadMessages(chatID: chatID, limit: 100, before: nil).map { $0.asDomainMessage() }
+            try lifetime.requireActive()
             try await store.upsert(messages: refreshed, for: chatID)
         } catch {
             analytics.track(error: error, context: "retryPendingMessages")
@@ -258,17 +284,35 @@ public final class DefaultChatRepository: ChatRepository {
         await retryAllPendingMessages()
         do {
             let chats = try await remote.listChats(searchQuery: nil).map { try $0.asDomainChat() }
+            try lifetime.requireActive()
             try await store.upsert(chats: chats)
         } catch {
             analytics.track(error: error, context: "foreground_refresh_chats")
         }
     }
 
+    public func invalidateSession() {
+        lifetime.invalidate()
+        reachabilityTask?.cancel()
+        realtimeTask?.cancel()
+        connectionStateTask?.cancel()
+    }
+
     public func resetLocalState() async {
+        invalidateSession()
         do {
-            try await store.reset()
+            try await store.invalidate()
         } catch {
             analytics.track(error: error, context: "reset_local_state")
+        }
+        for directory in [pendingImagesDirectory(), pendingAudioDirectory()] {
+            do {
+                if fileManager.fileExists(atPath: directory.path) {
+                    try fileManager.removeItem(at: directory)
+                }
+            } catch {
+                analytics.track(error: error, context: "reset_pending_attachments")
+            }
         }
     }
 
@@ -279,7 +323,16 @@ public final class DefaultChatRepository: ChatRepository {
         try await store.updateStatus(for: messageID, in: chatID, status: status)
     }
 
+    private func requirePlaintextTransport() async throws {
+        try lifetime.requireActive()
+        guard try await plaintextAllowed() else {
+            throw AppError.network(description: "Для этого аккаунта используйте защищённую переписку")
+        }
+        try lifetime.requireActive()
+    }
+
     private func attemptDelivery(of message: Message) async {
+        guard lifetime.isActive else { return }
         guard await pendingSendCoordinator.begin(localID: message.localID) else { return }
 
         guard reachability.isReachable else {
@@ -288,6 +341,7 @@ public final class DefaultChatRepository: ChatRepository {
         }
 
         do {
+            try await requirePlaintextTransport()
             let deliveredMessage: Message
             switch message.kind {
             case .text:
@@ -308,18 +362,22 @@ public final class DefaultChatRepository: ChatRepository {
                     return
                 }
                 let data = try Data(contentsOf: localFileURL)
+                try lifetime.requireActive()
                 let upload = try await remote.requestUploadURL(
                     mimeType: mimeType,
                     sizeBytes: data.count,
                     width: nil,
                     height: nil
                 )
+                try await requirePlaintextTransport()
                 let etag = try await remote.uploadImage(
                     to: upload.uploadURL,
                     data: data,
                     mimeType: mimeType
                 )
+                try lifetime.requireActive()
                 try await remote.confirmUpload(mediaID: upload.mediaID, etag: etag)
+                try lifetime.requireActive()
                 deliveredMessage = try await realtime.sendMessage(
                     chatID: message.id.chatID,
                     kind: message.kind,
@@ -330,13 +388,14 @@ public final class DefaultChatRepository: ChatRepository {
                 try? fileManager.removeItem(at: localFileURL)
             }
 
+            try lifetime.requireActive()
             try await store.replaceMessage(localID: message.localID, in: message.id.chatID, with: deliveredMessage)
             analytics.track(event: AppAnalyticsEvent(kind: .messageSent, metadata: [
                 "chatID": message.id.chatID.uuidString,
                 "kind": message.kind.rawValue
             ]))
         } catch {
-            if reachability.isReachable {
+            if lifetime.isActive, reachability.isReachable {
                 try? await store.updateStatus(forLocalID: message.localID, in: message.id.chatID, status: .failed)
             }
             analytics.track(error: error, context: "send_message_delivery")
@@ -347,6 +406,7 @@ public final class DefaultChatRepository: ChatRepository {
 
     private func observeReachability() async {
         for await isReachable in reachability.observe() {
+            guard lifetime.isActive else { break }
             guard isReachable else { continue }
             await retryAllPendingMessages()
         }
@@ -354,6 +414,7 @@ public final class DefaultChatRepository: ChatRepository {
 
     private func observeRealtime() async {
         for await envelope in realtime.observeAllEvents() {
+            guard lifetime.isActive else { break }
             switch envelope.event {
             case .chatCreated(let chat):
                 try? await store.upsert(chats: [chat])
@@ -385,7 +446,9 @@ public final class DefaultChatRepository: ChatRepository {
     private func observeRealtimeConnectionState() async {
         var hasObservedConnectedState = false
         for await state in realtime.observeConnectionState() {
+            guard lifetime.isActive else { break }
             guard case .connected = state else { continue }
+            await retryAllPendingMessages()
 
             if hasObservedConnectedState {
                 let chatIDs = await activeChatSubscriptions.activeChatIDs()
@@ -416,6 +479,7 @@ public final class DefaultChatRepository: ChatRepository {
                 limit: 200,
                 before: nil
             ).map { $0.asDomainMessage() }
+            try lifetime.requireActive()
             let validatedMessages = messages.filter { $0.id.chatID == chatID }
             if !validatedMessages.isEmpty {
                 try await store.ensureChatExists(id: chatID, title: "Диалог")
@@ -442,38 +506,41 @@ public final class DefaultChatRepository: ChatRepository {
 
     private func savePendingImage(data: Data, localID: UUID) throws -> URL {
         let directory = pendingImagesDirectory()
-        try fileManager.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
+        try preparePendingDirectory(directory)
         let url = directory.appendingPathComponent("\(localID.uuidString).jpg")
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
         return url
     }
 
     private func pendingImagesDirectory() -> URL {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ??
         URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        return appSupport.appendingPathComponent("MobileMessengerIOS/pending-images", isDirectory: true)
+        return appSupport.appendingPathComponent("MobileMessengerIOS/pending-images/\(attachmentNamespace.uuidString)", isDirectory: true)
     }
 
     private func savePendingAudio(data: Data, localID: UUID) throws -> URL {
         let directory = pendingAudioDirectory()
-        try fileManager.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
+        try preparePendingDirectory(directory)
         let url = directory.appendingPathComponent("\(localID.uuidString).m4a")
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
         return url
     }
 
     private func pendingAudioDirectory() -> URL {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ??
         URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        return appSupport.appendingPathComponent("MobileMessengerIOS/pending-audio", isDirectory: true)
+        return appSupport.appendingPathComponent("MobileMessengerIOS/pending-audio/\(attachmentNamespace.uuidString)", isDirectory: true)
+    }
+
+    private func preparePendingDirectory(_ directory: URL) throws {
+        try fileManager.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.complete]
+        )
+        var protectedDirectory = directory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try protectedDirectory.setResourceValues(values)
     }
 }
 
@@ -489,6 +556,27 @@ extension ServerChat {
             participantNames: participantNames,
             participantCount: participantCount
         )
+    }
+}
+
+private final class RepositoryLifetime: @unchecked Sendable {
+    private let lock = NSLock()
+    private var active = true
+
+    var isActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return active
+    }
+
+    func invalidate() {
+        lock.lock()
+        active = false
+        lock.unlock()
+    }
+
+    func requireActive() throws {
+        guard isActive else { throw CancellationError() }
     }
 }
 
