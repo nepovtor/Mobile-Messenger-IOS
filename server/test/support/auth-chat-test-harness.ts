@@ -119,6 +119,7 @@ export type TestAppOptions = {
   telegramAllowRelink?: boolean;
   webAppUrl?: string | null;
   e2eeRequired?: boolean;
+  postgresUrl?: string;
   beforeInit?: (app: INestApplication) => Promise<void> | void;
 };
 
@@ -206,27 +207,35 @@ export async function createTestApp(
             MediaEntity,
             PushSubscriptionEntity,
           ],
-          synchronize: true,
+          synchronize: !options.postgresUrl,
+          ...(options.postgresUrl ? { url: options.postgresUrl } : {}),
         }),
-        dataSourceFactory: async (options) => {
-          const database = newDb({
-            autoCreateForeignKeyIndices: true,
-          });
-          database.public.registerFunction({
-            name: "current_database",
-            returns: DataType.text,
-            implementation: () => "pg_mem",
-          });
-          database.public.registerFunction({
-            name: "version",
-            returns: DataType.text,
-            implementation: () => "pg-mem",
-          });
+        ...(!options.postgresUrl
+          ? {
+              dataSourceFactory: async (
+                options: import("typeorm").DataSourceOptions | undefined,
+              ) => {
+                if (!options) throw new Error("Database options are required");
+                const database = newDb({
+                  autoCreateForeignKeyIndices: true,
+                });
+                database.public.registerFunction({
+                  name: "current_database",
+                  returns: DataType.text,
+                  implementation: () => "pg_mem",
+                });
+                database.public.registerFunction({
+                  name: "version",
+                  returns: DataType.text,
+                  implementation: () => "pg-mem",
+                });
 
-          const dataSource =
-            await database.adapters.createTypeormDataSource(options);
-          return dataSource.initialize();
-        },
+                const dataSource =
+                  await database.adapters.createTypeormDataSource(options);
+                return dataSource.initialize();
+              },
+            }
+          : {}),
       }),
       RealtimeModule,
       AuthModule,

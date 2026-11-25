@@ -30,8 +30,8 @@ REST send, realtime send, edit and delete now also reject the stored chat policy
 The regression test exercises all four entry points and verifies no message row
 was persisted. Global production rejection remains intact. This is a boundary
 fix, not encryption. Legacy read permission is unchanged to preserve the
-documented migration path. Future concurrent chat policy transitions must be
-designed transactionally; the added read is not a database locking protocol.
+documented migration path. The October 6 follow-up below closes the race left
+by the original check.
 
 ## Library assessment
 
@@ -79,8 +79,9 @@ passes these builds or interoperability tests.
    encrypted sends.
 5. Complete identity-change UX, authenticated linking/recovery, multi-device
    fan-out, replay/skipped-key bounds, group rekey and attachment authentication.
-6. Run actual PostgreSQL concurrency/migration tests and obtain independent
-   cryptographic review. Mock/pg-mem tests are not substitutes for these gates.
+6. Obtain independent cryptographic review. Mock/pg-mem tests are not
+   substitutes for PostgreSQL concurrency tests; the latter are described in
+   the October 6 follow-up below.
 
 Production must retain `E2EE_REQUIRED=true`; the legacy clients cannot provide
 production messaging through that boundary yet. No release or deployment was
@@ -97,4 +98,85 @@ performed. Pre-existing iOS source moves and other user changes were preserved.
 - `Scripts/verify-production-security.sh` and `git diff --check` passed.
 - No actual PostgreSQL migration/concurrency run, new dependency build,
   upstream cryptographic vectors or iOS/web crypto interoperability run was
-  performed. None is implied by these results.
+  performed at the time of this October 1 review. None is implied by these
+  results.
+
+## Follow-up: transactional policy fence — 2026-10-06
+
+`ChatService` now uses one transaction for each legacy create, edit, delete,
+and read-receipt mutation. It locks the chat row with `SELECT ... FOR UPDATE`
+before reading participant/message rows, checks the stored `e2ee_required`
+value and global `E2EE_REQUIRED`, then writes through the same TypeORM
+transaction manager. REST and WebSocket send paths call this shared service.
+Chat metadata and participant read state commit with the message. Realtime and
+push delivery happen after commit; a rollback emits no success event. A failed
+SQL operation is returned as a generic HTTP error so TypeORM's SQL parameters
+cannot enter the framework exception log or client response as plaintext.
+
+The new `LegacyMessagePolicyFence20261001120000` migration installs a trigger
+on `messages` INSERT, UPDATE and DELETE. Direct writers, including the demo
+seeder, take the same chat row lock and reject mutations after E2EE is enabled.
+A second trigger forbids changing `chats.e2ee_required` from true to false.
+The demo seeder also skips chats already marked protected. There is no public
+policy-toggle route; in this phase an authorized migration/operator performs
+the atomic `UPDATE chats SET e2ee_required = true ...` operation. A participant
+cannot disable it through the application API or a later global flag change.
+
+On PostgreSQL's default `READ COMMITTED` isolation, the waiter on the chat row
+sees the committed policy after the lock holder commits. If plaintext takes
+the lock first, it commits before activation can complete. If activation
+takes the lock first, the waiting legacy mutation sees the new policy and
+rolls back. The integration tests observe actual blocked backend PIDs through
+`pg_blocking_pids`, then release a held transaction. Their result does not
+depend on a timing guess. Application writers lock chat before message rows;
+the trigger is a final guard for other writers. Raw SQL UPDATE/DELETE obtains
+a message row lock before the trigger's chat lock, so mixed raw writers can
+still deadlock; PostgreSQL aborts one transaction rather than committing an
+unsafe mutation. Such writers should follow the documented chat-first order.
+
+The dedicated test command is `cd server && E2EE_TEST_PGPORT=<local-port> npm
+run test:postgres:e2ee`. `Scripts/test-e2ee-postgres.sh` refuses a non-loopback
+host, creates a disposable database named `mm_ci_e2ee_*`, applies all TypeORM
+migrations, runs the API/concurrency suite, and drops the database. It never
+uses production credentials. The test covers normal plaintext send, protected
+create/edit/delete/read, both lock orders for create/edit/delete, REST and
+WebSocket, direct SQL write/downgrade rejection, forced SQL failure rollback,
+and a nonparticipant request. The migration smoke script was corrected to
+hold every migration after the legacy fixture cutoff, so the trigger cannot
+be installed before its `e2ee_required` column. Trigger functions use invoker
+privileges and revoke direct `PUBLIC` execution.
+
+This protects the legacy database mutation boundary, not message content
+cryptographically. Legacy rows and permitted legacy reads still contain
+plaintext. Service owners with DDL privileges can remove database triggers;
+deployment must limit those privileges and apply this migration before
+relying on the per-chat flag. There is no reviewed key protocol, client
+session store, device identity UX, encrypted attachment pipeline, group rekey
+or iOS/web interoperability. External design review and staging migration
+drills remain release gates. The trigger also blocks routine deletion of
+legacy message rows in a protected chat. A later retention/purge migration
+must define a separately reviewed maintenance procedure; it must not silently
+reopen legacy writes.
+
+### Verification on 2026-10-06
+
+| Check | Result |
+| --- | --- |
+| Backend unit/API suite | 134 passed, 0 failed |
+| Isolated PostgreSQL 18 API/concurrency suite | 14 passed (13 scenarios and their parent test), 0 failed; both lock orders observed with `pg_blocking_pids` |
+| PostgreSQL migration smoke | Clean up/down/up and legacy upgrade passed after correcting migration ordering |
+| Web suite | 88 passed in 26 files, 0 failed |
+| iOS simulator suite | 84 passed, 0 failed on Xcode 26.3 / iPhone 17 Pro simulator |
+| Backend/Web lint, format and production builds | Passed |
+| OpenAPI contract | 74 operations synchronized |
+| Production invariants | Passed |
+| Backend production dependency audit | 0 vulnerabilities after updating Nest 11.2.7, sharp 0.35.5 and vulnerable transitive packages |
+| Web production dependency audit | Passed |
+
+PostgreSQL 16, the version used by the project's Docker development image,
+was not available locally. The existing PostgreSQL 16 migration CI job now
+runs the same concurrency suite; that CI result has not yet been observed.
+No production database or deployment was touched. The backend
+legacy mutation boundary is prepared for the next client E2EE integration
+stage, subject to applying the new migration. The messenger remains blocked
+from a production E2EE claim.

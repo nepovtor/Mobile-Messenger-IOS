@@ -333,6 +333,12 @@ jobs:
       - name: Run clean and legacy migration smoke tests
         run: Scripts/migration-smoke.sh
 
+      - name: Test E2EE policy concurrency on PostgreSQL 16
+        working-directory: server
+        env:
+          E2EE_TEST_PGUSER: postgres
+        run: npm run test:postgres:e2ee
+
   dependency-review:
     if: >-
       github.event_name == 'pull_request' &&

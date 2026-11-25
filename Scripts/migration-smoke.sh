@@ -172,8 +172,14 @@ fi
 
 printf 'Testing migration of an existing legacy database...\n'
 MIGRATION_HOLD_DIRECTORY="$(mktemp -d)"
-find dist/database/migrations -maxdepth 1 -type f \
-  -name '20260731*.js' -exec mv {} "${MIGRATION_HOLD_DIRECTORY}/" \;
+# The legacy fixture predates E2EE. Hold that migration and every later one,
+# including policy triggers that require columns introduced by E2EE.
+for migration_file in dist/database/migrations/20*.js; do
+  migration_name="$(basename "${migration_file}")"
+  if [[ "${migration_name}" > "20260731" ]]; then
+    mv "${migration_file}" "${MIGRATION_HOLD_DIRECTORY}/"
+  fi
+done
 
 run_for_database "${LEGACY_DATABASE}" npm run migration:run:dist
 
